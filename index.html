@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Racing Game - Phaser</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        font-family: Arial, sans-serif;
+      }
+      #game-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      #game {
+        background: #000;
+      }
+      .controls {
+        margin-top: 20px;
+        color: #fff;
+        text-align: center;
+      }
+      .controls h2 {
+        margin: 0 0 10px 0;
+      }
+      .controls p {
+        margin: 5px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <div id="game"></div>
+      <div class="controls">
+        <h2>Racing Game</h2>
+        <p><strong>← → Arrow Keys</strong> to steer</p>
+        <p><strong>R</strong> to restart after crash</p>
+        <p>Stay between the yellow lines!</p>
+      </div>
+    </div>
+    <script type="module" src="/src/game.js"></script>
+  </body>
+</html>

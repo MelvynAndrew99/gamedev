@@ -1,0 +1,17 @@
+{
+  "name": "phaser-racing-game",
+  "version": "1.0.0",
+  "description": "A simple racing game built with Phaser.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.55.2"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
