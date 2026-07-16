@@ -15,7 +15,7 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             # Node.js runtime and package manager (npm included)
-            nodejs_20
+            nodejs
 
             # Build and development tools
             git

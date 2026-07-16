@@ -5,38 +5,143 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Racing Game - Phaser</title>
     <style>
-      body {
+      * {
         margin: 0;
         padding: 0;
-        background: #000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        font-family: Arial, sans-serif;
+        box-sizing: border-box;
       }
+
+      body {
+        background: #000;
+        font-family: Arial, sans-serif;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      #debug-panel {
+        background: rgba(0, 0, 0, 0.9);
+        border-right: 2px solid #00ff00;
+        padding: 20px;
+        width: 250px;
+        overflow-y: auto;
+        color: #00ff00;
+        font-size: 12px;
+      }
+
+      #debug-panel h2 {
+        font-size: 16px;
+        margin-bottom: 15px;
+        text-decoration: underline;
+      }
+
+      .debug-control {
+        margin-bottom: 20px;
+      }
+
+      .debug-control label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+
+      .debug-control input[type="range"] {
+        width: 100%;
+        cursor: pointer;
+      }
+
+      .debug-control .value {
+        display: inline-block;
+        background: #00ff00;
+        color: #000;
+        padding: 2px 6px;
+        margin-top: 5px;
+        font-weight: bold;
+        border-radius: 3px;
+      }
+
+      .debug-toggle {
+        margin-bottom: 15px;
+      }
+
+      .debug-toggle button {
+        width: 100%;
+        padding: 8px;
+        background: #00ff00;
+        color: #000;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 12px;
+      }
+
+      .debug-toggle button:hover {
+        background: #00dd00;
+      }
+
       #game-container {
+        flex: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
+        justify-content: center;
       }
+
       #game {
         background: #000;
       }
+
       .controls {
         margin-top: 20px;
         color: #fff;
         text-align: center;
       }
+
       .controls h2 {
         margin: 0 0 10px 0;
       }
+
       .controls p {
         margin: 5px 0;
       }
     </style>
   </head>
   <body>
+    <div id="debug-panel">
+      <h2>🎮 Debug Panel</h2>
+
+      <div class="debug-control">
+        <label for="roadSpeed">Road Speed</label>
+        <input type="range" id="roadSpeed" min="1" max="30" value="12" />
+        <div class="value" id="roadSpeedValue">12</div>
+      </div>
+
+      <div class="debug-control">
+        <label for="carSpeed">Car Speed</label>
+        <input type="range" id="carSpeed" min="100" max="800" value="500" step="50" />
+        <div class="value" id="carSpeedValue">500</div>
+      </div>
+
+      <div class="debug-control">
+        <label for="obstacleChance">Obstacle Spawn Rate</label>
+        <input type="range" id="obstacleChance" min="0" max="50" value="15" step="1" />
+        <div class="value" id="obstacleChanceValue">15%</div>
+      </div>
+
+      <div class="debug-toggle">
+        <button id="viewToggle">Switch to Mario Kart View</button>
+      </div>
+
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #00ff00;">
+        <p style="font-size: 11px; line-height: 1.6;">
+          <strong>Status:</strong><br>
+          View: <span id="currentView">Top-Down</span><br>
+          FPS: <span id="fps">60</span>
+        </p>
+      </div>
+    </div>
+
     <div id="game-container">
       <div id="game"></div>
       <div class="controls">
@@ -46,6 +151,7 @@
         <p>Stay between the yellow lines!</p>
       </div>
     </div>
+
     <script type="module" src="/src/game.js"></script>
   </body>
 </html>
