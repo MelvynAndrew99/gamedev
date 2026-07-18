@@ -4,13 +4,38 @@
   "laps": 2,
   "intro": "Every syndicate driver starts somewhere. Keep it on the road.",
   "pieces": [
-    ["straight", 25],
-    ["scurves"],
-    ["straight", 15],
-    ["curve", 50, 4],
-    ["straight", 15],
-    ["curve", 50, -4],
-    ["scurves"],
-    ["straight", 25]
-  ]
+    [
+      "straight",
+      25
+    ],
+    [
+      "scurves"
+    ],
+    [
+      "straight",
+      15
+    ],
+    [
+      "curve",
+      50,
+      4
+    ],
+    [
+      "straight",
+      15
+    ],
+    [
+      "curve",
+      50,
+      -4
+    ],
+    [
+      "scurves"
+    ],
+    [
+      "straight",
+      25
+    ]
+  ],
+  "obstacles": 0.04
 }

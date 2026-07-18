@@ -11,6 +11,9 @@ import { RoadRenderer } from '../road/RoadRenderer.js';
 import { Player } from '../entities/Player.js';
 import { RaceState, fmtTime } from '../systems/RaceState.js';
 import { getScore, submitScore } from '../systems/HighScores.js';
+import { checkObstacleHit } from '../systems/Collision.js';
+import { RACER } from '../systems/RacerState.js';
+import { HealthBar } from '../ui/HealthBar.js';
 import { TRACKS } from '../tracks/index.js';
 
 export class GameScene extends Phaser.Scene {
@@ -22,6 +25,7 @@ export class GameScene extends Phaser.Scene {
   init(data) {
     this.mode = data.mode ?? 'story';
     this.trackIndex = data.trackIndex ?? 0;
+    this.retryOnAdvance = false;
   }
 
   create() {
@@ -52,6 +56,8 @@ export class GameScene extends Phaser.Scene {
     this.hud = this.add
       .text(16, 16, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' })
       .setDepth(20);
+    this.healthBar = new HealthBar(this, this.scale.width - 200, 18);
+    this.iframes = 0; // post-hit invulnerability countdown
 
     // Center-screen banner: race intro, lap flash, results.
     this.banner = this.add
@@ -88,6 +94,14 @@ export class GameScene extends Phaser.Scene {
 
     this.player.update(dt, input, this.model);
 
+    // Obstacles. i-frames stop one rock cluster from being a death sentence.
+    this.iframes = Math.max(0, this.iframes - dt);
+    if (this.iframes <= 0) {
+      const hitSprite = checkObstacleHit(this.player, this.model, TUNING);
+      if (hitSprite) this.onHit(hitSprite.def);
+    }
+    this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
+
     if (this.mode === 'endless') {
       this.model.ensureAhead(this.player.position); // pave ahead of the car
     } else {
@@ -99,11 +113,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    this.renderer.render(this.model, this.player);
+    const speedPercent = this.player.speed / TUNING.maxSpeed;
+    this.renderer.render(this.model, this.player, speedPercent);
+    this.healthBar.draw(RACER.healthFrac);
 
     // Steering FRAMES (0=left, 1=straight, 2=right) — rotating pixel art
     // smears it. The sideways shove stays.
-    const speedPercent = this.player.speed / TUNING.maxSpeed;
     this.carSprite.setFrame(this.player.steer + 1);
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
@@ -128,6 +143,35 @@ export class GameScene extends Phaser.Scene {
     return Math.floor(this.player.position / 100);
   }
 
+  onHit(def) {
+    this.player.speed *= def.slow;       // momentum is the immediate price
+    const wrecked = RACER.damage(def.damage); // health is the long-term one
+    this.iframes = TUNING.iframes;
+    // Feedback within the same frame as the hit: shake scales with damage,
+    // car flashes red. The player should FEEL the difference between a
+    // cone and a rock before the health bar finishes updating.
+    this.cameras.main.shake(140, def.damage >= 20 ? 0.012 : 0.004);
+    this.carSprite.setTintFill(0xff4444);
+    this.time.delayedCall(120, () => this.carSprite.clearTint());
+    if (wrecked) this.onWrecked();
+  }
+
+  onWrecked() {
+    this.done = true;
+    if (this.mode === 'endless') {
+      const dist = this.distanceM();
+      const record = submitScore('endless', dist, 'max');
+      this.showBanner(
+        `WRECKED\n${dist}m${record ? '\nNEW RECORD' : ''}\n\nENTER FOR TITLE`, 0);
+    } else {
+      // Placeholder policy: retry restores full health. Once the shop
+      // exists, wrecking should cost money instead — otherwise crashing
+      // on purpose becomes a free repair (players WILL find that).
+      this.retryOnAdvance = true;
+      this.showBanner('WRECKED\n\nENTER TO RETRY RACE', 0);
+    }
+  }
+
   finishRace() {
     this.done = true;
     const t = this.race.time;
@@ -142,6 +186,11 @@ export class GameScene extends Phaser.Scene {
 
   advance() {
     if (!this.done) return;
+    if (this.retryOnAdvance) {
+      RACER.health = RACER.maxHealth; // see onWrecked: placeholder policy
+      this.scene.start('GameScene', { mode: 'story', trackIndex: this.trackIndex });
+      return;
+    }
     const last = this.trackIndex >= TRACKS.length - 1;
     if (this.mode === 'story' && !last) {
       this.scene.start('GameScene', {

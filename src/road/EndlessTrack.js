@@ -10,6 +10,7 @@
 // recovery room), straights get rarer. The road itself is the antagonist.
 
 import { RoadModel } from './RoadModel.js';
+import { stampPattern } from './patterns.js';
 
 const RAMP_PIECES = 30; // pieces until full difficulty (~a few minutes of driving)
 
@@ -18,6 +19,8 @@ export class EndlessTrack extends RoadModel {
     super(tuning);
     this.piecesGenerated = 0;
     this.addStraight(30); // gentle runway so the ramp starts from zero threat
+    this.decorate(0, 0);  // posts only — the runway stays hazard-free
+    this.nextPatternAt = 90; // hazards begin after the runway
   }
 
   // No wrap: clamp instead of modulo. ensureAhead guarantees we never
@@ -32,6 +35,20 @@ export class EndlessTrack extends RoadModel {
   ensureAhead(position) {
     const horizon = position + (this.t.drawDistance + 50) * this.t.segmentLength;
     while (this.trackLength < horizon) this.appendPiece();
+    this.stampPatterns();
+  }
+
+  // Patterns use a persistent cursor, decoupled from piece boundaries —
+  // a pattern is only stamped once ALL the road it needs exists, so the
+  // cone telegraph can never point at rocks that were never built.
+  stampPatterns() {
+    const d = Math.min(1, this.piecesGenerated / RAMP_PIECES);
+    const gap = Math.round(80 - d * 50); // breathing room shrinks: 80 -> 30
+    while (this.nextPatternAt < this.segments.length - 60) {
+      const consumed = stampPattern(this, this.nextPatternAt);
+      this.nextPatternAt +=
+        consumed + gap + Math.floor(Math.random() * gap * 0.5);
+    }
   }
 
   appendPiece() {
@@ -41,6 +58,7 @@ export class EndlessTrack extends RoadModel {
     const maxCurve = 2 + d * 5;                 // sharpest curve: 2 -> 7
     const straightChance = 0.4 - d * 0.25;      // straights: 40% -> 15%
 
+    const before = this.segments.length;
     const r = Math.random();
     if (r < straightChance) {
       this.addStraight(len);
@@ -50,6 +68,10 @@ export class EndlessTrack extends RoadModel {
     } else {
       this.addSCurves();
     }
+    // Posts only here — hazard patterns are stamped by stampPatterns(),
+    // which runs on its own cursor so formations never straddle the edge
+    // of the paved world.
+    this.decorate(0, before);
   }
 }
 

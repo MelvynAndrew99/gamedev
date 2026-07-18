@@ -19,6 +19,17 @@ export class RoadRenderer {
     this.sky = scene.add.graphics().setDepth(-2);
     this.g = scene.add.graphics().setDepth(-1);
     this.drawSky();
+
+    // Sprite pool for world objects (obstacles, roadside props). Created
+    // once, reassigned every frame — the render loop never allocates.
+    // All share depth 5; near-over-far ordering comes from assignment
+    // order (we assign far->near, and later pool entries draw on top).
+    this.pool = [];
+    for (let i = 0; i < 120; i++) {
+      this.pool.push(
+        scene.add.image(0, 0, 'cone').setOrigin(0.5, 1).setDepth(5).setVisible(false)
+      );
+    }
   }
 
   // Static gradient bands, drawn once. (Parallax scroll on curves is a
@@ -35,10 +46,16 @@ export class RoadRenderer {
     });
   }
 
-  render(model, player) {
+  render(model, player, speedPercent = 0) {
     const t = this.t;
     const g = this.g;
     g.clear();
+
+    // Dynamic FOV: widen with speed. VISUAL only — TUNING.cameraDepth and
+    // playerZ (used by game logic) stay pinned to the base fov, so handling
+    // doesn't change when the lens does.
+    const fov = t.fov + t.fovSpeedBoost * speedPercent;
+    this.frameDepth = 1 / Math.tan(((fov / 2) * Math.PI) / 180);
 
     const base = model.findSegment(player.position);
     const basePercent = (player.position % t.segmentLength) / t.segmentLength;
@@ -66,13 +83,41 @@ export class RoadRenderer {
       dx += seg.curve;
 
       seg.clipped =
-        seg.p1.camera.z <= t.cameraDepth || // behind the projection plane
-        seg.p2.screen.y >= maxY;            // hidden behind nearer road
+        seg.p1.camera.z <= this.frameDepth || // behind the projection plane
+        seg.p2.screen.y >= maxY;              // hidden behind nearer road
       if (seg.clipped) continue;
 
       this.drawSegment(seg, 1 - fog(n / t.drawDistance, t.fogDensity));
       maxY = seg.p2.screen.y;
     }
+
+    this.renderSprites(model, base);
+  }
+
+  // Second pass, far -> near, so close sprites draw over distant ones.
+  // Only segments the road pass projected this frame have valid screen
+  // coords; clipped segments are skipped along with their sprites.
+  renderSprites(model, base) {
+    const t = this.t;
+    let poolI = 0;
+    for (let n = t.drawDistance - 1; n >= 0; n--) {
+      const seg = model.segments[(base.index + n) % model.segments.length];
+      if (seg.clipped || seg.sprites.length === 0) continue;
+      const { x, y, scale } = seg.p1.screen;
+      for (const s of seg.sprites) {
+        if (s.hit || poolI >= this.pool.length) continue;
+        const img = this.pool[poolI++];
+        img.setTexture(s.key);
+        // Lateral placement: same projection term as the road edges.
+        img.x = x + scale * (s.offset * t.roadWidth) * (this.w / 2);
+        img.y = y;
+        // Width in road-half units -> pixels, aspect preserved.
+        const dw = s.view * scale * t.roadWidth * (this.w / 2);
+        img.setDisplaySize(dw, dw * (img.height / img.width));
+        img.setVisible(true);
+      }
+    }
+    for (let i = poolI; i < this.pool.length; i++) this.pool[i].setVisible(false);
   }
 
   // World -> camera -> screen. THE projection:
@@ -82,7 +127,7 @@ export class RoadRenderer {
     p.camera.x = p.world.x - cameraX;
     p.camera.y = p.world.y - cameraY;
     p.camera.z = p.world.z - cameraZ;
-    const scale = t.cameraDepth / p.camera.z;
+    const scale = this.frameDepth / p.camera.z;
     p.screen.scale = scale;
     p.screen.x = Math.round(this.w / 2 + (scale * p.camera.x * this.w) / 2);
     p.screen.y = Math.round(this.h / 2 - (scale * p.camera.y * this.h) / 2);

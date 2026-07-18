@@ -5,6 +5,7 @@
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
 import { getScore } from '../systems/HighScores.js';
+import { RACER } from '../systems/RacerState.js';
 
 const ITEMS = [
   { label: 'STORY MODE', data: { mode: 'story', trackIndex: 0 } },
@@ -24,6 +25,9 @@ export class TitleScene extends Phaser.Scene {
       frameWidth: 48,
       frameHeight: 64,
     });
+    this.load.image('cone', 'assets/cone.png');
+    this.load.image('rock', 'assets/rock.png');
+    this.load.image('post', 'assets/post.png');
   }
 
   create() {
@@ -96,6 +100,8 @@ export class TitleScene extends Phaser.Scene {
     kb.on('keydown-UP', () => this.move(-1));
     kb.on('keydown-DOWN', () => this.move(1));
     kb.on('keydown-ENTER', () => {
+      RACER.resetRun(); // fresh car for a fresh campaign/run — mid-campaign
+                        // races do NOT reset (that's the whole economy)
       this.scene.start('GameScene', ITEMS[this.selected].data);
     });
   }

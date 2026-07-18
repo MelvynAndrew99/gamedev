@@ -18,6 +18,12 @@ export const TUNING = {
   // ---- Car physics (arcade-tuned, not simulated) ---------------------
   maxSpeed: 12000,     // (derived-input) world units/sec. 12000 = 1 segment per frame at 60fps
   centrifugal: 0.3,    // how hard curves fling you outward. THE core risk knob of the game.
+  playerW: 0.14,       // car collision half-width in road-half units
+  iframes: 0.9,        // seconds of post-hit invulnerability (no combo-wrecks by cluster)
+
+  // ---- Speed feel ----------------------------------------------------
+  fovSpeedBoost: 22,   // degrees added to fov at max speed. Dynamic FOV is the
+                       // cheapest speed drug there is: the world stretches.
 
   // ---- Colors (F-Zero sunset / Wipeout neon) -------------------------
   colors: {

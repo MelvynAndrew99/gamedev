@@ -5,6 +5,9 @@
 // horizontally by this much per segment." Accumulate that while projecting
 // and straight slabs *look* curved. That's the entire OutRun trick.
 
+import { ROADSIDE } from '../config/obstacles.js';
+import { stampPattern } from './patterns.js';
+
 export class RoadModel {
   constructor(tuning) {
     this.t = tuning;
@@ -28,6 +31,9 @@ export class RoadModel {
       p2: { world: { x: 0, y: 0, z: (n + 1) * len }, camera: {}, screen: {} },
       // Which rumble color band this segment belongs to (the SNES stripes).
       band: Math.floor(n / this.t.rumbleLength) % 2,
+      // Things standing on this slab: obstacles ({def, offset}) and
+      // roadside decoration ({key, offset}). offset is in road-half units.
+      sprites: [],
     });
   }
 
@@ -61,6 +67,34 @@ export class RoadModel {
       else throw new Error(`Unknown track piece: ${type}`);
     }
     if (this.segments.length === 0) throw new Error('Track has no pieces');
+    this.decorate(data.obstacles ?? 0.05);
+  }
+
+  // Dress the track: roadside posts (speed perception — the eye reads
+  // velocity from things streaming past the edges, not from the road
+  // itself) and authored hazard patterns (see patterns.js — cones
+  // telegraph, rocks punish; nothing is placed at random positions).
+  // `obstacleDensity` sets pattern frequency: higher = shorter gaps.
+  decorate(obstacleDensity, from = 0, endMargin = 30) {
+    for (let i = from; i < this.segments.length; i++) {
+      if (i % 10 === 0) {
+        const seg = this.segments[i];
+        seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: -1.25 });
+        seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: 1.25 });
+      }
+    }
+    if (obstacleDensity <= 0) return;
+
+    // Density -> breathing room between patterns. The gap is the "flow"
+    // knob: recover, resettle into a lane, then read the next formation.
+    const gap = Math.min(130, Math.max(25, Math.round(4 / obstacleDensity)));
+    const start = Math.max(from, 30);          // grace zone at the line
+    const end = this.segments.length - endMargin - 45; // room for a full pattern
+    let i = start + Math.floor(Math.random() * gap * 0.5);
+    while (i < end) {
+      const consumed = stampPattern(this, i);
+      i += consumed + gap + Math.floor(Math.random() * gap * 0.5);
+    }
   }
 
   // Which segment is world-position z inside? (wraps — the track is a loop)

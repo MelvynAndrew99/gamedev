@@ -4,15 +4,50 @@
   "laps": 3,
   "intro": "The Gulch pays double for drivers who don't lift.",
   "pieces": [
-    ["straight", 20],
-    ["curve", 30, -3],
-    ["curve", 30, 5],
-    ["straight", 10],
-    ["scurves"],
-    ["curve", 60, 6],
-    ["straight", 12],
-    ["curve", 25, -5],
-    ["curve", 25, 5],
-    ["straight", 18]
-  ]
+    [
+      "straight",
+      20
+    ],
+    [
+      "curve",
+      30,
+      -3
+    ],
+    [
+      "curve",
+      30,
+      5
+    ],
+    [
+      "straight",
+      10
+    ],
+    [
+      "scurves"
+    ],
+    [
+      "curve",
+      60,
+      6
+    ],
+    [
+      "straight",
+      12
+    ],
+    [
+      "curve",
+      25,
+      -5
+    ],
+    [
+      "curve",
+      25,
+      5
+    ],
+    [
+      "straight",
+      18
+    ]
+  ],
+  "obstacles": 0.07
 }
