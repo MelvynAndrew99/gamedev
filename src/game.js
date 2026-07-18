@@ -11,6 +11,7 @@ const config = {
   width: 800,
   height: 600,
   parent: 'game',
+  pixelArt: true, // nearest-neighbor scaling — pixel art stays sharp
   scene: [TitleScene, GameScene], // first in the list boots first
   backgroundColor: '#0b0630',
 };

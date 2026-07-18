@@ -3,11 +3,20 @@
 
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
-import { Player } from '../entities/Player.js';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
     super({ key: 'TitleScene' });
+  }
+
+  // First scene in the boot order = the natural place to load shared assets.
+  // (If the asset list grows past a handful, promote this to a PreloadScene
+  // with a loading bar — same pattern as the HudScene deferral.)
+  preload() {
+    this.load.spritesheet('car', 'assets/car.png', {
+      frameWidth: 48,
+      frameHeight: 64,
+    });
   }
 
   create() {
@@ -35,9 +44,8 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // The machine, hovering. Same texture as in-game — one source of truth.
-    Player.createTexture(this);
-    const car = this.add.sprite(w / 2, 330, 'player-car').setScale(2.4);
+    // The machine, hovering. Frame 1 = straight. Same sheet as in-game.
+    const car = this.add.sprite(w / 2, 330, 'car', 1).setScale(2.4);
     this.tweens.add({
       targets: car,
       y: '+=8',

@@ -23,9 +23,8 @@ export class GameScene extends Phaser.Scene {
     this.renderer = new RoadRenderer(this, TUNING);
     this.player = new Player(TUNING);
 
-    Player.createTexture(this);
     this.carSprite = this.add
-      .sprite(this.scale.width / 2, this.scale.height - 70, 'player-car')
+      .sprite(this.scale.width / 2, this.scale.height - 70, 'car', 1)
       .setScale(1.8)
       .setDepth(10);
 
@@ -59,10 +58,11 @@ export class GameScene extends Phaser.Scene {
     const seg = this.player.update(dt, input, this.model);
     this.renderer.render(this.model, this.player);
 
-    // Car body language: lean into steering + get shoved by curves.
+    // Car body language: steering FRAMES (0=left, 1=straight, 2=right)
+    // instead of rotating the sprite — rotating pixel art smears it. The
+    // sideways shove from steering stays.
     const speedPercent = this.player.speed / TUNING.maxSpeed;
-    this.carSprite.rotation =
-      this.player.steer * 0.08 - seg.curve * speedPercent * 0.04;
+    this.carSprite.setFrame(this.player.steer + 1);
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
 
