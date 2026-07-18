@@ -1,27 +1,44 @@
-// GameScene.js — orchestration only. Owns the loop, wires input, HUD,
-// and the debug panel. All the interesting logic lives in road/ and
-// entities/. If this file grows past ~150 lines, something is in the
-// wrong place.
+// GameScene.js — orchestration for both modes. Owns the loop, wires input,
+// HUD, debug panel. Mode differences are contained to create() (which model,
+// which race rules) and one branch in update(). All interesting logic lives
+// in road/, entities/, and systems/.
 
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
 import { RoadModel } from '../road/RoadModel.js';
+import { EndlessTrack } from '../road/EndlessTrack.js';
 import { RoadRenderer } from '../road/RoadRenderer.js';
 import { Player } from '../entities/Player.js';
+import { RaceState, fmtTime } from '../systems/RaceState.js';
+import { getScore, submitScore } from '../systems/HighScores.js';
+import { TRACKS } from '../tracks/index.js';
 
 export class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
   }
 
+  // Scene launch data arrives here, before create().
+  init(data) {
+    this.mode = data.mode ?? 'story';
+    this.trackIndex = data.trackIndex ?? 0;
+  }
+
   create() {
-    // Note: state lives HERE, not the constructor. scene.start() re-runs
-    // create(), never the constructor — constructor state survives restarts
-    // and goes stale.
-    this.model = new RoadModel(TUNING);
-    this.model.buildTestTrack();
+    // State lives HERE, not the constructor — create() re-runs per start.
+    if (this.mode === 'endless') {
+      this.model = new EndlessTrack(TUNING);
+      this.race = null;
+      this.trackData = null;
+    } else {
+      this.trackData = TRACKS[this.trackIndex];
+      this.model = new RoadModel(TUNING);
+      this.model.buildFromData(this.trackData);
+      this.race = new RaceState(this.model, this.trackData.laps ?? 3);
+    }
     this.renderer = new RoadRenderer(this, TUNING);
     this.player = new Player(TUNING);
+    this.done = false;
 
     this.carSprite = this.add
       .sprite(this.scale.width / 2, this.scale.height - 70, 'car', 1)
@@ -29,25 +46,39 @@ export class GameScene extends Phaser.Scene {
       .setDepth(10);
 
     this.cursors = this.input.keyboard.createCursorKeys();
-
-    // ESC = back to menu. scene.start() shuts this scene down: Phaser-owned
-    // resources (keyboard handlers, timers, game objects) are auto-cleaned.
-    // DOM listeners are NOT Phaser's — see hookDebugPanel for their teardown.
-    this.input.keyboard.on('keydown-ESC', () => {
-      this.scene.start('TitleScene');
-    });
+    this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
+    this.input.keyboard.on('keydown-ENTER', () => this.advance());
 
     this.hud = this.add
       .text(16, 16, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' })
       .setDepth(20);
 
+    // Center-screen banner: race intro, lap flash, results.
+    this.banner = this.add
+      .text(this.scale.width / 2, 240, '', {
+        fontSize: '28px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        align: 'center',
+        stroke: '#0a0a14',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(30);
+
+    if (this.trackData) {
+      this.showBanner(`${this.trackData.name}\n${this.trackData.intro}`, 3500);
+    } else {
+      this.showBanner('ENDLESS\nThe road never ends. You will.', 3000);
+    }
+
     this.hookDebugPanel();
   }
 
   update(_time, delta) {
-    // Clamp dt: a background-tab hiccup shouldn't teleport the car.
-    const dt = Math.min(delta, 50) / 1000;
+    if (this.done) return; // race over: banner is up, ENTER/ESC handle exits
 
+    const dt = Math.min(delta, 50) / 1000;
     const input = {
       left: this.cursors.left.isDown,
       right: this.cursors.right.isDown,
@@ -55,31 +86,94 @@ export class GameScene extends Phaser.Scene {
       down: this.cursors.down.isDown,
     };
 
-    const seg = this.player.update(dt, input, this.model);
+    this.player.update(dt, input, this.model);
+
+    if (this.mode === 'endless') {
+      this.model.ensureAhead(this.player.position); // pave ahead of the car
+    } else {
+      const event = this.race.update(dt, this.player);
+      if (event === 'lap') {
+        this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
+      } else if (event === 'finished') {
+        this.finishRace();
+      }
+    }
+
     this.renderer.render(this.model, this.player);
 
-    // Car body language: steering FRAMES (0=left, 1=straight, 2=right)
-    // instead of rotating the sprite — rotating pixel art smears it. The
-    // sideways shove from steering stays.
+    // Steering FRAMES (0=left, 1=straight, 2=right) — rotating pixel art
+    // smears it. The sideways shove stays.
     const speedPercent = this.player.speed / TUNING.maxSpeed;
     this.carSprite.setFrame(this.player.steer + 1);
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
 
-    this.hud.setText(
-      `SPEED ${Math.round(this.player.speed / 100)}` +
-        (Math.abs(this.player.x) > 1 ? '   OFF TRACK' : '')
+    const speed = Math.round(this.player.speed / 100);
+    if (this.mode === 'endless') {
+      const dist = this.distanceM();
+      const best = getScore('endless');
+      this.hud.setText(
+        `DIST ${dist}m${best ? `   BEST ${best}m` : ''}   SPEED ${speed}` +
+          (Math.abs(this.player.x) > 1 ? '   OFF TRACK' : '')
+      );
+    } else {
+      this.hud.setText(
+        `LAP ${this.race.lap}/${this.race.laps}   TIME ${fmtTime(this.race.time)}   SPEED ${speed}` +
+          (Math.abs(this.player.x) > 1 ? '   OFF TRACK' : '')
+      );
+    }
+  }
+
+  distanceM() {
+    return Math.floor(this.player.position / 100);
+  }
+
+  finishRace() {
+    this.done = true;
+    const t = this.race.time;
+    const record = submitScore(this.trackData.id, t, 'min');
+    const last = this.trackIndex >= TRACKS.length - 1;
+    this.showBanner(
+      `FINISH  ${fmtTime(t)}${record ? '\nNEW RECORD' : ''}\n\n` +
+        (last ? 'CAMPAIGN COMPLETE\nENTER FOR TITLE' : 'ENTER FOR NEXT RACE'),
+      0
     );
   }
 
-  // Wire the HTML debug panel. Every hook is guarded — missing elements
-  // are fine, so the panel and the game can evolve independently.
-  //
-  // Resource-ownership note: create() re-runs on every scene start, and DOM
-  // listeners live outside Phaser's scene lifecycle — without teardown they'd
-  // stack one copy per restart. The AbortController deregisters them all on
-  // scene shutdown, same as you'd deregister an IRQ handler in a driver's
-  // teardown path.
+  advance() {
+    if (!this.done) return;
+    const last = this.trackIndex >= TRACKS.length - 1;
+    if (this.mode === 'story' && !last) {
+      this.scene.start('GameScene', {
+        mode: 'story',
+        trackIndex: this.trackIndex + 1,
+      });
+    } else {
+      this.scene.start('TitleScene');
+    }
+  }
+
+  quitToTitle() {
+    // Endless has no finish line yet (nothing to crash into), so the run
+    // banks its distance on exit. Once collisions land, game-over owns this.
+    if (this.mode === 'endless') submitScore('endless', this.distanceM(), 'max');
+    this.scene.start('TitleScene');
+  }
+
+  showBanner(text, ms) {
+    this.banner.setText(text).setAlpha(1);
+    if (this.bannerTimer) this.bannerTimer.remove();
+    if (ms > 0) {
+      this.bannerTimer = this.time.delayedCall(ms, () => {
+        this.tweens.add({ targets: this.banner, alpha: 0, duration: 400 });
+      });
+    }
+  }
+
+  // Wire the HTML debug panel. Guarded — missing elements are fine.
+  // DOM listeners outlive scene restarts unless torn down: the
+  // AbortController deregisters them all on shutdown, same as
+  // deregistering an IRQ handler in a driver's teardown path.
   hookDebugPanel() {
     const ac = new AbortController();
     this.events.once('shutdown', () => ac.abort());

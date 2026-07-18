@@ -1,8 +1,15 @@
-// TitleScene.js — the front door. Matches the in-game palette so the
-// transition into GameScene doesn't feel like changing channels.
+// TitleScene.js — the front door, now a real menu: STORY / ENDLESS,
+// arrow keys + ENTER. Shows the endless high score under its entry —
+// score-chasing starts before the race does.
 
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
+import { getScore } from '../systems/HighScores.js';
+
+const ITEMS = [
+  { label: 'STORY MODE', data: { mode: 'story', trackIndex: 0 } },
+  { label: 'ENDLESS MODE', data: { mode: 'endless' } },
+];
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -34,18 +41,18 @@ export class TitleScene extends Phaser.Scene {
     });
 
     this.add
-      .text(w / 2, 120, 'DESTRUCTION\nRACER', {
+      .text(w / 2, 110, 'DESTRUCTION\nRACER', {
         fontSize: '56px',
-        color: '#ff2d95', // rumbleA — the palette is the brand
+        color: '#ff2d95',
         fontStyle: 'bold',
         align: 'center',
-        stroke: '#00e5ff', // rumbleB
+        stroke: '#00e5ff',
         strokeThickness: 3,
       })
       .setOrigin(0.5);
 
-    // The machine, hovering. Frame 1 = straight. Same sheet as in-game.
-    const car = this.add.sprite(w / 2, 330, 'car', 1).setScale(2.4);
+    // The machine, hovering. Frame 1 = straight.
+    const car = this.add.sprite(w / 2, 290, 'car', 1).setScale(2.2);
     this.tweens.add({
       targets: car,
       y: '+=8',
@@ -55,31 +62,55 @@ export class TitleScene extends Phaser.Scene {
       ease: 'Sine.inOut',
     });
 
+    // Menu.
+    this.selected = 0;
+    this.menuTexts = ITEMS.map((item, i) =>
+      this.add
+        .text(w / 2, 400 + i * 52, item.label, {
+          fontSize: '28px',
+          fontStyle: 'bold',
+          color: '#ffffff',
+        })
+        .setOrigin(0.5)
+    );
+
+    // Endless best, sitting under its menu entry.
+    const best = getScore('endless');
     this.add
-      .text(w / 2, 440, 'Speed is free. Survival costs extra.', {
-        fontSize: '20px',
-        color: '#ffffff',
-        align: 'center',
-      })
-      .setOrigin(0.5);
-
-    const prompt = this.add
-      .text(w / 2, 510, 'PRESS ENTER', {
-        fontSize: '26px',
+      .text(w / 2, 400 + 1 * 52 + 24, best ? `BEST ${best}m` : '', {
+        fontSize: '14px',
         color: '#00e5ff',
-        fontStyle: 'bold',
       })
       .setOrigin(0.5);
-    this.tweens.add({
-      targets: prompt,
-      alpha: 0.25,
-      duration: 600,
-      yoyo: true,
-      repeat: -1,
-    });
 
-    this.input.keyboard.on('keydown-ENTER', () => {
-      this.scene.start('GameScene');
+    this.add
+      .text(w / 2, 560, '↑↓ SELECT   ENTER START', {
+        fontSize: '16px',
+        color: '#b8b8c8',
+      })
+      .setOrigin(0.5);
+
+    this.refreshMenu();
+
+    const kb = this.input.keyboard;
+    kb.on('keydown-UP', () => this.move(-1));
+    kb.on('keydown-DOWN', () => this.move(1));
+    kb.on('keydown-ENTER', () => {
+      this.scene.start('GameScene', ITEMS[this.selected].data);
+    });
+  }
+
+  move(dir) {
+    this.selected =
+      (this.selected + dir + ITEMS.length) % ITEMS.length;
+    this.refreshMenu();
+  }
+
+  refreshMenu() {
+    this.menuTexts.forEach((t, i) => {
+      const active = i === this.selected;
+      t.setColor(active ? '#ff2d95' : '#ffffff');
+      t.setText(active ? `> ${ITEMS[i].label} <` : ITEMS[i].label);
     });
   }
 }

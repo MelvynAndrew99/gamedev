@@ -49,17 +49,18 @@ export class RoadModel {
     this.addCurve(25,  -2);
   }
 
-  // A lap with a bit of everything, enough to feel the handling.
-  buildTestTrack() {
+  // Build the track from data (see src/tracks/index.js for the format).
+  // The track file IS the level: no code changes to add a course.
+  buildFromData(data) {
     this.segments = [];
-    this.addStraight(25);
-    this.addSCurves();
-    this.addStraight(15);
-    this.addCurve(50, 4);      // long sweeping right — feel the centrifugal pull
-    this.addStraight(15);
-    this.addCurve(50, -4);     // and the mirror left
-    this.addSCurves();
-    this.addStraight(25);
+    for (const piece of data.pieces) {
+      const [type, len, curve] = piece;
+      if (type === 'straight')     this.addStraight(len ?? 25);
+      else if (type === 'curve')   this.addCurve(len ?? 25, curve ?? 2);
+      else if (type === 'scurves') this.addSCurves();
+      else throw new Error(`Unknown track piece: ${type}`);
+    }
+    if (this.segments.length === 0) throw new Error('Track has no pieces');
   }
 
   // Which segment is world-position z inside? (wraps — the track is a loop)
