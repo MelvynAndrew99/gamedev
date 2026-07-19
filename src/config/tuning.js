@@ -11,6 +11,7 @@ export const TUNING = {
 
   // ---- Road geometry -------------------------------------------------
   segmentLength: 200,  // world units per segment. Smaller = smoother curves, more segments to draw
+  tunnelHeight: 2600,  // ceiling height in world units (camera sits at 1000)
   rumbleLength: 3,     // segments per rumble-strip color band (the SNES "stripe" cadence)
   roadWidth: 2000,     // world units, HALF-width (center to edge)
   lanes: 3,
@@ -53,6 +54,10 @@ export const TUNING = {
     rumbleB:     0x00e5ff, // cyan
     lane:        0xb8b8c8,
     fog:         0x1a0b45, // matches a sky band so distance melts into the horizon
+    tunnelWall:  0x150a26,
+    tunnelCeil:  0x0d0618,
+    tunnelRoadLight: 0x26262e,
+    tunnelRoadDark:  0x202028,
   },
 
   // Recompute derived values. Call after the debug panel changes fov,

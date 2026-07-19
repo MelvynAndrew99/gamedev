@@ -9,10 +9,10 @@
 export const OBSTACLES = {
   cone: {
     key: 'cone',
-    kind: 'candy',
-    pop: 10,      // fame per cone, multiplied by the current combo
+    kind: 'candy',  // harmless pass-through
+    pop: 0,         // signage, not candy: warnings don't pay (for now)
     damage: 0,
-    slow: 1.0,    // smashing candy is FREE — friction here kills the fun
+    slow: 1.0,      // driving through your own warning is free
     w: 0.07,
     view: 0.16,
   },

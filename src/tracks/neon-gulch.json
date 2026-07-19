@@ -11,7 +11,8 @@
     [
       "curve",
       30,
-      -3
+      -3,
+      2
     ],
     [
       "curve",
@@ -19,20 +20,31 @@
       5
     ],
     [
-      "straight",
-      10
+      "tunnel",
+      22
     ],
     [
       "scurves"
     ],
     [
+      "hill",
+      30,
+      4
+    ],
+    [
       "curve",
       60,
-      6
+      6,
+      -3
     ],
     [
       "straight",
       12
+    ],
+    [
+      "tunnel",
+      18,
+      2
     ],
     [
       "curve",
