@@ -21,6 +21,23 @@ export const TUNING = {
   playerW: 0.14,       // car collision half-width in road-half units
   iframes: 0.9,        // seconds of post-hit invulnerability (no combo-wrecks by cluster)
 
+  // ---- Handling feel (all live on the debug panel) --------------------
+  steerRate: 2.0,      // base steering authority: road-widths/sec at max speed
+  steerExpo: 1.6,      // analog stick response curve (1 = linear, higher = softer center)
+  airbrakeForce: 2.2,  // extra lateral authority while an airbrake is held
+
+  // ---- Popularity economy --------------------------------------------
+  comboWindow: 3.0,    // seconds to chain the next act before the combo lapses
+  comboMax: 8,         // multiplier cap
+  popPayoutRate: 1.0,  // money per fame point at payout
+  basePayout: 300,     // showing up money (story races)
+  parRate: 25,         // money per second under par
+
+  // ---- Jumps ----------------------------------------------------------
+  jumpMinAir: 0.35,    // seconds airborne at crawl speed
+  jumpMaxAir: 0.55,    // ADDITIONAL seconds at max speed (total ~0.9s)
+
+
   // ---- Speed feel ----------------------------------------------------
   fovSpeedBoost: 22,   // degrees added to fov at max speed. Dynamic FOV is the
                        // cheapest speed drug there is: the world stretches.
@@ -56,6 +73,7 @@ export const TUNING = {
     this.decel        = -this.maxSpeed / 5;  // engine braking / coasting
     this.offRoadDecel = -this.maxSpeed / 2;  // punish leaving the road
     this.offRoadLimit =  this.maxSpeed / 4;  // off-road won't slow you below this
+    this.airbrakeDrag  = -this.maxSpeed / 8; // airbrakes trade a little speed for the turn
   },
 };
 

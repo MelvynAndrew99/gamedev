@@ -12,6 +12,8 @@ import { Player } from '../entities/Player.js';
 import { RaceState, fmtTime } from '../systems/RaceState.js';
 import { getScore, submitScore } from '../systems/HighScores.js';
 import { checkObstacleHit } from '../systems/Collision.js';
+import { Controls } from '../systems/Controls.js';
+import { Popularity } from '../systems/Popularity.js';
 import { RACER } from '../systems/RacerState.js';
 import { HealthBar } from '../ui/HealthBar.js';
 import { TRACKS } from '../tracks/index.js';
@@ -42,6 +44,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.renderer = new RoadRenderer(this, TUNING);
     this.player = new Player(TUNING);
+    this.pop = new Popularity(TUNING);
     this.done = false;
 
     this.carSprite = this.add
@@ -49,7 +52,7 @@ export class GameScene extends Phaser.Scene {
       .setScale(1.8)
       .setDepth(10);
 
-    this.cursors = this.input.keyboard.createCursorKeys();
+    this.controls = new Controls(this);
     this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
     this.input.keyboard.on('keydown-ENTER', () => this.advance());
 
@@ -82,24 +85,38 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time, delta) {
-    if (this.done) return; // race over: banner is up, ENTER/ESC handle exits
+    // Result banners answer the controller: cross advances, circle bails.
+    // Edge-detected poll, same reasoning as the title menu.
+    const gp = this.input.gamepad;
+    const pad = gp && gp.total > 0 ? gp.getPad(0) : null;
+    const padNow = { a: !!(pad && pad.A), b: !!(pad && pad.B) };
+    const padPrev = this.prevPad ?? { a: true, b: true };
+    this.prevPad = padNow;
+
+    if (this.done) {
+      if (padNow.a && !padPrev.a) this.advance();
+      if (padNow.b && !padPrev.b) this.quitToTitle();
+      return; // banner is up; keyboard ENTER/ESC still work too
+    }
 
     const dt = Math.min(delta, 50) / 1000;
-    const input = {
-      left: this.cursors.left.isDown,
-      right: this.cursors.right.isDown,
-      up: this.cursors.up.isDown,
-      down: this.cursors.down.isDown,
-    };
+    const input = this.controls.read(TUNING);
 
     this.player.update(dt, input, this.model);
 
-    // Obstacles. i-frames stop one rock cluster from being a death sentence.
-    this.iframes = Math.max(0, this.iframes - dt);
-    if (this.iframes <= 0) {
-      const hitSprite = checkObstacleHit(this.player, this.model, TUNING);
-      if (hitSprite) this.onHit(hitSprite.def);
+    // Contact. Airborne clears everything below — that's the point of
+    // flying. i-frames only gate hazards; candy always pays.
+    this.pop.update(dt);
+    if (!this.player.airborne) {
+      const s = checkObstacleHit(this.player, this.model, TUNING);
+      if (s) {
+        if (s.def.kind === 'candy') this.onCandy(s.def);
+        else if (s.def.kind === 'launch') this.onRamp(s.def);
+        else if (this.iframes <= 0) this.onHit(s.def);
+        else s.hit = false; // i-frames: hazard not consumed, just ghosted
+      }
     }
+    this.iframes = Math.max(0, this.iframes - dt);
     this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
 
     if (this.mode === 'endless') {
@@ -117,24 +134,32 @@ export class GameScene extends Phaser.Scene {
     this.renderer.render(this.model, this.player, speedPercent);
     this.healthBar.draw(RACER.healthFrac);
 
-    // Steering FRAMES (0=left, 1=straight, 2=right) — rotating pixel art
-    // smears it. The sideways shove stays.
-    this.carSprite.setFrame(this.player.steer + 1);
+    // Steering FRAMES (0=left, 1=straight, 2=right) — analog steer is
+    // quantized; the thresholds keep small corrections from strobing the
+    // sprite. Rotating pixel art smears it, hence frames not rotation.
+    const s = this.player.steer;
+    this.carSprite.setFrame(s < -0.25 ? 0 : s > 0.25 ? 2 : 1);
+    // Jump arc: the sprite swells and lifts through a sine, then lands.
+    const arc = this.player.airArc;
+    this.carSprite.setScale(1.8 * (1 + 0.45 * arc));
+    this.carSprite.y = this.scale.height - 70 - 46 * arc;
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
 
     const speed = Math.round(this.player.speed / 100);
+    const combo = this.pop.combo > 1 ? ` x${this.pop.combo}` : '';
+    const fame = `FAME ${this.pop.total}${combo}`;
     if (this.mode === 'endless') {
       const dist = this.distanceM();
       const best = getScore('endless');
       this.hud.setText(
-        `DIST ${dist}m${best ? `   BEST ${best}m` : ''}   SPEED ${speed}` +
-          (Math.abs(this.player.x) > 1 ? '   OFF TRACK' : '')
+        `DIST ${dist}m${best ? `  BEST ${best}m` : ''}  ${fame}  SPEED ${speed}` +
+          (!this.player.airborne && Math.abs(this.player.x) > 1 ? '  OFF TRACK' : '')
       );
     } else {
       this.hud.setText(
-        `LAP ${this.race.lap}/${this.race.laps}   TIME ${fmtTime(this.race.time)}   SPEED ${speed}` +
-          (Math.abs(this.player.x) > 1 ? '   OFF TRACK' : '')
+        `LAP ${this.race.lap}/${this.race.laps}  ${fmtTime(this.race.time)}  ${fame}  SPEED ${speed}` +
+          (!this.player.airborne && Math.abs(this.player.x) > 1 ? '  OFF TRACK' : '')
       );
     }
   }
@@ -143,7 +168,20 @@ export class GameScene extends Phaser.Scene {
     return Math.floor(this.player.position / 100);
   }
 
+  onCandy(def) {
+    const earned = this.pop.add(def.pop);
+    this.popup(`+${earned}`, '#ffcf3f');
+  }
+
+  onRamp(def) {
+    const earned = this.pop.add(def.pop);
+    this.player.launch();
+    this.popup(`+${earned} AIR!`, '#00e5ff');
+    this.cameras.main.shake(60, 0.003); // takeoff kick
+  }
+
   onHit(def) {
+    if (this.pop.bust()) this.popup('COMBO LOST', '#ff2d55');
     this.player.speed *= def.slow;       // momentum is the immediate price
     const wrecked = RACER.damage(def.damage); // health is the long-term one
     this.iframes = TUNING.iframes;
@@ -161,8 +199,9 @@ export class GameScene extends Phaser.Scene {
     if (this.mode === 'endless') {
       const dist = this.distanceM();
       const record = submitScore('endless', dist, 'max');
+      RACER.money += this.pop.cash; // the crowd tips even a spectacular ending
       this.showBanner(
-        `WRECKED\n${dist}m${record ? '\nNEW RECORD' : ''}\n\nENTER FOR TITLE`, 0);
+        `WRECKED\n${dist}m${record ? '  NEW RECORD' : ''}\nTIPS $${this.pop.cash}\n\nENTER FOR TITLE`, 0);
     } else {
       // Placeholder policy: retry restores full health. Once the shop
       // exists, wrecking should cost money instead — otherwise crashing
@@ -176,9 +215,18 @@ export class GameScene extends Phaser.Scene {
     this.done = true;
     const t = this.race.time;
     const record = submitScore(this.trackData.id, t, 'min');
+    // The two careers, side by side on every receipt: racing income
+    // (base + beating par) and fame income. Players see which one is
+    // funding their garage — that's the payout screen teaching playstyle.
+    const par = this.trackData.par ?? 120;
+    const timeCash = TUNING.basePayout + Math.max(0, Math.round((par - t) * TUNING.parRate));
+    const fameCash = this.pop.cash;
+    RACER.money += timeCash + fameCash;
     const last = this.trackIndex >= TRACKS.length - 1;
     this.showBanner(
-      `FINISH  ${fmtTime(t)}${record ? '\nNEW RECORD' : ''}\n\n` +
+      `FINISH  ${fmtTime(t)}${record ? '  NEW RECORD' : ''}\n` +
+        `RACING $${timeCash}  +  FAME $${fameCash}\n` +
+        `WALLET $${RACER.money}\n\n` +
         (last ? 'CAMPAIGN COMPLETE\nENTER FOR TITLE' : 'ENTER FOR NEXT RACE'),
       0
     );
@@ -203,10 +251,27 @@ export class GameScene extends Phaser.Scene {
   }
 
   quitToTitle() {
-    // Endless has no finish line yet (nothing to crash into), so the run
-    // banks its distance on exit. Once collisions land, game-over owns this.
-    if (this.mode === 'endless') submitScore('endless', this.distanceM(), 'max');
+    // Walking away mid-run still banks the endless distance and tips.
+    if (this.mode === 'endless' && !this.done) {
+      submitScore('endless', this.distanceM(), 'max');
+      RACER.money += this.pop.cash;
+    }
     this.scene.start('TitleScene');
+  }
+
+  // Sub-300ms reward legibility: fame blooms at the car, not on a tally.
+  popup(text, color) {
+    const p = this.add
+      .text(this.carSprite.x, this.carSprite.y - 50, text, {
+        fontSize: '20px', color, fontStyle: 'bold',
+        stroke: '#0a0a14', strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(25);
+    this.tweens.add({
+      targets: p, y: p.y - 44, alpha: 0, duration: 700,
+      ease: 'Cubic.out', onComplete: () => p.destroy(),
+    });
   }
 
   showBanner(text, ms) {
@@ -241,7 +306,11 @@ export class GameScene extends Phaser.Scene {
       apply();
     };
 
-    hook('maxSpeed',     (v) => (TUNING.maxSpeed = v));
+    hook('maxSpeed',      (v) => (TUNING.maxSpeed = v));
+    hook('steerRate',     (v) => (TUNING.steerRate = v));
+    hook('centrifugal',   (v) => (TUNING.centrifugal = v));
+    hook('airbrakeForce', (v) => (TUNING.airbrakeForce = v));
+    hook('steerExpo',     (v) => (TUNING.steerExpo = v));
     hook('fov',          (v) => (TUNING.fov = v));
     hook('cameraHeight', (v) => (TUNING.cameraHeight = v));
     hook('drawDistance', (v) => (TUNING.drawDistance = v));

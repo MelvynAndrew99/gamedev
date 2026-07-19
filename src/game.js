@@ -12,6 +12,7 @@ const config = {
   height: 600,
   parent: 'game',
   pixelArt: true, // nearest-neighbor scaling — pixel art stays sharp
+  input: { gamepad: true },
   scene: [TitleScene, GameScene], // first in the list boots first
   backgroundColor: '#0b0630',
 };

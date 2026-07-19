@@ -49,5 +49,6 @@
       18
     ]
   ],
-  "obstacles": 0.07
+  "obstacles": 0.07,
+  "par": 170
 }

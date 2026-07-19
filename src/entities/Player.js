@@ -15,7 +15,27 @@ export class Player {
     this.position = 0;
     this.x = 0;
     this.speed = 0;
-    this.steer = 0; // -1 | 0 | +1, for sprite lean
+    this.steer = 0; // visual lean, -1..1
+    this.air = 0;      // seconds of airtime remaining
+    this.airTotal = 0; // total airtime of the current jump (for the arc)
+  }
+
+  get airborne() {
+    return this.air > 0;
+  }
+
+  // 0 at takeoff/landing, 1 at apex — for the sprite's visual arc.
+  get airArc() {
+    if (!this.airborne || this.airTotal <= 0) return 0;
+    const t = 1 - this.air / this.airTotal;
+    return Math.sin(t * Math.PI);
+  }
+
+  // Hit a ramp. Faster launch = longer flight = more cleared road.
+  launch() {
+    const speedPercent = this.speed / this.t.maxSpeed;
+    this.airTotal = this.t.jumpMinAir + this.t.jumpMaxAir * speedPercent;
+    this.air = this.airTotal;
   }
 
   update(dt, input, model) {
@@ -23,23 +43,44 @@ export class Player {
     const seg = model.findSegment(this.position + t.playerZ); // segment under the CAR, not the camera
     const speedPercent = this.speed / t.maxSpeed;
 
-    // Steering. `2` = full road-widths per second at max speed.
-    const dx = dt * 2 * speedPercent;
-    if (input.left)       { this.x -= dx; this.steer = -1; }
-    else if (input.right) { this.x += dx; this.steer =  1; }
-    else                  { this.steer = 0; }
+    // Airborne: tick the timer; steering authority drops to a whisper —
+    // you committed at the ramp, the air is where commitment lives.
+    this.air = Math.max(0, this.air - dt);
+    const grip = this.airborne ? 0.25 : 1;
 
-    // Centrifugal push: dx * speedPercent makes it scale with speed²,
-    // so a curve that's trivial at half throttle is a fight at full.
-    this.x -= dx * speedPercent * seg.curve * t.centrifugal;
+    // Steering authority scales with speed (can't turn a parked hovercar).
+    // input.steer is analog (-1..1) — keyboard just supplies ±1.
+    const authority = dt * t.steerRate * speedPercent * grip;
+    let dx = authority * input.steer;
 
-    // Throttle / brake / coast.
-    if (input.up)        this.speed += t.accel * dt;
-    else if (input.down) this.speed += t.braking * dt;
-    else                 this.speed += t.decel * dt;
+    // Airbrakes (F-Zero shoulder lean / Wipeout airbrake): extra lateral
+    // force in the held direction, paid for with a little speed. Holding
+    // BOTH cancels the turn but doubles the drag — a deliberate scrub,
+    // exactly like tapping both shoulders in F-Zero before a hairpin.
+    let ab = 0;
+    if (input.airbrakeL) ab -= 1;
+    if (input.airbrakeR) ab += 1;
+    if (input.airbrakeL || input.airbrakeR) {
+      dx += dt * t.airbrakeForce * speedPercent * ab;
+      this.speed += t.airbrakeDrag * dt * (input.airbrakeL && input.airbrakeR ? 2 : 1);
+    }
+    this.x += dx;
 
-    // Off the road (|x| > 1): heavy drag down to a crawl.
-    if ((this.x < -1 || this.x > 1) && this.speed > t.offRoadLimit) {
+    // Centrifugal push scales with speed², so a curve that's trivial at
+    // half throttle is a fight at full.
+    this.x -= authority * speedPercent * seg.curve * t.centrifugal;
+
+    // Analog throttle/brake; coast when neither.
+    if (input.throttle > 0)   this.speed += t.accel * input.throttle * dt;
+    else if (input.brake > 0) this.speed += t.braking * input.brake * dt;
+    else                      this.speed += t.decel * dt;
+
+    // Visual lean for the sprite: steering plus airbrake attitude.
+    this.steer = clamp(input.steer + ab * 0.6, -1, 1);
+
+    // Off the road (|x| > 1): heavy drag down to a crawl. Not while
+    // airborne — flight doesn't care what's under you.
+    if (!this.airborne && (this.x < -1 || this.x > 1) && this.speed > t.offRoadLimit) {
       this.speed += t.offRoadDecel * dt;
     }
 

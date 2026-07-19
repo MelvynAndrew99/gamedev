@@ -50,6 +50,38 @@
         <div class="value" id="maxSpeedValue">12000</div>
       </div>
 
+      <div style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #00e5ff;">
+        <strong>HANDLING</strong>
+      </div>
+
+      <div class="debug-control">
+        <label for="steerRate">Steer Rate</label>
+        <input type="range" id="steerRate" min="0.5" max="4" value="2" step="0.1" />
+        <div class="value" id="steerRateValue">2</div>
+      </div>
+
+      <div class="debug-control">
+        <label for="centrifugal">Centrifugal Pull</label>
+        <input type="range" id="centrifugal" min="0" max="1" value="0.3" step="0.05" />
+        <div class="value" id="centrifugalValue">0.3</div>
+      </div>
+
+      <div class="debug-control">
+        <label for="airbrakeForce">Airbrake Force</label>
+        <input type="range" id="airbrakeForce" min="0" max="5" value="2.2" step="0.1" />
+        <div class="value" id="airbrakeForceValue">2.2</div>
+      </div>
+
+      <div class="debug-control">
+        <label for="steerExpo">Stick Expo Curve</label>
+        <input type="range" id="steerExpo" min="1" max="3" value="1.6" step="0.1" />
+        <div class="value" id="steerExpoValue">1.6</div>
+      </div>
+
+      <div style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #00e5ff;">
+        <strong>CAMERA</strong>
+      </div>
+
       <div class="debug-control">
         <label for="fov">Field of View</label>
         <input type="range" id="fov" min="60" max="140" value="100" step="1" />
@@ -86,9 +118,9 @@
       <div id="game"></div>
       <div class="controls">
         <h2>Destruction Racer</h2>
-        <p><strong>↑</strong> accelerate &nbsp; <strong>↓</strong> brake</p>
-        <p><strong>← →</strong> steer</p>
-        <p>Neon strips mark the edge. For now.</p>
+        <p><strong>↑</strong> gas &nbsp; <strong>↓</strong> brake &nbsp; <strong>← →</strong> steer &nbsp; <strong>Z / X</strong> airbrakes</p>
+        <p>🎮 stick steer &nbsp; R2 gas &nbsp; L2 brake &nbsp; <strong>L1 / R1 airbrakes</strong></p>
+        <p>Cones warn. Rocks collect.</p>
       </div>
     </div>
 
