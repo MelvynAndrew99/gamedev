@@ -10,13 +10,11 @@ import { EndlessTrack } from '../road/EndlessTrack.js';
 import { RoadRenderer } from '../road/RoadRenderer.js';
 import { Player } from '../entities/Player.js';
 import { RaceState, fmtTime } from '../systems/RaceState.js';
-import { getScore, submitScore } from '../systems/HighScores.js';
+import { submitScore } from '../systems/HighScores.js';
 import { checkObstacleHit } from '../systems/Collision.js';
 import { Controls } from '../systems/Controls.js';
 import { Popularity } from '../systems/Popularity.js';
 import { RACER } from '../systems/RacerState.js';
-import { HealthBar } from '../ui/HealthBar.js';
-import { ProgressBar } from '../ui/ProgressBar.js';
 import { TRACKS } from '../tracks/index.js';
 
 export class GameScene extends Phaser.Scene {
@@ -57,23 +55,20 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
     this.input.keyboard.on('keydown-ENTER', () => this.advance());
 
-    this.hud = this.add
-      .text(16, 16, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' })
-      .setDepth(20);
-    this.healthBar = new HealthBar(this, this.scale.width - 200, 18);
-    // Race progress bar — story only; endless has no "how far is left."
-    this.progressBar = this.race ? new ProgressBar(this, this.race.laps) : null;
     this.iframes = 0; // post-hit invulnerability countdown
+    this.boostCooldown = 0; // one pad = one kick, even if we overlap for 2 frames
 
     // Center-screen banner: race intro, lap flash, results.
     this.banner = this.add
-      .text(this.scale.width / 2, 240, '', {
-        fontSize: '28px',
+      .text(this.scale.width / 2, 250, '', {
+        fontSize: '24px',
         color: '#ffffff',
         fontStyle: 'bold',
         align: 'center',
         stroke: '#0a0a14',
         strokeThickness: 5,
+        lineSpacing: 6,
+        wordWrap: { width: this.scale.width - 120 }, // no more edge bleed
       })
       .setOrigin(0.5)
       .setDepth(30);
@@ -85,6 +80,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.hookDebugPanel();
+
+    // Instruments run in a parallel scene: own camera, immune to the
+    // shakes and zooms this scene will accumulate. Stopped with us.
+    this.scene.launch('HudScene');
+    this.events.once('shutdown', () => this.scene.stop('HudScene'));
   }
 
   update(_time, delta) {
@@ -115,11 +115,13 @@ export class GameScene extends Phaser.Scene {
       if (s) {
         if (s.def.kind === 'candy') this.onCandy(s.def);
         else if (s.def.kind === 'launch') this.onRamp(s.def);
+        else if (s.def.kind === 'boost') this.onBoost();
         else if (this.iframes <= 0) this.onHit(s.def);
         else s.hit = false; // i-frames: hazard not consumed, just ghosted
       }
     }
     this.iframes = Math.max(0, this.iframes - dt);
+    this.boostCooldown = Math.max(0, this.boostCooldown - dt);
     this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
 
     if (this.mode === 'endless') {
@@ -135,13 +137,6 @@ export class GameScene extends Phaser.Scene {
 
     const speedPercent = this.player.speed / TUNING.maxSpeed;
     this.renderer.render(this.model, this.player, speedPercent);
-    this.healthBar.draw(RACER.healthFrac);
-    if (this.progressBar) {
-      // (lap-1 + fraction-through-this-lap) / total laps. Position wraps
-      // each lap, so the in-lap fraction is just position / trackLength.
-      const inLap = this.player.position / this.model.trackLength;
-      this.progressBar.draw((this.race.lap - 1 + inLap) / this.race.laps);
-    }
 
     // Steering FRAMES (0=left, 1=straight, 2=right) — analog steer is
     // quantized; the thresholds keep small corrections from strobing the
@@ -155,26 +150,19 @@ export class GameScene extends Phaser.Scene {
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
 
-    const speed = Math.round(this.player.speed / 100);
-    const combo = this.pop.combo > 1 ? ` x${this.pop.combo}` : '';
-    const fame = `FAME ${this.pop.total}${combo}`;
-    if (this.mode === 'endless') {
-      const dist = this.distanceM();
-      const best = getScore('endless');
-      this.hud.setText(
-        `DIST ${dist}m${best ? `  BEST ${best}m` : ''}  ${fame}  SPEED ${speed}` +
-          (!this.player.airborne && Math.abs(this.player.x) > 1 ? '  OFF TRACK' : '')
-      );
-    } else {
-      this.hud.setText(
-        `LAP ${this.race.lap}/${this.race.laps}  ${fmtTime(this.race.time)}  ${fame}  SPEED ${speed}` +
-          (!this.player.airborne && Math.abs(this.player.x) > 1 ? '  OFF TRACK' : '')
-      );
-    }
+
   }
 
   distanceM() {
     return Math.floor(this.player.position / 100);
+  }
+
+  onBoost() {
+    if (this.boostCooldown > 0) return;
+    this.boostCooldown = 0.5;
+    this.player.boost();
+    this.popup('BOOST', '#2ee56b');
+    this.cameras.main.shake(50, 0.002);
   }
 
   onCandy(def) {

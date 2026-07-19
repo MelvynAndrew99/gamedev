@@ -104,28 +104,80 @@ export class RoadRenderer {
     this.renderSprites(model, base);
   }
 
-  // Tunnels: walls + ceiling per segment, drawn BACK to front (opposite of
-  // the road pass) so near geometry paints over far — canvas painter's
-  // algorithm, direction chosen per pass by what should win overlaps.
+  // Tunnels, drawn BACK to front (opposite of the road pass) so near
+  // geometry paints over far. Philosophy fix from the first attempt: a
+  // tunnel interior is not strips around the road — it's EVERYTHING
+  // EXCEPT THE ROAD OPENING, filled dark. Side fills run to the screen
+  // edges, the ceiling band runs full width, and the mouth segment draws
+  // a portal face. No sky can leak inside.
   renderTunnels(model, base) {
     const t = this.t;
     const c = t.colors;
     const g = this.g;
     const halfH = this.h / 2;
-    for (let n = t.drawDistance - 1; n >= 1; n--) {
+
+    // PRE-PASS — the depth void. The interior tiles (ceiling from the
+    // top, road from the bottom) converge toward the horizon but never
+    // meet; without this, raw sky shows through the gap (the pink-stripe
+    // bug). Fill the whole convergence region behind the DEEPEST visible
+    // tunnel segment with near-black first; everything else paints over
+    // it, and whatever they don't reach reads as depth, not sky.
+    // (Known simplification: two tunnels visible at once with open road
+    // between them would share one void — rare and brief, accepted.)
+    let far = null, inRun = false, exitVisible = false;
+    for (let n = 1; n < t.drawDistance; n++) {
       const seg = model.segments[(base.index + n) % model.segments.length];
+      if (seg.clipped) continue;
+      if (seg.tunnel) { far = seg; inRun = true; }
+      else if (inRun) { exitVisible = true; break; } // first run only
+    }
+    if (far) {
+      const farCeil = far.p2.screen.y - far.p2.screen.scale * t.tunnelHeight * halfH;
+      g.fillStyle(c.tunnelDeep, 1);
+      g.fillRect(0, farCeil, this.w, Math.max(1, far.p2.screen.y - farCeil));
+
+      // Light at the end: if the exit is in view, paint the far opening
+      // with the horizon color. The darkness must read as passage, not
+      // wall — the exit glow is the tunnel keeping its promise.
+      if (exitVisible) {
+        const { x: fx, y: fy, w: fw, scale: fs } = far.p2.screen;
+        const fCeil = fy - fs * t.tunnelHeight * halfH;
+        const FW = fw * 1.18;
+        g.fillStyle(c.fog, 1);
+        g.fillRect(fx - FW, fCeil, FW * 2, Math.max(1, fy - fCeil));
+      }
+    }
+
+    for (let n = t.drawDistance - 1; n >= 1; n--) {
+      const idx = (base.index + n) % model.segments.length;
+      const seg = model.segments[idx];
       if (seg.clipped || !seg.tunnel) continue;
       const { x: x1, y: y1, w: w1, scale: s1 } = seg.p1.screen;
       const { x: x2, y: y2, w: w2, scale: s2 } = seg.p2.screen;
-      // Ceiling line = road line lifted by tunnelHeight through the
-      // same projection (screen-y shifts by scale * height * h/2).
+      // Ceiling line = road line lifted by tunnelHeight through the same
+      // projection (screen-y shifts by scale * height * h/2).
       const ceil1 = y1 - s1 * t.tunnelHeight * halfH;
       const ceil2 = y2 - s2 * t.tunnelHeight * halfH;
-      const W1 = w1 * 1.18, W2 = w2 * 1.18; // walls sit past the rumble
-      // left wall, right wall, ceiling
-      this.quad(g, c.tunnelWall, x1 - W1, y1, x1 - W1, ceil1, x2 - W2, ceil2, x2 - W2, y2);
-      this.quad(g, c.tunnelWall, x1 + W1, y1, x1 + W1, ceil1, x2 + W2, ceil2, x2 + W2, y2);
-      this.quad(g, c.tunnelCeil, x1 - W1, ceil1, x1 + W1, ceil1, x2 + W2, ceil2, x2 - W2, ceil2);
+      const W1 = w1 * 1.18, W2 = w2 * 1.18; // opening sits past the rumble
+
+      // Ceiling: full-width band between this segment's ceiling lines.
+      g.fillStyle(c.tunnelCeil, 1);
+      g.fillRect(0, Math.min(ceil1, ceil2), this.w, Math.abs(ceil2 - ceil1) + 1);
+      // Side fills: road edge to the screen edge, for this road band.
+      this.quad(g, c.tunnelWall, 0, y1, x1 - W1, y1, x2 - W2, y2, 0, y2);
+      this.quad(g, c.tunnelWall, this.w, y1, x1 + W1, y1, x2 + W2, y2, this.w, y2);
+
+      // Portal face at the mouth (first tunnel segment after open road):
+      // solid wall from ceiling to road on both sides of the opening.
+      const prev = model.segments[(idx - 1 + model.segments.length) % model.segments.length];
+      if (!prev.tunnel) {
+        g.fillStyle(c.tunnelWall, 1);
+        g.fillRect(0, ceil1, Math.max(0, x1 - W1), y1 - ceil1);
+        g.fillRect(Math.min(this.w, x1 + W1), ceil1, this.w - (x1 + W1), y1 - ceil1);
+        // neon lip over the opening — the brand says hello at the door
+        g.fillStyle(c.rumbleB, 1);
+        g.fillRect(Math.max(0, x1 - W1), ceil1, Math.min(this.w, W1 * 2), 4);
+      }
     }
   }
 

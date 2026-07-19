@@ -31,6 +31,12 @@ export class Player {
     return Math.sin(t * Math.PI);
   }
 
+  // Boost pad: a shove toward (and past) max. Pads are reusable — the
+  // uphill asks the same question every lap.
+  boost() {
+    this.speed = Math.min(this.speed + this.t.boostKick, this.t.maxSpeed * this.t.overspeedCap);
+  }
+
   // Hit a ramp. Faster launch = longer flight = more cleared road.
   launch() {
     const speedPercent = this.speed / this.t.maxSpeed;
@@ -49,8 +55,10 @@ export class Player {
     const grip = this.airborne ? 0.25 : 1;
 
     // Steering authority scales with speed (can't turn a parked hovercar).
-    // input.steer is analog (-1..1) — keyboard just supplies ±1.
-    const authority = dt * t.steerRate * speedPercent * grip;
+    // input.steer is analog (-1..1) — keyboard just supplies ±1. Dirt is
+    // a loose surface: less authority, same speed of consequences.
+    const surfaceGrip = seg.surface === 'dirt' ? t.dirtSteer : 1;
+    const authority = dt * t.steerRate * speedPercent * grip * surfaceGrip;
     let dx = authority * input.steer;
 
     // Airbrakes (F-Zero shoulder lean / Wipeout airbrake): extra lateral
@@ -70,10 +78,28 @@ export class Player {
     // half throttle is a fight at full.
     this.x -= authority * speedPercent * seg.curve * t.centrifugal;
 
-    // Analog throttle/brake; coast when neither.
-    if (input.throttle > 0)   this.speed += t.accel * input.throttle * dt;
-    else if (input.brake > 0) this.speed += t.braking * input.brake * dt;
-    else                      this.speed += t.decel * dt;
+    // Analog throttle/brake; coast when neither. The engine can only
+    // push you to maxSpeed — everything beyond that belongs to gravity.
+    if (input.throttle > 0 && this.speed < t.maxSpeed)
+      this.speed += t.accel * input.throttle * dt;
+    else if (input.brake > 0) this.speed += t.braking * dt * input.brake;
+    else if (input.throttle <= 0) this.speed += t.decel * dt;
+
+    // Gravity along the road: uphill drains, downhill pays — and downhill
+    // can pay PAST maxSpeed (see the clamp), where steering authority and
+    // centrifugal force keep scaling. Free speed, expensive hands.
+    if (!this.airborne) {
+      const slope = (seg.p2.world.y - seg.p1.world.y) / t.segmentLength;
+      this.speed -= slope * t.slopeAccel * dt;
+    }
+    // Above maxSpeed, drag claws you back toward it — hold overspeed only
+    // while gravity keeps winning the tug-of-war.
+    if (this.speed > t.maxSpeed) this.speed += t.overspeedDecay * dt;
+
+    // Dirt: the surface won't carry more than dirtSpeed of max.
+    if (!this.airborne && seg.surface === 'dirt' && this.speed > t.maxSpeed * t.dirtSpeed) {
+      this.speed += t.dirtDrag * dt;
+    }
 
     // Visual lean for the sprite: steering plus airbrake attitude.
     this.steer = clamp(input.steer + ab * 0.6, -1, 1);
@@ -85,7 +111,7 @@ export class Player {
     }
 
     this.x = clamp(this.x, -2, 2);
-    this.speed = clamp(this.speed, 0, t.maxSpeed);
+    this.speed = clamp(this.speed, 0, t.maxSpeed * t.overspeedCap);
 
     // Advance along the loop.
     this.position += this.speed * dt;

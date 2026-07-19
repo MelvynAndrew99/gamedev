@@ -23,9 +23,30 @@ const PALETTE = {
   C: [0x00, 0xe5, 0xff], // post lamp (cyan — matches the rumble neon)
   Y: [0xff, 0xcf, 0x3f], // ramp chevron yellow
   y: [0xc9, 0x9a, 0x12], // ramp chevron shade
+  E: [0x2e, 0xe5, 0x6b], // boost green
+  e: [0x14, 0x8f, 0x3f], // boost green shade
 };
 
 const SPRITES = {
+  // Flat pad, double cyan chevrons pointing away (i.e., "go faster").
+  boost: [
+    '.KKKKKKKKKKKKKKKKKKKKKK.',
+    'KKPPCCPPPPCCPPPPCCPPPPKK',
+    'KPPCCCCPPCCCCPPCCCCPPPPK',
+    'KPCCWCCCCCCWCCCCCWCCCPPK',
+    'KPPCCCCPPCCCCPPCCCCPPPPK',
+    'KKPPCCPPPPCCPPPPCCPPPPKK',
+    '.KKKKKKKKKKKKKKKKKKKKKK.',
+  ],
+  // Flat pad, green chevrons pointing away (i.e., "go faster this way").
+  boost: [
+    '.KKKKKKKKKKKKKKKKKKKKKK.',
+    'KeeEEeeeEEeeeEEeeeEEeeeK',
+    'KeEEEEeEEEEeEEEEeEEEEeeK',
+    'KEEeEEEEeEEEEeEEEEeEEEeK',
+    'KEeeeEEeeeEEeeeEEeeeEEeK',
+    '.KKKKKKKKKKKKKKKKKKKKKK.',
+  ],
   // Seen from behind: a low wedge, chevron warning face, neon lip on top.
   ramp: [
     '..KKKKKKKKKKKKKKKKKKKK..',

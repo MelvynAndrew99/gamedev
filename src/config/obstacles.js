@@ -25,6 +25,15 @@ export const OBSTACLES = {
     w: 0.11,
     view: 0.22,
   },
+  boost: {
+    key: 'boost',
+    kind: 'boost',  // speed impulse — placed on uphills, where gravity taxes
+    pop: 0,
+    damage: 0,
+    slow: 1.0,
+    w: 0.12,
+    view: 0.26,
+  },
   ramp: {
     key: 'ramp',
     kind: 'launch',

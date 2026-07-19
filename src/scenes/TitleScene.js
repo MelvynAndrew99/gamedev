@@ -29,6 +29,7 @@ export class TitleScene extends Phaser.Scene {
     this.load.image('rock', 'assets/rock.png');
     this.load.image('post', 'assets/post.png');
     this.load.image('ramp', 'assets/ramp.png');
+    this.load.image('boost', 'assets/boost.png');
   }
 
   create() {

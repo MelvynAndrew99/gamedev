@@ -5,11 +5,11 @@
 // into "which lap, how deep" at a glance without reading anything.
 
 export class ProgressBar {
-  constructor(scene, laps) {
+  constructor(scene, laps, y = 30) {
     this.laps = laps;
-    this.w = scene.scale.width * 0.5;
+    this.w = scene.scale.width * 0.45;
     this.x = (scene.scale.width - this.w) / 2;
-    this.y = 14;
+    this.y = y;
     this.g = scene.add.graphics().setDepth(20);
   }
 

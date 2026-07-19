@@ -11,7 +11,6 @@ export const TUNING = {
 
   // ---- Road geometry -------------------------------------------------
   segmentLength: 200,  // world units per segment. Smaller = smoother curves, more segments to draw
-  tunnelHeight: 2600,  // ceiling height in world units (camera sits at 1000)
   rumbleLength: 3,     // segments per rumble-strip color band (the SNES "stripe" cadence)
   roadWidth: 2000,     // world units, HALF-width (center to edge)
   lanes: 3,
@@ -26,6 +25,14 @@ export const TUNING = {
   steerRate: 2.0,      // base steering authority: road-widths/sec at max speed
   steerExpo: 1.6,      // analog stick response curve (1 = linear, higher = softer center)
   airbrakeForce: 2.2,  // extra lateral authority while an airbrake is held
+
+  // ---- Terrain physics ------------------------------------------------
+  overspeedCap: 1.35,  // downhills can push speed to 135% of maxSpeed
+  minBoostSlope: 0.04, // uphill grade that earns boost pads (rise/run)
+  dirtSpeed: 0.72,     // dirt won't let you hold more than this fraction of max
+  dirtSteer: 0.85,     // steering authority multiplier on dirt (loose surface)
+
+  // ---- Terrain physics ------------------------------------------------
 
   // ---- Popularity economy --------------------------------------------
   comboWindow: 3.0,    // seconds to chain the next act before the combo lapses
@@ -54,10 +61,12 @@ export const TUNING = {
     rumbleB:     0x00e5ff, // cyan
     lane:        0xb8b8c8,
     fog:         0x1a0b45, // matches a sky band so distance melts into the horizon
-    tunnelWall:  0x150a26,
-    tunnelCeil:  0x0d0618,
-    tunnelRoadLight: 0x26262e,
-    tunnelRoadDark:  0x202028,
+    // Dirt: desaturated, no neon — the road stops glowing when the
+    // pavement ends. Edges are dusty, not electric.
+    dirtLight:   0x4a3a35,
+    dirtDark:    0x423330,
+    dirtEdgeA:   0x6b4f35,
+    dirtEdgeB:   0x5a4230,
   },
 
   // Recompute derived values. Call after the debug panel changes fov,
@@ -79,6 +88,10 @@ export const TUNING = {
     this.offRoadDecel = -this.maxSpeed / 2;  // punish leaving the road
     this.offRoadLimit =  this.maxSpeed / 4;  // off-road won't slow you below this
     this.airbrakeDrag  = -this.maxSpeed / 8; // airbrakes trade a little speed for the turn
+    this.slopeAccel    =  this.maxSpeed * 4;  // gravity along the road: beats the engine on steep grades — that's the boost-pad economy
+    this.overspeedDecay= -this.maxSpeed / 6;  // above maxSpeed, drag pulls you back (unless gravity wins)
+    this.boostKick     =  this.maxSpeed * 0.35; // one pad's worth of shove
+    this.dirtDrag      = -this.maxSpeed / 3;  // drain on dirt above the dirt speed ceiling
   },
 };
 
