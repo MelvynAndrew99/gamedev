@@ -60,6 +60,15 @@ export class RoadRenderer {
     const base = model.findSegment(player.position);
     const basePercent = (player.position % t.segmentLength) / t.segmentLength;
 
+    // Camera rides the terrain: its height is cameraHeight ABOVE THE ROAD
+    // at the player, not above sea level — hills move the world, not the
+    // car. (Same trick as forward motion: the player never moves, the
+    // ground does.)
+    const playerSeg = model.findSegment(player.position + t.playerZ);
+    const pPercent = ((player.position + t.playerZ) % t.segmentLength) / t.segmentLength;
+    const roadY = playerSeg.p1.world.y + (playerSeg.p2.world.y - playerSeg.p1.world.y) * pPercent;
+    this.cameraY = t.cameraHeight + roadY;
+
     // Running curve accumulators. dx starts partially into the base
     // segment's curve so the road doesn't visibly "step" as segments
     // scroll under the camera.
@@ -77,8 +86,8 @@ export class RoadRenderer {
       // playerX is in road-halves (-1..1 = edge to edge); scale to world.
       const camX = player.x * t.roadWidth;
 
-      this.project(seg.p1, camX - x,      t.cameraHeight, camZ);
-      this.project(seg.p2, camX - x - dx, t.cameraHeight, camZ);
+      this.project(seg.p1, camX - x,      this.cameraY, camZ);
+      this.project(seg.p2, camX - x - dx, this.cameraY, camZ);
       x += dx;
       dx += seg.curve;
 
@@ -91,7 +100,33 @@ export class RoadRenderer {
       maxY = seg.p2.screen.y;
     }
 
+    this.renderTunnels(model, base);
     this.renderSprites(model, base);
+  }
+
+  // Tunnels: walls + ceiling per segment, drawn BACK to front (opposite of
+  // the road pass) so near geometry paints over far — canvas painter's
+  // algorithm, direction chosen per pass by what should win overlaps.
+  renderTunnels(model, base) {
+    const t = this.t;
+    const c = t.colors;
+    const g = this.g;
+    const halfH = this.h / 2;
+    for (let n = t.drawDistance - 1; n >= 1; n--) {
+      const seg = model.segments[(base.index + n) % model.segments.length];
+      if (seg.clipped || !seg.tunnel) continue;
+      const { x: x1, y: y1, w: w1, scale: s1 } = seg.p1.screen;
+      const { x: x2, y: y2, w: w2, scale: s2 } = seg.p2.screen;
+      // Ceiling line = road line lifted by tunnelHeight through the
+      // same projection (screen-y shifts by scale * height * h/2).
+      const ceil1 = y1 - s1 * t.tunnelHeight * halfH;
+      const ceil2 = y2 - s2 * t.tunnelHeight * halfH;
+      const W1 = w1 * 1.18, W2 = w2 * 1.18; // walls sit past the rumble
+      // left wall, right wall, ceiling
+      this.quad(g, c.tunnelWall, x1 - W1, y1, x1 - W1, ceil1, x2 - W2, ceil2, x2 - W2, y2);
+      this.quad(g, c.tunnelWall, x1 + W1, y1, x1 + W1, ceil1, x2 + W2, ceil2, x2 + W2, y2);
+      this.quad(g, c.tunnelCeil, x1 - W1, ceil1, x1 + W1, ceil1, x2 + W2, ceil2, x2 - W2, ceil2);
+    }
   }
 
   // Second pass, far -> near, so close sprites draw over distant ones.
@@ -152,8 +187,11 @@ export class RoadRenderer {
     this.quad(g, light ? c.rumbleA : c.rumbleB,
       x1 + w1 + r1, y1, x1 + w1, y1, x2 + w2, y2, x2 + w2 + r2, y2);
 
-    // Road surface.
-    this.quad(g, light ? c.roadLight : c.roadDark,
+    // Road surface (dimmed inside tunnels — headlights not included).
+    const roadColor = seg.tunnel
+      ? (light ? c.tunnelRoadLight : c.tunnelRoadDark)
+      : (light ? c.roadLight : c.roadDark);
+    this.quad(g, roadColor,
       x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2);
 
     // Lane lines, dashed by drawing only on light bands.

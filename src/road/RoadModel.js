@@ -1,9 +1,9 @@
 // RoadModel.js — the track as pure data. No Phaser, no rendering, no DOM.
-// A track is just an array of segments; each segment is a slab of road
-// segmentLength deep with a `curve` value. Curves are not geometry — they're
-// an instruction to the renderer: "while walking through me, bend the road
-// horizontally by this much per segment." Accumulate that while projecting
-// and straight slabs *look* curved. That's the entire OutRun trick.
+// A track is an array of segments; each is a slab segmentLength deep with
+// a `curve` value (horizontal bend accumulated by the renderer) and world
+// y heights on its edges (hills — REAL geometry, unlike curves: the
+// projection handles elevation natively). Tunnels are a per-segment flag
+// the renderer dresses with walls and a ceiling.
 
 import { ROADSIDE } from '../config/obstacles.js';
 import { stampPattern } from './patterns.js';
@@ -18,78 +18,97 @@ export class RoadModel {
     return this.segments.length * this.t.segmentLength;
   }
 
-  addSegment(curve) {
+  lastY() {
+    const n = this.segments.length;
+    return n ? this.segments[n - 1].p2.world.y : 0;
+  }
+
+  addSegment(curve, y1, y2, tunnel) {
     const n = this.segments.length;
     const len = this.t.segmentLength;
     this.segments.push({
       index: n,
       curve,
-      // p1 = near edge of the slab, p2 = far edge. world -> camera -> screen
-      // are filled in by the renderer every frame; we just allocate them once
-      // here so the render loop never allocates (GC pauses are frame drops).
-      p1: { world: { x: 0, y: 0, z: n * len },       camera: {}, screen: {} },
-      p2: { world: { x: 0, y: 0, z: (n + 1) * len }, camera: {}, screen: {} },
-      // Which rumble color band this segment belongs to (the SNES stripes).
+      tunnel,
+      p1: { world: { x: 0, y: y1, z: n * len },       camera: {}, screen: {} },
+      p2: { world: { x: 0, y: y2, z: (n + 1) * len }, camera: {}, screen: {} },
       band: Math.floor(n / this.t.rumbleLength) % 2,
-      // Things standing on this slab: obstacles ({def, offset}) and
-      // roadside decoration ({key, offset}). offset is in road-half units.
       sprites: [],
     });
   }
 
-  // Ease into a curve, hold it, ease out. Slamming from curve=0 to curve=4
-  // in one segment looks like the road snapped; easing looks like a bend.
-  addRoad(enter, hold, leave, curve) {
-    for (let i = 0; i < enter; i++) this.addSegment(easeIn(0, curve, i / enter));
-    for (let i = 0; i < hold; i++)  this.addSegment(curve);
-    for (let i = 0; i < leave; i++) this.addSegment(easeInOut(curve, 0, i / leave));
+  // Ease into a curve, hold, ease out — while the whole run of segments
+  // also eases from the current height to current + hill*segmentLength.
+  // Curves are per-segment (accumulated); height is absolute geometry, so
+  // it interpolates across the entire piece.
+  addRoad(enter, hold, leave, curve, hill = 0, tunnel = false) {
+    const startY = this.lastY();
+    const endY = startY + hill * this.t.segmentLength;
+    const total = enter + hold + leave;
+    let n = 0;
+    const yAt = (k) => easeInOut(startY, endY, k / total);
+    for (let i = 0; i < enter; i++, n++)
+      this.addSegment(easeIn(0, curve, i / enter), yAt(n), yAt(n + 1), tunnel);
+    for (let i = 0; i < hold; i++, n++)
+      this.addSegment(curve, yAt(n), yAt(n + 1), tunnel);
+    for (let i = 0; i < leave; i++, n++)
+      this.addSegment(easeInOut(curve, 0, i / leave), yAt(n), yAt(n + 1), tunnel);
   }
 
-  addStraight(n)          { this.addRoad(n, n, n, 0); }
-  addCurve(n, curve)      { this.addRoad(n, n, n, curve); }
-  addSCurves()            {
-    this.addCurve(25,  -2);
-    this.addCurve(25,   2);
-    this.addCurve(25,  -4);
-    this.addCurve(25,   4);
-    this.addCurve(25,  -2);
+  addStraight(n)             { this.addRoad(n, n, n, 0); }
+  addCurve(n, curve, hill=0) { this.addRoad(n, n, n, curve, hill); }
+  addHill(n, hill)           { this.addRoad(n, n, n, 0, hill); }
+  addTunnel(n, curve = 0)    { this.addRoad(n, n, n, curve, 0, true); }
+  addSCurves() {
+    this.addCurve(25, -2);
+    this.addCurve(25, 2);
+    this.addCurve(25, -4);
+    this.addCurve(25, 4);
+    this.addCurve(25, -2);
   }
 
-  // Build the track from data (see src/tracks/index.js for the format).
-  // The track file IS the level: no code changes to add a course.
+  // Build from data (see src/tracks/index.js for the format):
+  //   ["straight", len]  ["curve", len, curve, hill?]  ["hill", len, hill]
+  //   ["tunnel", len, curve?]  ["scurves"]
   buildFromData(data) {
     this.segments = [];
     for (const piece of data.pieces) {
-      const [type, len, curve] = piece;
+      const [type, len, a, b] = piece;
       if (type === 'straight')     this.addStraight(len ?? 25);
-      else if (type === 'curve')   this.addCurve(len ?? 25, curve ?? 2);
+      else if (type === 'curve')   this.addCurve(len ?? 25, a ?? 2, b ?? 0);
+      else if (type === 'hill')    this.addHill(len ?? 25, a ?? 2);
+      else if (type === 'tunnel')  this.addTunnel(len ?? 20, a ?? 0);
       else if (type === 'scurves') this.addSCurves();
       else throw new Error(`Unknown track piece: ${type}`);
     }
     if (this.segments.length === 0) throw new Error('Track has no pieces');
+
+    // Looping tracks must land at their starting height, or the finish
+    // line becomes a cliff. Authors don't have to balance their hills —
+    // we close the drift with a gentle ramp home.
+    const drift = this.lastY();
+    if (Math.abs(drift) > 1) {
+      this.addRoad(15, 10, 15, 0, -drift / this.t.segmentLength);
+    }
+
     this.decorate(data.obstacles ?? 0.05);
   }
 
-  // Dress the track: roadside posts (speed perception — the eye reads
-  // velocity from things streaming past the edges, not from the road
-  // itself) and authored hazard patterns (see patterns.js — cones
-  // telegraph, rocks punish; nothing is placed at random positions).
-  // `obstacleDensity` sets pattern frequency: higher = shorter gaps.
+  // Roadside posts (speed perception — the eye reads velocity from things
+  // streaming past the edges) and authored hazard patterns (patterns.js).
   decorate(obstacleDensity, from = 0, endMargin = 30) {
     for (let i = from; i < this.segments.length; i++) {
-      if (i % 10 === 0) {
-        const seg = this.segments[i];
+      const seg = this.segments[i];
+      if (i % 10 === 0 && !seg.tunnel) { // no posts inside tunnels
         seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: -1.25 });
         seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: 1.25 });
       }
     }
     if (obstacleDensity <= 0) return;
 
-    // Density -> breathing room between patterns. The gap is the "flow"
-    // knob: recover, resettle into a lane, then read the next formation.
     const gap = Math.min(130, Math.max(25, Math.round(4 / obstacleDensity)));
-    const start = Math.max(from, 30);          // grace zone at the line
-    const end = this.segments.length - endMargin - 45; // room for a full pattern
+    const start = Math.max(from, 30);
+    const end = this.segments.length - endMargin - 45;
     let i = start + Math.floor(Math.random() * gap * 0.5);
     while (i < end) {
       const consumed = stampPattern(this, i);
@@ -97,13 +116,11 @@ export class RoadModel {
     }
   }
 
-  // Which segment is world-position z inside? (wraps — the track is a loop)
   findSegment(z) {
     const i = Math.floor(z / this.t.segmentLength) % this.segments.length;
     return this.segments[(i + this.segments.length) % this.segments.length];
   }
 }
 
-// p in [0,1]
 function easeIn(a, b, p)    { return a + (b - a) * Math.pow(p, 2); }
 function easeInOut(a, b, p) { return a + (b - a) * (-Math.cos(p * Math.PI) / 2 + 0.5); }

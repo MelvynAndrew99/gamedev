@@ -16,6 +16,7 @@ import { Controls } from '../systems/Controls.js';
 import { Popularity } from '../systems/Popularity.js';
 import { RACER } from '../systems/RacerState.js';
 import { HealthBar } from '../ui/HealthBar.js';
+import { ProgressBar } from '../ui/ProgressBar.js';
 import { TRACKS } from '../tracks/index.js';
 
 export class GameScene extends Phaser.Scene {
@@ -60,6 +61,8 @@ export class GameScene extends Phaser.Scene {
       .text(16, 16, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' })
       .setDepth(20);
     this.healthBar = new HealthBar(this, this.scale.width - 200, 18);
+    // Race progress bar — story only; endless has no "how far is left."
+    this.progressBar = this.race ? new ProgressBar(this, this.race.laps) : null;
     this.iframes = 0; // post-hit invulnerability countdown
 
     // Center-screen banner: race intro, lap flash, results.
@@ -133,6 +136,12 @@ export class GameScene extends Phaser.Scene {
     const speedPercent = this.player.speed / TUNING.maxSpeed;
     this.renderer.render(this.model, this.player, speedPercent);
     this.healthBar.draw(RACER.healthFrac);
+    if (this.progressBar) {
+      // (lap-1 + fraction-through-this-lap) / total laps. Position wraps
+      // each lap, so the in-lap fraction is just position / trackLength.
+      const inLap = this.player.position / this.model.trackLength;
+      this.progressBar.draw((this.race.lap - 1 + inLap) / this.race.laps);
+    }
 
     // Steering FRAMES (0=left, 1=straight, 2=right) — analog steer is
     // quantized; the thresholds keep small corrections from strobing the
@@ -169,6 +178,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   onCandy(def) {
+    if (def.pop <= 0) return; // warning cone: knocked flat, no fanfare
     const earned = this.pop.add(def.pop);
     this.popup(`+${earned}`, '#ffcf3f');
   }

@@ -59,14 +59,27 @@ export class EndlessTrack extends RoadModel {
     const straightChance = 0.4 - d * 0.25;      // straights: 40% -> 15%
 
     const before = this.segments.length;
+    // Hills random-walk but with a homeward bias — unbounded drift would
+    // slowly push the horizon out of frame. When high, downhills get
+    // likelier; when low, uphills. Terrain that breathes but stays home.
+    const homeBias = -Math.sign(this.lastY()) * Math.min(0.35, Math.abs(this.lastY()) / 40000);
+    const rollHill = () =>
+      Math.random() < 0.45
+        ? rand(1, 3 + d * 2) * (Math.random() < 0.5 + homeBias ? 1 : -1) * -1
+        : 0;
+
     const r = Math.random();
     if (r < straightChance) {
       this.addStraight(len);
-    } else if (r < 0.9) {
+    } else if (r < 0.72) {
       const curve = rand(minCurve, maxCurve) * (Math.random() < 0.5 ? -1 : 1);
-      this.addCurve(len, curve);
-    } else {
+      this.addCurve(len, curve, rollHill());
+    } else if (r < 0.86) {
+      this.addHill(len, rand(2, 4 + d * 3) * (Math.random() < 0.5 + homeBias ? 1 : -1));
+    } else if (r < 0.93) {
       this.addSCurves();
+    } else {
+      this.addTunnel(Math.max(12, len - 6), rand(0, minCurve) * (Math.random() < 0.5 ? -1 : 1));
     }
     // Posts only here — hazard patterns are stamped by stampPatterns(),
     // which runs on its own cursor so formations never straddle the edge
