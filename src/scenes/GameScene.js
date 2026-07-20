@@ -44,11 +44,14 @@ export class GameScene extends Phaser.Scene {
     this.renderer = new RoadRenderer(this, TUNING);
     this.player = new Player(TUNING);
     this.pop = new Popularity(TUNING);
+    this.nitro = 0; // pocketed boosts (see TUNING.nitroMax)
+    this.wasOnZipper = false;
+    this.prevNitroHeld = false;
     this.done = false;
 
     this.carSprite = this.add
-      .sprite(this.scale.width / 2, this.scale.height - 70, 'car', 1)
-      .setScale(1.8)
+      .sprite(this.scale.width / 2, this.scale.height - 60, 'car', 2)
+      .setScale(TUNING.carScale)
       .setDepth(10);
 
     this.controls = new Controls(this);
@@ -105,7 +108,30 @@ export class GameScene extends Phaser.Scene {
     const dt = Math.min(delta, 50) / 1000;
     const input = this.controls.read(TUNING);
 
+    // Nitro: edge-detected — one burn per press, if there's one to burn.
+    if (input.nitro && !this.prevNitroHeld && this.nitro > 0) {
+      this.nitro--;
+      this.onBoost();
+    }
+    this.prevNitroHeld = input.nitro;
+
     this.player.update(dt, input, this.model);
+
+    // Zipper crossings: edge-triggered per strip (kick on entry, re-arm on
+    // exit), never consumed — the paint is permanent, the skill is lining
+    // up on it lap after lap. Airborne cars aren't touching the road.
+    {
+      const seg = this.model.findSegment(this.player.position + TUNING.playerZ);
+      const z = seg.zipper;
+      const on = !!z && !this.player.airborne &&
+        Math.abs(this.player.x - z.offset) < z.w + TUNING.playerW * 0.5;
+      if (on && !this.wasOnZipper) {
+        this.player.zip();
+        const earned = this.pop.add(TUNING.zipPop); // zips build the combo
+        this.popup(`ZIP +${earned}`, '#2ee56b');
+      }
+      this.wasOnZipper = on;
+    }
 
     // Contact. Airborne clears everything below — that's the point of
     // flying. i-frames only gate hazards; candy always pays.
@@ -115,7 +141,7 @@ export class GameScene extends Phaser.Scene {
       if (s) {
         if (s.def.kind === 'candy') this.onCandy(s.def);
         else if (s.def.kind === 'launch') this.onRamp(s.def);
-        else if (s.def.kind === 'boost') this.onBoost();
+        else if (s.def.kind === 'pickup') this.onPickup(s);
         else if (this.iframes <= 0) this.onHit(s.def);
         else s.hit = false; // i-frames: hazard not consumed, just ghosted
       }
@@ -138,14 +164,17 @@ export class GameScene extends Phaser.Scene {
     const speedPercent = this.player.speed / TUNING.maxSpeed;
     this.renderer.render(this.model, this.player, speedPercent);
 
-    // Steering FRAMES (0=left, 1=straight, 2=right) — analog steer is
-    // quantized; the thresholds keep small corrections from strobing the
-    // sprite. Rotating pixel art smears it, hence frames not rotation.
+    // Steering FRAMES: 0=hard-left, 1=left, 2=straight, 3=right, 4=hard-right.
+    // Five buckets instead of three — needed once airbrakes are in the mix:
+    // a shoulder-button bank needs to look visibly harder than a light stick
+    // correction, and player.steer already blends stick + airbrake (see
+    // Player.update), so one signal drives the whole 5-way read.
     const s = this.player.steer;
-    this.carSprite.setFrame(s < -0.25 ? 0 : s > 0.25 ? 2 : 1);
+    const frame = s < -0.6 ? 0 : s < -0.2 ? 1 : s <= 0.2 ? 2 : s <= 0.6 ? 3 : 4;
+    this.carSprite.setFrame(frame);
     // Jump arc: the sprite swells and lifts through a sine, then lands.
     const arc = this.player.airArc;
-    this.carSprite.setScale(1.8 * (1 + 0.45 * arc));
+    this.carSprite.setScale(TUNING.carScale * (1 + 0.45 * arc));
     this.carSprite.y = this.scale.height - 70 - 46 * arc;
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
@@ -155,6 +184,15 @@ export class GameScene extends Phaser.Scene {
 
   distanceM() {
     return Math.floor(this.player.position / 100);
+  }
+
+  onPickup(sprite) {
+    if (this.nitro >= TUNING.nitroMax) {
+      sprite.hit = false; // pockets full — leave it for the next lap
+      return;
+    }
+    this.nitro++;
+    this.popup('+NITRO', '#2ee56b');
   }
 
   onBoost() {
@@ -309,6 +347,7 @@ export class GameScene extends Phaser.Scene {
     hook('centrifugal',   (v) => (TUNING.centrifugal = v));
     hook('airbrakeForce', (v) => (TUNING.airbrakeForce = v));
     hook('steerExpo',     (v) => (TUNING.steerExpo = v));
+    hook('carScale',      (v) => (TUNING.carScale = v));
     hook('fov',          (v) => (TUNING.fov = v));
     hook('cameraHeight', (v) => (TUNING.cameraHeight = v));
     hook('drawDistance', (v) => (TUNING.drawDistance = v));

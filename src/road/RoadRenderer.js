@@ -77,7 +77,7 @@ export class RoadRenderer {
     let maxY = this.h; // clip line: nothing draws below (screen-wise, nearer than) this
 
     for (let n = 0; n < t.drawDistance; n++) {
-      const seg = model.segments[(base.index + n) % model.segments.length];
+      const seg = model.segmentAt(base, n);
       // If we wrapped past the finish line, this segment's world z is from
       // the *previous* lap relative to the camera — shift it forward.
       const looped = seg.index < base.index;
@@ -100,85 +100,7 @@ export class RoadRenderer {
       maxY = seg.p2.screen.y;
     }
 
-    this.renderTunnels(model, base);
     this.renderSprites(model, base);
-  }
-
-  // Tunnels, drawn BACK to front (opposite of the road pass) so near
-  // geometry paints over far. Philosophy fix from the first attempt: a
-  // tunnel interior is not strips around the road — it's EVERYTHING
-  // EXCEPT THE ROAD OPENING, filled dark. Side fills run to the screen
-  // edges, the ceiling band runs full width, and the mouth segment draws
-  // a portal face. No sky can leak inside.
-  renderTunnels(model, base) {
-    const t = this.t;
-    const c = t.colors;
-    const g = this.g;
-    const halfH = this.h / 2;
-
-    // PRE-PASS — the depth void. The interior tiles (ceiling from the
-    // top, road from the bottom) converge toward the horizon but never
-    // meet; without this, raw sky shows through the gap (the pink-stripe
-    // bug). Fill the whole convergence region behind the DEEPEST visible
-    // tunnel segment with near-black first; everything else paints over
-    // it, and whatever they don't reach reads as depth, not sky.
-    // (Known simplification: two tunnels visible at once with open road
-    // between them would share one void — rare and brief, accepted.)
-    let far = null, inRun = false, exitVisible = false;
-    for (let n = 1; n < t.drawDistance; n++) {
-      const seg = model.segments[(base.index + n) % model.segments.length];
-      if (seg.clipped) continue;
-      if (seg.tunnel) { far = seg; inRun = true; }
-      else if (inRun) { exitVisible = true; break; } // first run only
-    }
-    if (far) {
-      const farCeil = far.p2.screen.y - far.p2.screen.scale * t.tunnelHeight * halfH;
-      g.fillStyle(c.tunnelDeep, 1);
-      g.fillRect(0, farCeil, this.w, Math.max(1, far.p2.screen.y - farCeil));
-
-      // Light at the end: if the exit is in view, paint the far opening
-      // with the horizon color. The darkness must read as passage, not
-      // wall — the exit glow is the tunnel keeping its promise.
-      if (exitVisible) {
-        const { x: fx, y: fy, w: fw, scale: fs } = far.p2.screen;
-        const fCeil = fy - fs * t.tunnelHeight * halfH;
-        const FW = fw * 1.18;
-        g.fillStyle(c.fog, 1);
-        g.fillRect(fx - FW, fCeil, FW * 2, Math.max(1, fy - fCeil));
-      }
-    }
-
-    for (let n = t.drawDistance - 1; n >= 1; n--) {
-      const idx = (base.index + n) % model.segments.length;
-      const seg = model.segments[idx];
-      if (seg.clipped || !seg.tunnel) continue;
-      const { x: x1, y: y1, w: w1, scale: s1 } = seg.p1.screen;
-      const { x: x2, y: y2, w: w2, scale: s2 } = seg.p2.screen;
-      // Ceiling line = road line lifted by tunnelHeight through the same
-      // projection (screen-y shifts by scale * height * h/2).
-      const ceil1 = y1 - s1 * t.tunnelHeight * halfH;
-      const ceil2 = y2 - s2 * t.tunnelHeight * halfH;
-      const W1 = w1 * 1.18, W2 = w2 * 1.18; // opening sits past the rumble
-
-      // Ceiling: full-width band between this segment's ceiling lines.
-      g.fillStyle(c.tunnelCeil, 1);
-      g.fillRect(0, Math.min(ceil1, ceil2), this.w, Math.abs(ceil2 - ceil1) + 1);
-      // Side fills: road edge to the screen edge, for this road band.
-      this.quad(g, c.tunnelWall, 0, y1, x1 - W1, y1, x2 - W2, y2, 0, y2);
-      this.quad(g, c.tunnelWall, this.w, y1, x1 + W1, y1, x2 + W2, y2, this.w, y2);
-
-      // Portal face at the mouth (first tunnel segment after open road):
-      // solid wall from ceiling to road on both sides of the opening.
-      const prev = model.segments[(idx - 1 + model.segments.length) % model.segments.length];
-      if (!prev.tunnel) {
-        g.fillStyle(c.tunnelWall, 1);
-        g.fillRect(0, ceil1, Math.max(0, x1 - W1), y1 - ceil1);
-        g.fillRect(Math.min(this.w, x1 + W1), ceil1, this.w - (x1 + W1), y1 - ceil1);
-        // neon lip over the opening — the brand says hello at the door
-        g.fillStyle(c.rumbleB, 1);
-        g.fillRect(Math.max(0, x1 - W1), ceil1, Math.min(this.w, W1 * 2), 4);
-      }
-    }
   }
 
   // Second pass, far -> near, so close sprites draw over distant ones.
@@ -188,7 +110,7 @@ export class RoadRenderer {
     const t = this.t;
     let poolI = 0;
     for (let n = t.drawDistance - 1; n >= 0; n--) {
-      const seg = model.segments[(base.index + n) % model.segments.length];
+      const seg = model.segmentAt(base, n);
       if (seg.clipped || seg.sprites.length === 0) continue;
       const { x, y, scale } = seg.p1.screen;
       for (const s of seg.sprites) {
@@ -232,22 +154,41 @@ export class RoadRenderer {
     g.fillStyle(light ? c.groundLight : c.groundDark, 1);
     g.fillRect(0, y2, this.w, y1 - y2);
 
-    // Rumble strips: 1/6th of road width each side. Neon = Wipeout.
+    // Rumble strips: 1/6th of road width each side. Neon on asphalt;
+    // dusty berms on dirt — the glow dies where the pavement does, which
+    // is also how you READ the surface change from three seconds out.
+    const isDirt = seg.surface === 'dirt';
+    const rumble = isDirt ? (light ? c.dirtEdgeA : c.dirtEdgeB)
+                          : (light ? c.rumbleA : c.rumbleB);
     const r1 = w1 / 6, r2 = w2 / 6;
-    this.quad(g, light ? c.rumbleA : c.rumbleB,
+    this.quad(g, rumble,
       x1 - w1 - r1, y1, x1 - w1, y1, x2 - w2, y2, x2 - w2 - r2, y2);
-    this.quad(g, light ? c.rumbleA : c.rumbleB,
+    this.quad(g, rumble,
       x1 + w1 + r1, y1, x1 + w1, y1, x2 + w2, y2, x2 + w2 + r2, y2);
 
-    // Road surface (dimmed inside tunnels — headlights not included).
-    const roadColor = seg.tunnel
-      ? (light ? c.tunnelRoadLight : c.tunnelRoadDark)
+    // Road surface. Dirt drops the asphalt grays for dusty umber.
+    const dirt = seg.surface === 'dirt';
+    const roadColor = dirt
+      ? (light ? c.dirtLight : c.dirtDark)
       : (light ? c.roadLight : c.roadDark);
     this.quad(g, roadColor,
       x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2);
 
+    // Zipper paint: part of the ROAD, not an object on it — drawn in the
+    // road pass so perspective is exact and it can never float. Band
+    // alternation scrolls the two greens as the road moves: free animation.
+    if (seg.zipper) {
+      const zc = light ? c.zipperA : c.zipperB;
+      const zo = seg.zipper.offset, zw = seg.zipper.w;
+      const zx1 = x1 + zo * w1, zW1 = zw * w1;
+      const zx2 = x2 + zo * w2, zW2 = zw * w2;
+      this.quad(g, zc, zx1 - zW1, y1, zx1 + zW1, y1, zx2 + zW2, y2, zx2 - zW2, y2);
+      // center glow stripe — the aiming line
+      this.quad(g, c.zipperGlow, zx1 - zW1 * 0.12, y1, zx1 + zW1 * 0.12, y1, zx2 + zW2 * 0.12, y2, zx2 - zW2 * 0.12, y2);
+    }
+
     // Lane lines, dashed by drawing only on light bands.
-    if (light && this.t.lanes > 1) {
+    if (light && this.t.lanes > 1 && seg.surface !== 'dirt') {
       const l1 = w1 / 32, l2 = w2 / 32;
       const laneW1 = (w1 * 2) / this.t.lanes;
       const laneW2 = (w2 * 2) / this.t.lanes;

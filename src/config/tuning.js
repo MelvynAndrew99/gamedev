@@ -19,6 +19,12 @@ export const TUNING = {
   maxSpeed: 12000,     // (derived-input) world units/sec. 12000 = 1 segment per frame at 60fps
   centrifugal: 0.3,    // how hard curves fling you outward. THE core risk knob of the game.
   playerW: 0.14,       // car collision half-width in road-half units
+  carScale: 6.0,        // on-screen size of the car sprite. Measured against the
+                        // renderer's own projection: a lane at the bottom of the
+                        // screen runs several hundred px wide, so a 60-96px sprite
+                        // (the old flat-guess scale) reads as a toy. This value is
+                        // tuned to roughly 45-55% of canvas width, matching
+                        // classic pseudo-3D racers' car-to-screen proportion.
   iframes: 0.9,        // seconds of post-hit invulnerability (no combo-wrecks by cluster)
 
   // ---- Handling feel (all live on the debug panel) --------------------
@@ -27,7 +33,21 @@ export const TUNING = {
   airbrakeForce: 2.2,  // extra lateral authority while an airbrake is held
 
   // ---- Terrain physics ------------------------------------------------
-  overspeedCap: 1.35,  // downhills can push speed to 135% of maxSpeed
+  overspeedCap: 1.25,  // the overspeed ceiling: HUD 150 — the top of the fun band Melvyn found (140-150). Everything that grants speed clamps here.
+  torqueLow: 1.4,      // engine multiplier at standstill (weight feel: strong launch)
+  torqueHigh: 0.6,     // engine multiplier near maxSpeed (top end pulls like a loaded truck)
+  climbFloor: 0.28,    // under throttle, grades can't drag you below this fraction of max
+  nitroMax: 3,         // pocket size for boost pickups
+  hitRecoveryTime: 2.0,   // seconds of grace after a hit — mistakes cost the moment, not the minute
+  hitRecoveryAccel: 1.9,  // engine multiplier during recovery
+  hitRecoveryShield: 0.35,// gravity multiplier during recovery — the real fix: authored hills peak
+                          // near 0.14 grade (the ease's midpoint runs ~1.57x steeper than its own
+                          // average), too steep for accel alone to beat. Shielding gravity AND
+                          // boosting the engine together guarantees recovery wins on any grade we
+                          // actually author, not just gentle ones.
+  zipPop: 5,             // fame per zipper crossing — zips feed the combo (Tony Hawk foundation)
+  zipperKick: 0.22,    // per-crossing shove: a clean chain PINS the ceiling; one miss and decay starts reclaiming it
+  zipperW: 0.22,       // zipper half-width in road-half units
   minBoostSlope: 0.04, // uphill grade that earns boost pads (rise/run)
   dirtSpeed: 0.72,     // dirt won't let you hold more than this fraction of max
   dirtSteer: 0.85,     // steering authority multiplier on dirt (loose surface)
@@ -63,6 +83,9 @@ export const TUNING = {
     fog:         0x1a0b45, // matches a sky band so distance melts into the horizon
     // Dirt: desaturated, no neon — the road stops glowing when the
     // pavement ends. Edges are dusty, not electric.
+    zipperA:     0x2ee56b, // zipper paint (band-alternates with B: free scroll animation)
+    zipperB:     0x18b04b,
+    zipperGlow:  0xbfffd9,
     dirtLight:   0x4a3a35,
     dirtDark:    0x423330,
     dirtEdgeA:   0x6b4f35,

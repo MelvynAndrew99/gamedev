@@ -52,10 +52,23 @@ function rampOverRocksPayload(model, at, lane) {
   return rockStart + 3 * 4 + 4 - at;
 }
 
+// Zipper runway into a ramp: paint feeds speed, speed feeds airtime.
+// The strip is part of the road (segment.zipper), the ramp is a sprite —
+// hit the paint at the right line and the jump is a rocket launch.
+function zipRampPayload(model, at, lane) {
+  for (let k = at; k < at + 5; k++) {
+    const seg = model.segments[k];
+    if (seg) seg.zipper = { offset: lane, w: 0.22 };
+  }
+  put(model, at + 7, OBSTACLES.ramp, lane);
+  return 12;
+}
+
 const PAYLOADS = [
   { fn: rocksPayload, weight: 4 },
-  { fn: rampPayload, weight: 3 },
+  { fn: rampPayload, weight: 2 },
   { fn: rampOverRocksPayload, weight: 3 },
+  { fn: zipRampPayload, weight: 3 },
 ];
 const TOTAL_WEIGHT = PAYLOADS.reduce((s, p) => s + p.weight, 0);
 
@@ -65,6 +78,37 @@ function pickPayload() {
     if ((r -= p.weight) <= 0) return p.fn;
   }
   return PAYLOADS[0].fn;
+}
+
+// --- The combo line (Tony Hawk foundation) -------------------------------
+// An authored chain: zip runway -> ramp -> landing strip in the ADJACENT
+// lane -> return strip. Rocks guard the launch lane's landing zone
+// (cone-warned for anyone grounded), so the trick is carving to the new
+// lane MID-AIR with the airbrakes. Every beat feeds the combo; the whole
+// line fits far inside the combo window at band speed, so a clean run
+// compounds: zip x1, ramp x2, zip x3, zip x4...
+function setZip(model, i, lane) {
+  const seg = model.segments[i];
+  if (seg) seg.zipper = { offset: lane, w: 0.22 };
+}
+
+function comboLine(model, at) {
+  const li = Math.floor(Math.random() * LANES.length);
+  const laneA = LANES[li];
+  const laneB = LANES[(li + 1 + Math.floor(Math.random() * 2)) % LANES.length];
+  let i = at;
+  for (let k = 0; k < 5; k++) setZip(model, i + k, laneA);   // runway
+  i += 7;
+  put(model, i, OBSTACLES.ramp, laneA);                      // launch
+  put(model, i + 4, OBSTACLES.cone, laneA);                  // grounded-warning:
+  put(model, i + 8, OBSTACLES.cone, laneA);                  // rocks ahead in A
+  const land = i + 14;
+  for (let k = 0; k < 5; k++) setZip(model, land + k, laneB); // landing strip (B)
+  put(model, land + 1, OBSTACLES.rock, laneA);               // A's landing is mined
+  put(model, land + 5, OBSTACLES.rock, laneA);
+  i = land + 12;
+  for (let k = 0; k < 5; k++) setZip(model, i + k, laneA);   // return strip
+  return i + 8 - at;
 }
 
 // --- Wide formations (warned across the affected lanes) ------------------
@@ -98,12 +142,13 @@ function edgeSqueeze(model, at) {
 
 export function stampPattern(model, at) {
   const roll = Math.random();
-  if (roll < 0.7) {
+  if (roll < 0.55) {
     // Lane event: warning, then a mystery payload in the same lane.
     const lane = LANES[Math.floor(Math.random() * LANES.length)];
     const used = warn(model, at, lane);
     return used + pickPayload()(model, at + used, lane);
   }
-  if (roll < 0.85) return gate(model, at);
+  if (roll < 0.73) return comboLine(model, at);
+  if (roll < 0.87) return gate(model, at);
   return edgeSqueeze(model, at);
 }

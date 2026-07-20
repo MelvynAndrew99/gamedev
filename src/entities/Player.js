@@ -17,6 +17,7 @@ export class Player {
     this.speed = 0;
     this.steer = 0; // visual lean, -1..1
     this.air = 0;      // seconds of airtime remaining
+    this.hitRecovery = 0; // post-impact engine surge countdown
     this.airTotal = 0; // total airtime of the current jump (for the arc)
   }
 
@@ -33,6 +34,13 @@ export class Player {
 
   // Boost pad: a shove toward (and past) max. Pads are reusable — the
   // uphill asks the same question every lap.
+  // Zipper crossing: same shove as nitro but free and repeatable — the
+  // road pays skill directly. Capped at the overspeed ceiling like all
+  // speed income.
+  zip() {
+    this.speed = Math.min(this.speed + this.t.maxSpeed * this.t.zipperKick, this.t.maxSpeed * this.t.overspeedCap);
+  }
+
   boost() {
     this.speed = Math.min(this.speed + this.t.boostKick, this.t.maxSpeed * this.t.overspeedCap);
   }
@@ -78,19 +86,44 @@ export class Player {
     // half throttle is a fight at full.
     this.x -= authority * speedPercent * seg.curve * t.centrifugal;
 
-    // Analog throttle/brake; coast when neither. The engine can only
-    // push you to maxSpeed — everything beyond that belongs to gravity.
+    // Engine with a torque curve: strong off the line, tapering toward
+    // maxSpeed. This is most of what "the car has weight" means — launch
+    // shoves, top end grinds. It can only push you to maxSpeed;
+    // everything beyond that belongs to gravity.
+    // Hit recovery: for a short window after an impact the engine surges
+    // hard enough to out-pull ANY grade. Without this, a rock on a hill
+    // drops you below the grade's equilibrium and the climb floor becomes
+    // a 30-second penalty box. The mistake costs momentum ONCE; the
+    // recovery hands the flow back.
+    this.hitRecovery = Math.max(0, this.hitRecovery - dt);
+    const surge = this.hitRecovery > 0 ? t.hitRecoveryAccel : 1;
+
+    const torque = t.torqueLow + (t.torqueHigh - t.torqueLow) * Math.min(1, speedPercent);
     if (input.throttle > 0 && this.speed < t.maxSpeed)
-      this.speed += t.accel * input.throttle * dt;
+      this.speed += t.accel * torque * surge * input.throttle * dt;
     else if (input.brake > 0) this.speed += t.braking * dt * input.brake;
     else if (input.throttle <= 0) this.speed += t.decel * dt;
 
     // Gravity along the road: uphill drains, downhill pays — and downhill
     // can pay PAST maxSpeed (see the clamp), where steering authority and
     // centrifugal force keep scaling. Free speed, expensive hands.
+    let slope = 0;
     if (!this.airborne) {
-      const slope = (seg.p2.world.y - seg.p1.world.y) / t.segmentLength;
-      this.speed -= slope * t.slopeAccel * dt;
+      slope = (seg.p2.world.y - seg.p1.world.y) / t.segmentLength;
+      // Recovery shields against gravity too, not just the accel boost —
+      // a bounce that fades before the grade does just becomes a sag.
+      const gravityMul = this.hitRecovery > 0 ? t.hitRecoveryShield : 1;
+      this.speed -= slope * t.slopeAccel * gravityMul * dt;
+    }
+
+    // Climb floor — the softlock guarantee. Gravity is speed-independent
+    // and so was the engine, so any grade steeper than the engine could
+    // hold would decay the car to zero FOREVER. Under throttle on a
+    // grade, first gear always grinds you forward at a crawl: hills tax
+    // speed, they never confiscate motion.
+    const floor = t.maxSpeed * t.climbFloor;
+    if (input.throttle > 0 && slope > 0.02 && this.speed < floor) {
+      this.speed = Math.min(floor, this.speed + t.accel * 2 * dt);
     }
     // Above maxSpeed, drag claws you back toward it — hold overspeed only
     // while gravity keeps winning the tug-of-war.

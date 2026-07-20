@@ -22,6 +22,7 @@ export class HudScene extends Phaser.Scene {
 
   create() {
     this.gs = this.scene.get('GameScene');
+    this.cachedBest = getScore('endless'); // once — not a disk read per frame
     const w = this.scale.width;
     const h = this.scale.height;
 
@@ -46,7 +47,8 @@ export class HudScene extends Phaser.Scene {
 
     // Bottom-left: fame + combo.
     chip(10, h - 56, 196, 44);
-    this.fameText = this.add.text(22, h - 48, '', { fontSize: '18px', fontStyle: 'bold', color: '#ffcf3f' });
+    this.fameText = this.add.text(22, h - 50, '', { fontSize: '17px', fontStyle: 'bold', color: '#ffcf3f' });
+    this.nitroText = this.add.text(22, h - 30, '', { fontSize: '14px', fontStyle: 'bold', color: '#2ee56b' });
 
     // Bottom-right: the speedo. Big number, small label — read at a glance.
     chip(w - 148, h - 68, 136, 56);
@@ -74,9 +76,8 @@ export class HudScene extends Phaser.Scene {
       const inLap = gs.player.position / gs.model.trackLength;
       this.progressBar.draw((gs.race.lap - 1 + inLap) / gs.race.laps);
     } else {
-      const best = getScore('endless');
       this.line1.setText(`${gs.distanceM()}m`);
-      this.line2.setText(best ? `BEST ${best}m` : '');
+      this.line2.setText(this.cachedBest ? `BEST ${this.cachedBest}m` : '');
     }
 
     this.healthBar.draw(RACER.healthFrac);
@@ -85,7 +86,10 @@ export class HudScene extends Phaser.Scene {
     this.fameText.setText(`FAME ${gs.pop.total}${combo}`);
     this.fameText.setColor(gs.pop.combo > 1 ? '#00e5ff' : '#ffcf3f');
 
+    // Cyan speedo = you are past the engine's ceiling: gravity's money.
     this.speedText.setText(`${Math.round(gs.player.speed / 100)}`);
+    this.nitroText.setText(gs.nitro > 0 ? '◆'.repeat(gs.nitro) + ` NITRO` : 'NITRO —');
+    this.speedText.setColor(gs.player.speed > TUNING.maxSpeed ? '#00e5ff' : '#ffffff');
 
     const off = !gs.player.airborne && Math.abs(gs.player.x) > 1;
     this.offTrack.setVisible(off && Math.floor(time / 250) % 2 === 0);
