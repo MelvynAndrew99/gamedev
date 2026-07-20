@@ -22,13 +22,14 @@ export class TitleScene extends Phaser.Scene {
   // with a loading bar — same pattern as the HudScene deferral.)
   preload() {
     this.load.spritesheet('car', 'assets/car.png', {
-      frameWidth: 48,
-      frameHeight: 64,
+      frameWidth: 64,
+      frameHeight: 48,
     });
     this.load.image('cone', 'assets/cone.png');
     this.load.image('rock', 'assets/rock.png');
     this.load.image('post', 'assets/post.png');
     this.load.image('ramp', 'assets/ramp.png');
+    this.load.image('boost', 'assets/boost.png');
   }
 
   create() {
@@ -57,7 +58,7 @@ export class TitleScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // The machine, hovering. Frame 1 = straight.
-    const car = this.add.sprite(w / 2, 290, 'car', 1).setScale(2.2);
+    const car = this.add.sprite(w / 2, 300, 'car', 2).setScale(2.6);
     this.tweens.add({
       targets: car,
       y: '+=8',

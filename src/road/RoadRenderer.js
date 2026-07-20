@@ -60,6 +60,15 @@ export class RoadRenderer {
     const base = model.findSegment(player.position);
     const basePercent = (player.position % t.segmentLength) / t.segmentLength;
 
+    // Camera rides the terrain: its height is cameraHeight ABOVE THE ROAD
+    // at the player, not above sea level — hills move the world, not the
+    // car. (Same trick as forward motion: the player never moves, the
+    // ground does.)
+    const playerSeg = model.findSegment(player.position + t.playerZ);
+    const pPercent = ((player.position + t.playerZ) % t.segmentLength) / t.segmentLength;
+    const roadY = playerSeg.p1.world.y + (playerSeg.p2.world.y - playerSeg.p1.world.y) * pPercent;
+    this.cameraY = t.cameraHeight + roadY;
+
     // Running curve accumulators. dx starts partially into the base
     // segment's curve so the road doesn't visibly "step" as segments
     // scroll under the camera.
@@ -68,7 +77,7 @@ export class RoadRenderer {
     let maxY = this.h; // clip line: nothing draws below (screen-wise, nearer than) this
 
     for (let n = 0; n < t.drawDistance; n++) {
-      const seg = model.segments[(base.index + n) % model.segments.length];
+      const seg = model.segmentAt(base, n);
       // If we wrapped past the finish line, this segment's world z is from
       // the *previous* lap relative to the camera — shift it forward.
       const looped = seg.index < base.index;
@@ -77,8 +86,8 @@ export class RoadRenderer {
       // playerX is in road-halves (-1..1 = edge to edge); scale to world.
       const camX = player.x * t.roadWidth;
 
-      this.project(seg.p1, camX - x,      t.cameraHeight, camZ);
-      this.project(seg.p2, camX - x - dx, t.cameraHeight, camZ);
+      this.project(seg.p1, camX - x,      this.cameraY, camZ);
+      this.project(seg.p2, camX - x - dx, this.cameraY, camZ);
       x += dx;
       dx += seg.curve;
 
@@ -101,7 +110,7 @@ export class RoadRenderer {
     const t = this.t;
     let poolI = 0;
     for (let n = t.drawDistance - 1; n >= 0; n--) {
-      const seg = model.segments[(base.index + n) % model.segments.length];
+      const seg = model.segmentAt(base, n);
       if (seg.clipped || seg.sprites.length === 0) continue;
       const { x, y, scale } = seg.p1.screen;
       for (const s of seg.sprites) {
@@ -145,19 +154,41 @@ export class RoadRenderer {
     g.fillStyle(light ? c.groundLight : c.groundDark, 1);
     g.fillRect(0, y2, this.w, y1 - y2);
 
-    // Rumble strips: 1/6th of road width each side. Neon = Wipeout.
+    // Rumble strips: 1/6th of road width each side. Neon on asphalt;
+    // dusty berms on dirt — the glow dies where the pavement does, which
+    // is also how you READ the surface change from three seconds out.
+    const isDirt = seg.surface === 'dirt';
+    const rumble = isDirt ? (light ? c.dirtEdgeA : c.dirtEdgeB)
+                          : (light ? c.rumbleA : c.rumbleB);
     const r1 = w1 / 6, r2 = w2 / 6;
-    this.quad(g, light ? c.rumbleA : c.rumbleB,
+    this.quad(g, rumble,
       x1 - w1 - r1, y1, x1 - w1, y1, x2 - w2, y2, x2 - w2 - r2, y2);
-    this.quad(g, light ? c.rumbleA : c.rumbleB,
+    this.quad(g, rumble,
       x1 + w1 + r1, y1, x1 + w1, y1, x2 + w2, y2, x2 + w2 + r2, y2);
 
-    // Road surface.
-    this.quad(g, light ? c.roadLight : c.roadDark,
+    // Road surface. Dirt drops the asphalt grays for dusty umber.
+    const dirt = seg.surface === 'dirt';
+    const roadColor = dirt
+      ? (light ? c.dirtLight : c.dirtDark)
+      : (light ? c.roadLight : c.roadDark);
+    this.quad(g, roadColor,
       x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2);
 
+    // Zipper paint: part of the ROAD, not an object on it — drawn in the
+    // road pass so perspective is exact and it can never float. Band
+    // alternation scrolls the two greens as the road moves: free animation.
+    if (seg.zipper) {
+      const zc = light ? c.zipperA : c.zipperB;
+      const zo = seg.zipper.offset, zw = seg.zipper.w;
+      const zx1 = x1 + zo * w1, zW1 = zw * w1;
+      const zx2 = x2 + zo * w2, zW2 = zw * w2;
+      this.quad(g, zc, zx1 - zW1, y1, zx1 + zW1, y1, zx2 + zW2, y2, zx2 - zW2, y2);
+      // center glow stripe — the aiming line
+      this.quad(g, c.zipperGlow, zx1 - zW1 * 0.12, y1, zx1 + zW1 * 0.12, y1, zx2 + zW2 * 0.12, y2, zx2 - zW2 * 0.12, y2);
+    }
+
     // Lane lines, dashed by drawing only on light bands.
-    if (light && this.t.lanes > 1) {
+    if (light && this.t.lanes > 1 && seg.surface !== 'dirt') {
       const l1 = w1 / 32, l2 = w2 / 32;
       const laneW1 = (w1 * 2) / this.t.lanes;
       const laneW2 = (w2 * 2) / this.t.lanes;

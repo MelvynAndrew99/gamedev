@@ -21,11 +21,33 @@ const PALETTE = {
   d: [0x3c, 0x3c, 0x4a], // rock dark
   P: [0x2a, 0x2a, 0x3a], // post pole
   C: [0x00, 0xe5, 0xff], // post lamp (cyan — matches the rumble neon)
+  N: [0x2e, 0xe5, 0x6b], // nitro green (canister metal reuses rock gray G)
   Y: [0xff, 0xcf, 0x3f], // ramp chevron yellow
   y: [0xc9, 0x9a, 0x12], // ramp chevron shade
+  E: [0x2e, 0xe5, 0x6b], // boost green
+  e: [0x14, 0x8f, 0x3f], // boost green shade
 };
 
 const SPRITES = {
+  // Nitro cell: energy bolt in a green diamond — floats above the road
+  // (collectible language: pickups gleam, hazards squat). Nothing like the
+  // flat painted zippers or the yellow ramp face.
+  boost: [
+    '......KK......',
+    '.....KNNK.....',
+    '....KNNNNK....',
+    '...KNNWWNNK...',
+    '..KNNNWWKNNK..',
+    '.KNNNWWKNNNNK.',
+    'KNNNWWWWKNNNNK',
+    'KNNNNKWWWWNNNK',
+    '.KNNNNKWWNNNK.',
+    '..KNNKWWNNNK..',
+    '...KNNWWNNK...',
+    '....KNNNNK....',
+    '.....KNNK.....',
+    '......KK......',
+  ],
   // Seen from behind: a low wedge, chevron warning face, neon lip on top.
   ramp: [
     '..KKKKKKKKKKKKKKKKKKKK..',

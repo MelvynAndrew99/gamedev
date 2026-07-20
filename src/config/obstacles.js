@@ -9,10 +9,10 @@
 export const OBSTACLES = {
   cone: {
     key: 'cone',
-    kind: 'candy',
-    pop: 10,      // fame per cone, multiplied by the current combo
+    kind: 'candy',  // harmless pass-through
+    pop: 0,         // signage, not candy: warnings don't pay (for now)
     damage: 0,
-    slow: 1.0,    // smashing candy is FREE — friction here kills the fun
+    slow: 1.0,      // driving through your own warning is free
     w: 0.07,
     view: 0.16,
   },
@@ -24,6 +24,15 @@ export const OBSTACLES = {
     slow: 0.35,   // momentum death — the real punishment
     w: 0.11,
     view: 0.22,
+  },
+  boost: {
+    key: 'boost',
+    kind: 'boost',  // speed impulse — placed on uphills, where gravity taxes
+    pop: 0,
+    damage: 0,
+    slow: 1.0,
+    w: 0.12,
+    view: 0.26,
   },
   ramp: {
     key: 'ramp',

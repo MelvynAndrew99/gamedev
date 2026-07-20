@@ -5,6 +5,7 @@
 import Phaser from 'phaser';
 import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
+import { HudScene } from './scenes/HudScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -13,7 +14,7 @@ const config = {
   parent: 'game',
   pixelArt: true, // nearest-neighbor scaling — pixel art stays sharp
   input: { gamepad: true },
-  scene: [TitleScene, GameScene], // first in the list boots first
+  scene: [TitleScene, GameScene, HudScene], // first boots; Hud is launched by GameScene
   backgroundColor: '#0b0630',
 };
 

@@ -1,78 +1,75 @@
-// tools/gen-car.js — generates public/assets/car.png, a 3-frame steering
-// sprite sheet (left / straight / right), 48x64 per frame, 144x64 total.
-//
-// The car is drawn once as a 24x32 pixel map (strings, one char per pixel),
-// scaled 2x, then the steering frames are made by shearing: each row shifts
-// horizontally, more at the top (far end) than the bottom, which reads as
-// the machine yawing into the turn. Cheap, and at pixel-art scale, convincing.
-//
-// Usage:  npm i -D pngjs && node tools/gen-car.js
-// Tweak the palette or the map, re-run, refresh the browser. Art as code.
+// tools/gen-car.js — apocalypse Jeep, rear-3/4 view, v3.
+// Fixes from playtest feedback: (1) full-width cab window band + roof rail
+// replaces v2's disconnected twin-post cage — the actual "does this read
+// as a car" fix; (2) a mounted spare tire on the tailgate as the
+// unmistakable Jeep signature; (3) FIVE steering frames instead of three
+// (hard-left, left, straight, right, hard-right), needed once airbrake
+// leans are in play — three frames can't show a hard shoulder-button bank
+// distinctly from a light stick correction, five can.
+// Map computed programmatically (tools/design.py) for guaranteed symmetry.
 
 import { PNG } from 'pngjs';
 import fs from 'fs';
 import path from 'path';
 
 const PALETTE = {
-  '.': null,                 // transparent
-  K: [0x0a, 0x0a, 0x14],     // outline
-  B: [0x22, 0x55, 0xee],     // hull
-  L: [0x4d, 0x7d, 0xff],     // hull highlight
-  D: [0x1a, 0x3c, 0xb0],     // hull shadow
-  M: [0xd8, 0x1b, 0x7f],     // side pod (magenta, matches rumble)
-  m: [0x8f, 0x12, 0x57],     // pod shadow
-  G: [0x9b, 0xe8, 0xff],     // canopy glass
-  g: [0x3a, 0x9f, 0xc9],     // glass shade
-  C: [0x00, 0xe5, 0xff],     // engine glow (cyan, matches rumble)
-  W: [0xff, 0xff, 0xff],     // glint
+  '.': null,
+  K: [0x0a, 0x0a, 0x14],
+  G: [0x5c, 0x5c, 0x6c],
+  g: [0x9a, 0x9a, 0xaa],
+  D: [0x14, 0x16, 0x22],
+  R: [0xa8, 0x50, 0x1f],
+  r: [0x7a, 0x38, 0x14],
+  H: [0xd0, 0x7a, 0x35],
+  A: [0x6b, 0x70, 0x60],
+  a: [0x4a, 0x4f, 0x42],
+  Y: [0xff, 0xcf, 0x3f],
+  t: [0x2a, 0x10, 0x10],
+  T: [0xff, 0x2d, 0x55],
+  O: [0xff, 0x8a, 0x1a],
+  C: [0x9a, 0x9a, 0xa8],
+  c: [0xff, 0x7a, 0x1a],
+  W: [0x14, 0x14, 0x18],
+  w: [0xc9, 0xc9, 0xd4],
+  S: [0xb8, 0xb8, 0xc8],
 };
 
-// 24 wide x 32 tall, viewed from behind-and-above. Nose at top (far),
-// engines at bottom (near) — matching the road's perspective.
 const MAP = [
-  '.........KKKKKK.........',
-  '........KBBBBBBK........',
-  '.......KBLBBBBLBK.......',
-  '.......KBLBBBBLBK.......',
-  '......KBBLBBBBLBBK......',
-  '......KBBLBBBBLBBK......',
-  '.....KBBBLBBBBLBBBK.....',
-  '.....KBBBLBBBBLBBBK.....',
-  '....KBBBBKKKKKKBBBBK....',
-  '....KBBBKGGGGGGKBBBK....',
-  '...KBBBBKGWGGGGKBBBBK...',
-  '...KBBBBKGGGGggKBBBBK...',
-  '...KBBBBKggggggKBBBBK...',
-  '..KMKBBBBKKKKKKBBBBKMK..',
-  '..KMMKBBBBBBBBBBBBKMMK..',
-  '.KMMMKBBBBBBBBBBBBKMMMK.',
-  '.KMMMKBBLBBBBBBLBBKMMMK.',
-  '.KMMMKBBLBBBBBBLBBKMMMK.',
-  '.KMmMKBBBBBBBBBBBBKMmMK.',
-  '.KMmMKBBBBBBBBBBBBKMmMK.',
-  '.KMmMKBDBBBBBBBBDBKMmMK.',
-  '.KMmMKBDBBBBBBBBDBKMmMK.',
-  '..KmMKBDDBBBBBBDDBKMmK..',
-  '..KmKDDDDBBBBBBDDDDKmK..',
-  '...KKDDDDDDDDDDDDDDKK...',
-  '....KDDDDDDDDDDDDDDK....',
-  '....KKCCKKDDDDKKCCKK....',
-  '....KCCCCKKDDKKCCCCK....',
-  '....KCWCCK.KK.KCCWCK....',
-  '.....KCCK......KCCK.....',
-  '......KK........KK......',
-  '........................',
+  '.....KGGGGGGGGGGGGGGGGGGGGK.....',
+  '.....KGGGGGGGGGGGGGGGGGGGGK.....',
+  '.....KGGGGGGGGGGGGGGGGGGGGK.....',
+  '.....KKKGGggggggggggggGGKKK.....',
+  '........GGDDDDDggDDDDDGG........',
+  '........GGDDDDDggDDDDDGG........',
+  '........GGDDDDDggDDDDDGG........',
+  '........GGDDDDDggDDDDDGG........',
+  '...KKKKKGGDDDDDDDDDDDDGGKKKKK...',
+  '...KRaaaaaaaaaaaaaaaaaaaaaaRK...',
+  '...KRAAAAAAAAAAAAAAAAAAAAAARK...',
+  '...KRRRYYYYYYYYYYYYYYYYYYRRRK...',
+  '...KRRrrRHHRRRRKKKRRRHHRrrRRK...',
+  '...KRRrrRHHRRKKWWWKKRHHRrrRRK...',
+  '...KRTTOOHHRRKWWWWWKRHHOOTTRK...',
+  'KKKKRTwOOHHRKWWWwWWWKHHOOwTRKKKK',
+  'CCKKRTTOOHHRKWWwwwWWKHHOOTTRKKCC',
+  'CCKKRTTOOHHRKWWWwWWWKHHOOTTRKKCC',
+  'CCKKRRrrRHHRRKWWWWWKRHHRrrRRKKCC',
+  'KKKKKKrrKRRRRKKWWWKKRrrrrrKKKKKK',
+  'ccKKKKKWKaAaAaAaAaAaAaArWKKKKKcc',
+  'KwwwwwKWKAaAaAaAaAaAaAaKWKwwwwwK',
+  'KKKKKAAAAAAAAAAAAAAAAAAAAAAKKKKK',
+  'WWWWWWWSK..S...SS...S..KSWWWWWWW'
 ];
 
 const SCALE = 2;
-const FW = MAP[0].length * SCALE; // 48
-const FH = MAP.length * SCALE;    // 64
-const FRAMES = 3;                 // left, straight, right
-const MAX_SHEAR = 4;              // px at top row, 0 at bottom row
+const FW = MAP[0].length * SCALE;
+const FH = MAP.length * SCALE;
+const FRAMES = 5; // hard-left, left, straight, right, hard-right
+const SHEAR_STEPS = [-2, -1, 0, 1, 2]; // multiples of MAX_SHEAR per frame
+const MAX_SHEAR = 4;
 
-// Rasterize the map at SCALE into an RGBA buffer (one frame, no shear).
 function rasterize() {
-  const buf = Buffer.alloc(FW * FH * 4); // zeroed = transparent
+  const buf = Buffer.alloc(FW * FH * 4);
   MAP.forEach((row, my) => {
     [...row].forEach((ch, mx) => {
       const c = PALETTE[ch];
@@ -88,29 +85,31 @@ function rasterize() {
   return buf;
 }
 
-// Copy a frame into the sheet, shearing each row by dir * shear(y).
-function blit(sheet, frame, frameIndex, dir) {
+// Three-zone weighted lean (cab leans hardest, body half as much, wheels
+// stay nearly planted) — reads as banking weight, not a skewed decal.
+function blit(sheet, frame, frameIndex, dirSteps) {
+  const wheelLine = FH - 8 * SCALE;
   for (let y = 0; y < FH; y++) {
-    const shift = dir * Math.round(MAX_SHEAR * (1 - y / FH));
+    let mul;
+    if (y < wheelLine * 0.4) mul = MAX_SHEAR;
+    else if (y < wheelLine) mul = MAX_SHEAR * 0.5;
+    else mul = 0.5;
+    const shift = dirSteps * mul;
     for (let x = 0; x < FW; x++) {
-      const sx = x - shift; // sample source shifted opposite the lean
+      const sx = x - Math.round(shift);
       if (sx < 0 || sx >= FW) continue;
       const si = (y * FW + sx) * 4;
       if (frame[si + 3] === 0) continue;
       const di = (y * sheet.width + frameIndex * FW + x) * 4;
-      sheet.data[di] = frame[si];
-      sheet.data[di + 1] = frame[si + 1];
-      sheet.data[di + 2] = frame[si + 2];
-      sheet.data[di + 3] = 255;
+      sheet.data[di] = frame[si]; sheet.data[di+1] = frame[si+1];
+      sheet.data[di+2] = frame[si+2]; sheet.data[di+3] = 255;
     }
   }
 }
 
 const sheet = new PNG({ width: FW * FRAMES, height: FH });
 const frame = rasterize();
-blit(sheet, frame, 0, -1); // frame 0: leaning left
-blit(sheet, frame, 1, 0);  // frame 1: straight
-blit(sheet, frame, 2, 1);  // frame 2: leaning right
+SHEAR_STEPS.forEach((steps, i) => blit(sheet, frame, i, steps));
 
 const out = path.join(process.cwd(), 'public', 'assets', 'car.png');
 fs.mkdirSync(path.dirname(out), { recursive: true });
