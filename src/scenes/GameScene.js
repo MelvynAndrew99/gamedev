@@ -49,8 +49,16 @@ export class GameScene extends Phaser.Scene {
     this.prevNitroHeld = false;
     this.done = false;
 
+    // Bottom-anchored (origin 0.5,1): the sprite's y IS its rear-bumper
+    // line, not its center. Center-anchoring was the actual "too close to
+    // the bottom" bug — scaling up grew the car in BOTH directions, so a
+    // bigger Car Size pushed the bottom half off-canvas along with making
+    // the top bigger. Bottom-anchoring means Car Size only ever grows the
+    // car upward into the road, never off the bottom edge.
+    this.carBaselineY = this.scale.height - 24;
     this.carSprite = this.add
-      .sprite(this.scale.width / 2, this.scale.height - 60, 'car', 2)
+      .sprite(this.scale.width / 2, this.carBaselineY, 'car', 2)
+      .setOrigin(0.5, 1)
       .setScale(TUNING.carScale)
       .setDepth(10);
 
@@ -175,7 +183,7 @@ export class GameScene extends Phaser.Scene {
     // Jump arc: the sprite swells and lifts through a sine, then lands.
     const arc = this.player.airArc;
     this.carSprite.setScale(TUNING.carScale * (1 + 0.45 * arc));
-    this.carSprite.y = this.scale.height - 70 - 46 * arc;
+    this.carSprite.y = this.carBaselineY - 46 * arc; // lift from the bumper line, not center
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
 

@@ -22,7 +22,7 @@ export class TitleScene extends Phaser.Scene {
   // with a loading bar — same pattern as the HudScene deferral.)
   preload() {
     this.load.spritesheet('car', 'assets/car.png', {
-      frameWidth: 64,
+      frameWidth: 92,
       frameHeight: 48,
     });
     this.load.image('cone', 'assets/cone.png');
