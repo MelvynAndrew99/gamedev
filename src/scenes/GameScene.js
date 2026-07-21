@@ -118,8 +118,7 @@ export class GameScene extends Phaser.Scene {
 
     // Nitro: edge-detected — one burn per press, if there's one to burn.
     if (input.nitro && !this.prevNitroHeld && this.nitro > 0) {
-      this.nitro--;
-      this.onBoost();
+      if (this.onBoost()) this.nitro--;
     }
     this.prevNitroHeld = input.nitro;
 
@@ -204,11 +203,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   onBoost() {
-    if (this.boostCooldown > 0) return;
+    if (this.boostCooldown > 0) return false;
     this.boostCooldown = 0.5;
     this.player.boost();
     this.popup('BOOST', '#2ee56b');
     this.cameras.main.shake(50, 0.002);
+    return true;
   }
 
   onCandy(def) {

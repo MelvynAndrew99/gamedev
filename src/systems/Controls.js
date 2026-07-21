@@ -1,6 +1,6 @@
 // Controls.js — one input signal, many devices. The rest of the game never
 // asks "keyboard or pad?"; it reads a normalized frame:
-//   { steer: -1..1, throttle: 0..1, brake: 0..1, airbrakeL, airbrakeR }
+//   { steer: -1..1, throttle: 0..1, brake: 0..1, airbrakeL, airbrakeR, nitro }
 //
 // Keyboard is digital (steer snaps to ±1); the stick is analog with a
 // deadzone and an expo curve — steerExpo > 1 softens the center so small
@@ -19,6 +19,7 @@ export class Controls {
     this.cursors = kb.createCursorKeys();
     this.keyZ = kb.addKey('Z'); // left airbrake
     this.keyX = kb.addKey('X'); // right airbrake
+    this.keySpace = kb.addKey('SPACE'); // spend one pocketed nitro
   }
 
   get pad() {
@@ -27,7 +28,7 @@ export class Controls {
   }
 
   read(tuning) {
-    let steer = 0, throttle = 0, brake = 0, abL = false, abR = false;
+    let steer = 0, throttle = 0, brake = 0, abL = false, abR = false, nitro = false;
 
     const pad = this.pad;
     if (pad) {
@@ -39,6 +40,7 @@ export class Controls {
       brake = pad.L2 ?? 0;
       abL = !!pad.L1;
       abR = !!pad.R1;
+      nitro = !!pad.B; // circle on PlayStation / B on Xbox-style pads
       if (pad.left) steer = -1;   // d-pad works too
       if (pad.right) steer = 1;
       if (pad.A) throttle = Math.max(throttle, 1); // cross = gas, for the lazy thumb
@@ -51,7 +53,8 @@ export class Controls {
     if (this.cursors.down.isDown) brake = 1;
     if (this.keyZ.isDown) abL = true;
     if (this.keyX.isDown) abR = true;
+    if (this.keySpace.isDown) nitro = true;
 
-    return { steer, throttle, brake, airbrakeL: abL, airbrakeR: abR, connected: !!pad };
+    return { steer, throttle, brake, airbrakeL: abL, airbrakeR: abR, nitro, connected: !!pad };
   }
 }
