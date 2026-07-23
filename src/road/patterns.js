@@ -23,8 +23,8 @@ function put(model, i, def, offset) {
 }
 
 // The universal warning: 2-3 cones down the lane. Returns segments used.
-function warn(model, at, lane) {
-  const count = 2 + Math.floor(Math.random() * 2);
+function warn(model, at, lane, rng) {
+  const count = 2 + Math.floor(rng() * 2);
   let i = at;
   for (let c = 0; c < count; c++, i += 4) put(model, i, OBSTACLES.cone, lane);
   return i - at + 2; // small gap after the last cone
@@ -72,8 +72,8 @@ const PAYLOADS = [
 ];
 const TOTAL_WEIGHT = PAYLOADS.reduce((s, p) => s + p.weight, 0);
 
-function pickPayload() {
-  let r = Math.random() * TOTAL_WEIGHT;
+function pickPayload(rng) {
+  let r = rng() * TOTAL_WEIGHT;
   for (const p of PAYLOADS) {
     if ((r -= p.weight) <= 0) return p.fn;
   }
@@ -92,10 +92,10 @@ function setZip(model, i, lane) {
   if (seg) seg.zipper = { offset: lane, w: 0.22 };
 }
 
-function comboLine(model, at) {
-  const li = Math.floor(Math.random() * LANES.length);
+function comboLine(model, at, rng) {
+  const li = Math.floor(rng() * LANES.length);
   const laneA = LANES[li];
-  const laneB = LANES[(li + 1 + Math.floor(Math.random() * 2)) % LANES.length];
+  const laneB = LANES[(li + 1 + Math.floor(rng() * 2)) % LANES.length];
   let i = at;
   for (let k = 0; k < 5; k++) setZip(model, i + k, laneA);   // runway
   i += 7;
@@ -115,8 +115,8 @@ function comboLine(model, at) {
 
 // Two lanes closing: cones mark BOTH doomed lanes, rocks follow. The gap
 // in the warning is the way through.
-function gate(model, at) {
-  const open = Math.floor(Math.random() * LANES.length);
+function gate(model, at, rng) {
+  const open = Math.floor(rng() * LANES.length);
   let i = at;
   for (let c = 0; c < 2; c++, i += 4) {
     LANES.forEach((lane, li) => { if (li !== open) put(model, i, OBSTACLES.cone, lane); });
@@ -129,8 +129,8 @@ function gate(model, at) {
 }
 
 // One edge closing: cones along the edge, then a rock wall there.
-function edgeSqueeze(model, at) {
-  const side = Math.random() < 0.5 ? -1 : 1;
+function edgeSqueeze(model, at, rng) {
+  const side = rng() < 0.5 ? -1 : 1;
   let i = at;
   for (let c = 0; c < 2; c++, i += 4) put(model, i, OBSTACLES.cone, side * 0.8);
   i += 2;
@@ -140,15 +140,15 @@ function edgeSqueeze(model, at) {
 
 // --- Entry point ---------------------------------------------------------
 
-export function stampPattern(model, at) {
-  const roll = Math.random();
+export function stampPattern(model, at, rng = Math.random) {
+  const roll = rng();
   if (roll < 0.55) {
     // Lane event: warning, then a mystery payload in the same lane.
-    const lane = LANES[Math.floor(Math.random() * LANES.length)];
-    const used = warn(model, at, lane);
-    return used + pickPayload()(model, at + used, lane);
+    const lane = LANES[Math.floor(rng() * LANES.length)];
+    const used = warn(model, at, lane, rng);
+    return used + pickPayload(rng)(model, at + used, lane);
   }
-  if (roll < 0.73) return comboLine(model, at);
-  if (roll < 0.87) return gate(model, at);
-  return edgeSqueeze(model, at);
+  if (roll < 0.73) return comboLine(model, at, rng);
+  if (roll < 0.87) return gate(model, at, rng);
+  return edgeSqueeze(model, at, rng);
 }

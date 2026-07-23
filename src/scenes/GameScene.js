@@ -163,6 +163,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       const event = this.race.update(dt, this.player);
       if (event === 'lap') {
+        this.model.resetLapSprites();
         this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
       } else if (event === 'finished') {
         this.finishRace();

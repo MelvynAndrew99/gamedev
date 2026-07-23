@@ -74,7 +74,7 @@ export class EndlessTrack extends RoadModel {
     // Math.max(1, ...) guard: the cursor must always advance — a stalled
     // cursor here is an infinite loop wearing a trench coat.
     while (this.nextPatternAt - this.trimOffset < this.segments.length - 60) {
-      const consumed = stampPattern(this, this.nextPatternAt - this.trimOffset);
+      const consumed = stampPattern(this, this.nextPatternAt - this.trimOffset, this.rng);
       this.nextPatternAt +=
         Math.max(1, (consumed || 0) + gap + Math.floor(Math.random() * gap * 0.5));
     }
