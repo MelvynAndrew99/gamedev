@@ -26,7 +26,7 @@ export class GameScene extends Phaser.Scene {
   init(data) {
     this.mode = data.mode ?? 'story';
     this.trackIndex = data.trackIndex ?? 0;
-    this.retryOnAdvance = false;
+    this.garageData = null;
   }
 
   create() {
@@ -247,11 +247,12 @@ export class GameScene extends Phaser.Scene {
       this.showBanner(
         `WRECKED\n${dist}m${record ? '  NEW RECORD' : ''}\nTIPS $${this.pop.cash}\n\nENTER FOR TITLE`, 0);
     } else {
-      // Placeholder policy: retry restores full health. Once the shop
-      // exists, wrecking should cost money instead — otherwise crashing
-      // on purpose becomes a free repair (players WILL find that).
-      this.retryOnAdvance = true;
-      this.showBanner('WRECKED\n\nENTER TO RETRY RACE', 0);
+      this.garageData = {
+        wrecked: true,
+        retryTrackIndex: this.trackIndex,
+        receipt: 'WRECKED — NO RACE PURSE',
+      };
+      this.showBanner('WRECKED\n\nENTER FOR GARAGE', 0);
     }
   }
 
@@ -267,20 +268,24 @@ export class GameScene extends Phaser.Scene {
     const fameCash = this.pop.cash;
     RACER.money += timeCash + fameCash;
     const last = this.trackIndex >= TRACKS.length - 1;
+    this.garageData = {
+      nextTrackIndex: this.trackIndex + 1,
+      complete: last,
+      receipt: `RACING +$${timeCash}   FAME +$${fameCash}`,
+    };
     this.showBanner(
       `FINISH  ${fmtTime(t)}${record ? '  NEW RECORD' : ''}\n` +
         `RACING $${timeCash}  +  FAME $${fameCash}\n` +
         `WALLET $${RACER.money}\n\n` +
-        (last ? 'CAMPAIGN COMPLETE\nENTER FOR TITLE' : 'ENTER FOR NEXT RACE'),
+        (last ? 'CAMPAIGN COMPLETE\nENTER FOR GARAGE' : 'ENTER FOR GARAGE'),
       0
     );
   }
 
   advance() {
     if (!this.done) return;
-    if (this.retryOnAdvance) {
-      RACER.health = RACER.maxHealth; // see onWrecked: placeholder policy
-      this.scene.start('GameScene', { mode: 'story', trackIndex: this.trackIndex });
+    if (this.mode === 'story' && this.garageData) {
+      this.scene.start('GarageScene', this.garageData);
       return;
     }
     const last = this.trackIndex >= TRACKS.length - 1;

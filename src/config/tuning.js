@@ -59,6 +59,9 @@ export const TUNING = {
   popPayoutRate: 1.0,  // money per fame point at payout
   basePayout: 300,     // showing up money (story races)
   parRate: 25,         // money per second under par
+  repairPackHealth: 10,// garage purchase size: small enough to leave a real choice
+  repairPackCost: 50,  // $5 per hull point; base pay repairs 60% of a car
+  emergencyHealth: 25, // free tow floor prevents a broke/wrecked campaign lock
 
   // ---- Jumps ----------------------------------------------------------
   jumpMinAir: 0.35,    // seconds airborne at crawl speed
