@@ -6,6 +6,7 @@ import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
 import { getScore } from '../systems/HighScores.js';
 import { RACER } from '../systems/RacerState.js';
+import { axisValue, buttonDown, dpadDown, getPrimaryPad } from '../systems/Gamepad.js';
 
 const ITEMS = [
   { label: 'STORY MODE', data: { mode: 'story', trackIndex: 0 } },
@@ -116,18 +117,17 @@ export class TitleScene extends Phaser.Scene {
   }
 
   update() {
-    const gp = this.input.gamepad;
-    if (!gp || gp.total === 0) {
+    const pad = getPrimaryPad(this.input.gamepad);
+    if (!pad) {
       this.prevPad = null;
       this.padText.setText('');
       return;
     }
     this.padText.setText('CONTROLLER CONNECTED');
-    const pad = gp.getPad(0);
     const now = {
-      up: pad.up || pad.leftStick.y < -0.5,
-      down: pad.down || pad.leftStick.y > 0.5,
-      a: !!pad.A,
+      up: dpadDown(pad, 'up') || axisValue(pad, 1) < -0.5,
+      down: dpadDown(pad, 'down') || axisValue(pad, 1) > 0.5,
+      a: buttonDown(pad, 0, 'A'),
     };
     // First sight of the pad: seed prev with a=true so the button press
     // that woke the browser's gamepad API doesn't instantly start a race.

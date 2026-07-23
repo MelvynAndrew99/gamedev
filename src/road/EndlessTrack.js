@@ -70,14 +70,22 @@ export class EndlessTrack extends RoadModel {
   stampPatterns() {
     const d = Math.min(1, this.piecesGenerated / RAMP_PIECES);
     const gap = Math.round(80 - d * 50); // breathing room shrinks: 80 -> 30
+    let cleanupFrom = null;
     // nextPatternAt is ABSOLUTE; convert to array space for stamping.
     // Math.max(1, ...) guard: the cursor must always advance — a stalled
     // cursor here is an infinite loop wearing a trench coat.
     while (this.nextPatternAt - this.trimOffset < this.segments.length - 60) {
-      const consumed = stampPattern(this, this.nextPatternAt - this.trimOffset, this.rng);
+      const localAt = this.nextPatternAt - this.trimOffset;
+      if (cleanupFrom === null) cleanupFrom = Math.max(0, localAt - 20);
+      const consumed = stampPattern(this, localAt, this.rng);
       this.nextPatternAt +=
-        Math.max(1, (consumed || 0) + gap + Math.floor(Math.random() * gap * 0.5));
+        Math.max(1, (consumed || 0) + gap + Math.floor(this.rng() * gap * 0.5));
     }
+
+    // Pickups are laid down as road pieces are appended; patterns arrive
+    // later once enough road exists. Reconcile after stamping so a new cone
+    // line can never accidentally announce an older nitro placement.
+    if (cleanupFrom !== null) this.moveBoostsOutOfConeWarnings(cleanupFrom);
   }
 
   appendPiece() {

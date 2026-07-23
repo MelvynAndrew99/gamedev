@@ -52,23 +52,10 @@ function rampOverRocksPayload(model, at, lane) {
   return rockStart + 3 * 4 + 4 - at;
 }
 
-// Zipper runway into a ramp: paint feeds speed, speed feeds airtime.
-// The strip is part of the road (segment.zipper), the ramp is a sprite —
-// hit the paint at the right line and the jump is a rocket launch.
-function zipRampPayload(model, at, lane) {
-  for (let k = at; k < at + 5; k++) {
-    const seg = model.segments[k];
-    if (seg) seg.zipper = { offset: lane, w: 0.22 };
-  }
-  put(model, at + 7, OBSTACLES.ramp, lane);
-  return 12;
-}
-
 const PAYLOADS = [
   { fn: rocksPayload, weight: 4 },
-  { fn: rampPayload, weight: 2 },
+  { fn: rampPayload, weight: 3 },
   { fn: rampOverRocksPayload, weight: 3 },
-  { fn: zipRampPayload, weight: 3 },
 ];
 const TOTAL_WEIGHT = PAYLOADS.reduce((s, p) => s + p.weight, 0);
 

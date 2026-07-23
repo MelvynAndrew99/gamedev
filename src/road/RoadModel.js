@@ -124,8 +124,13 @@ export class RoadModel {
       i += Math.max(1, (consumed || 0) + gap + Math.floor(this.rng() * gap * 0.5));
     }
 
+    // Pickups were scattered before hazard patterns. Move any that ended up
+    // directly after same-lane cones, otherwise the warning appears to point
+    // at the boost instead of its rock/ramp payload.
+    this.moveBoostsOutOfConeWarnings(from);
+
     // Zippers LAST, so their hazard-clearance check sees the finished
-    // road — paint never goes down where rocks already live.
+    // road — paint never goes down where rocks or cone warnings already live.
     this.placeZippers(from, endMargin);
   }
 
@@ -156,10 +161,41 @@ export class RoadModel {
     }
   }
 
+  hasConeWarningBehind(at, lane, distance = 20) {
+    for (let i = at - 1; i >= Math.max(0, at - distance); i--) {
+      const sameLane = this.segments[i].sprites
+        .filter((s) => Math.abs(s.offset - lane) < 0.25);
+      // Once its rock/ramp payload has appeared, the cone warning is resolved
+      // and a later boost cannot be mistaken for what the cones announced.
+      if (sameLane.some((s) => s.key === 'rock' || s.key === 'ramp')) return false;
+      if (sameLane.some((s) => s.key === 'cone')) return true;
+    }
+    return false;
+  }
+
+  moveBoostsOutOfConeWarnings(from = 0) {
+    const lanes = [-0.66, 0, 0.66];
+    for (let i = Math.max(from, 0); i < this.segments.length; i++) {
+      for (const sprite of this.segments[i].sprites) {
+        if (sprite.key !== 'boost' || !this.hasConeWarningBehind(i, sprite.offset)) continue;
+        const clearLanes = lanes.filter((lane) => !this.hasConeWarningBehind(i, lane));
+        if (clearLanes.length) {
+          sprite.offset = clearLanes[Math.floor(this.rng() * clearLanes.length)];
+        } else {
+          // A rare full-width warning: omit this pickup instead of teaching
+          // the wrong cone meaning.
+          sprite.removeFromTrack = true;
+        }
+      }
+      this.segments[i].sprites = this.segments[i].sprites
+        .filter((sprite) => !sprite.removeFromTrack);
+    }
+  }
+
   // Zipper strips: 5-segment lanes of painted speed, every 60-100
   // segments. PERSISTENT — never consumed; they're the skill-expression
-  // surface. A strip is skipped if a hazard occupies its lane nearby, so
-  // the paint never lies about being a good idea... on its own segment.
+  // surface. A strip is skipped if a hazard occupies its lane nearby or a
+  // same-lane cone warning precedes it.
   // (What comes AFTER the strip at 150% is your problem.)
   placeZippers(from = 0, endMargin = 30) {
     const lanes = [-0.66, 0, 0.66];
@@ -167,11 +203,12 @@ export class RoadModel {
     const end = this.segments.length - endMargin - 10;
     while (i < end) {
       const lane = lanes[Math.floor(this.rng() * lanes.length)];
-      let clear = true;
+      let clear = !this.hasConeWarningBehind(i, lane);
       for (let k = i - 3; k < i + 8 && clear; k++) {
         const seg = this.segments[k];
         if (!seg) continue;
         for (const s of seg.sprites) {
+          if (s.key === 'cone' && Math.abs(s.offset - lane) < 0.35) { clear = false; break; }
           if (s.def && s.def.damage > 0 && Math.abs(s.offset - lane) < 0.35) { clear = false; break; }
         }
       }

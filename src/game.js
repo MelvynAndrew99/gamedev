@@ -7,6 +7,10 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { GarageScene } from './scenes/GarageScene.js';
+import { installGamepadShutdownFix } from './systems/Gamepad.js';
+
+// Must be installed before the first Scene input plugin starts.
+installGamepadShutdownFix(Phaser.Input.Gamepad.GamepadPlugin);
 
 const config = {
   type: Phaser.AUTO,
