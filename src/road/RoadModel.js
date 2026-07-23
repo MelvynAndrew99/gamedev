@@ -12,6 +12,7 @@ export class RoadModel {
   constructor(tuning) {
     this.t = tuning;
     this.segments = [];
+    this.rng = Math.random;
   }
 
   get trackLength() {
@@ -75,6 +76,10 @@ export class RoadModel {
   //   ["dirt", len, curve?, hill?]  ["scurves"]
   buildFromData(data) {
     this.segments = [];
+    // Campaign layouts must be learnable. A stable per-course RNG keeps
+    // warnings, payloads, pickups, and zippers in the same places on every
+    // retry while EndlessTrack remains unpredictable.
+    this.rng = seededRandom(data.seed ?? hashString(data.id ?? 'track'));
     for (const piece of data.pieces) {
       const [type, len, a, b] = piece;
       if (type === 'straight')     this.addStraight(len ?? 25);
@@ -113,14 +118,19 @@ export class RoadModel {
     const gap = Math.min(130, Math.max(25, Math.round(4 / obstacleDensity)));
     const start = Math.max(from, 30);
     const end = this.segments.length - endMargin - 45;
-    let i = start + Math.floor(Math.random() * gap * 0.5);
+    let i = start + Math.floor(this.rng() * gap * 0.5);
     while (i < end) {
-      const consumed = stampPattern(this, i);
-      i += Math.max(1, (consumed || 0) + gap + Math.floor(Math.random() * gap * 0.5));
+      const consumed = stampPattern(this, i, this.rng);
+      i += Math.max(1, (consumed || 0) + gap + Math.floor(this.rng() * gap * 0.5));
     }
 
+    // Pickups were scattered before hazard patterns. Move any that ended up
+    // directly after same-lane cones, otherwise the warning appears to point
+    // at the boost instead of its rock/ramp payload.
+    this.moveBoostsOutOfConeWarnings(from);
+
     // Zippers LAST, so their hazard-clearance check sees the finished
-    // road — paint never goes down where rocks already live.
+    // road — paint never goes down where rocks or cone warnings already live.
     this.placeZippers(from, endMargin);
   }
 
@@ -138,12 +148,12 @@ export class RoadModel {
       seg.sprites.push({
         def: { key: 'boost', kind: 'pickup', pop: 0, damage: 0, slow: 1, w: 0.1, view: 0.15 },
         key: 'boost', view: 0.15,
-        offset: lanes[Math.floor(Math.random() * lanes.length)], hit: false,
+        offset: lanes[Math.floor(this.rng() * lanes.length)], hit: false,
       });
     };
-    let next = Math.max(from, 30) + Math.floor(Math.random() * 60);
+    let next = Math.max(from, 30) + Math.floor(this.rng() * 60);
     for (let i = Math.max(from, 20); i < this.segments.length; i++) {
-      if (i >= next) { putNitro(i); next = i + 110 + Math.floor(Math.random() * 60); }
+      if (i >= next) { putNitro(i); next = i + 110 + Math.floor(this.rng() * 60); }
       const seg = this.segments[i];
       const s0 = (seg.p2.world.y - seg.p1.world.y) / t.segmentLength;
       const sPrev = i > 0 ? (this.segments[i-1].p2.world.y - this.segments[i-1].p1.world.y) / t.segmentLength : 0;
@@ -151,22 +161,54 @@ export class RoadModel {
     }
   }
 
+  hasConeWarningBehind(at, lane, distance = 20) {
+    for (let i = at - 1; i >= Math.max(0, at - distance); i--) {
+      const sameLane = this.segments[i].sprites
+        .filter((s) => Math.abs(s.offset - lane) < 0.25);
+      // Once its rock/ramp payload has appeared, the cone warning is resolved
+      // and a later boost cannot be mistaken for what the cones announced.
+      if (sameLane.some((s) => s.key === 'rock' || s.key === 'ramp')) return false;
+      if (sameLane.some((s) => s.key === 'cone')) return true;
+    }
+    return false;
+  }
+
+  moveBoostsOutOfConeWarnings(from = 0) {
+    const lanes = [-0.66, 0, 0.66];
+    for (let i = Math.max(from, 0); i < this.segments.length; i++) {
+      for (const sprite of this.segments[i].sprites) {
+        if (sprite.key !== 'boost' || !this.hasConeWarningBehind(i, sprite.offset)) continue;
+        const clearLanes = lanes.filter((lane) => !this.hasConeWarningBehind(i, lane));
+        if (clearLanes.length) {
+          sprite.offset = clearLanes[Math.floor(this.rng() * clearLanes.length)];
+        } else {
+          // A rare full-width warning: omit this pickup instead of teaching
+          // the wrong cone meaning.
+          sprite.removeFromTrack = true;
+        }
+      }
+      this.segments[i].sprites = this.segments[i].sprites
+        .filter((sprite) => !sprite.removeFromTrack);
+    }
+  }
+
   // Zipper strips: 5-segment lanes of painted speed, every 60-100
   // segments. PERSISTENT — never consumed; they're the skill-expression
-  // surface. A strip is skipped if a hazard occupies its lane nearby, so
-  // the paint never lies about being a good idea... on its own segment.
+  // surface. A strip is skipped if a hazard occupies its lane nearby or a
+  // same-lane cone warning precedes it.
   // (What comes AFTER the strip at 150% is your problem.)
   placeZippers(from = 0, endMargin = 30) {
     const lanes = [-0.66, 0, 0.66];
-    let i = Math.max(from, 40) + Math.floor(Math.random() * 40);
+    let i = Math.max(from, 40) + Math.floor(this.rng() * 40);
     const end = this.segments.length - endMargin - 10;
     while (i < end) {
-      const lane = lanes[Math.floor(Math.random() * lanes.length)];
-      let clear = true;
+      const lane = lanes[Math.floor(this.rng() * lanes.length)];
+      let clear = !this.hasConeWarningBehind(i, lane);
       for (let k = i - 3; k < i + 8 && clear; k++) {
         const seg = this.segments[k];
         if (!seg) continue;
         for (const s of seg.sprites) {
+          if (s.key === 'cone' && Math.abs(s.offset - lane) < 0.35) { clear = false; break; }
           if (s.def && s.def.damage > 0 && Math.abs(s.offset - lane) < 0.35) { clear = false; break; }
         }
       }
@@ -175,7 +217,7 @@ export class RoadModel {
           this.segments[k].zipper = { offset: lane, w: this.t.zipperW };
         }
       }
-      i += 60 + Math.floor(Math.random() * 40);
+      i += 60 + Math.floor(this.rng() * 40);
     }
   }
 
@@ -189,7 +231,38 @@ export class RoadModel {
   segmentAt(base, n) {
     return this.segments[(base.index + n) % this.segments.length];
   }
+
+  // Contact flags debounce a sprite while the car crosses its segment.
+  // Re-arm the course at the lap line so ramps, hazards, and pickups remain
+  // part of the authored rhythm on every lap.
+  resetLapSprites() {
+    for (const segment of this.segments) {
+      for (const sprite of segment.sprites) {
+        if (sprite.def) sprite.hit = false;
+      }
+    }
+  }
 }
 
 function easeIn(a, b, p)    { return a + (b - a) * Math.pow(p, 2); }
 function easeInOut(a, b, p) { return a + (b - a) * (-Math.cos(p * Math.PI) / 2 + 0.5); }
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function seededRandom(seed) {
+  let state = Number(seed) >>> 0;
+  return () => {
+    state += 0x6d2b79f5;
+    let n = state;
+    n = Math.imul(n ^ (n >>> 15), n | 1);
+    n ^= n + Math.imul(n ^ (n >>> 7), n | 61);
+    return ((n ^ (n >>> 14)) >>> 0) / 4294967296;
+  };
+}

@@ -15,6 +15,7 @@ import { checkObstacleHit } from '../systems/Collision.js';
 import { Controls } from '../systems/Controls.js';
 import { Popularity } from '../systems/Popularity.js';
 import { RACER } from '../systems/RacerState.js';
+import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { TRACKS } from '../tracks/index.js';
 
 export class GameScene extends Phaser.Scene {
@@ -101,9 +102,11 @@ export class GameScene extends Phaser.Scene {
   update(_time, delta) {
     // Result banners answer the controller: cross advances, circle bails.
     // Edge-detected poll, same reasoning as the title menu.
-    const gp = this.input.gamepad;
-    const pad = gp && gp.total > 0 ? gp.getPad(0) : null;
-    const padNow = { a: !!(pad && pad.A), b: !!(pad && pad.B) };
+    const pad = getPrimaryPad(this.input.gamepad);
+    const padNow = {
+      a: buttonDown(pad, 0, 'A'),
+      b: buttonDown(pad, 1, 'B'),
+    };
     const padPrev = this.prevPad ?? { a: true, b: true };
     this.prevPad = padNow;
 
@@ -163,6 +166,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       const event = this.race.update(dt, this.player);
       if (event === 'lap') {
+        this.model.resetLapSprites();
         this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
       } else if (event === 'finished') {
         this.finishRace();

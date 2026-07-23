@@ -1,6 +1,7 @@
 {
   "id": "training-loop",
   "name": "TRAINING LOOP",
+  "seed": 1101,
   "laps": 2,
   "intro": "Every syndicate driver starts somewhere. Keep it on the road.",
   "pieces": [
@@ -48,6 +49,6 @@
       25
     ]
   ],
-  "obstacles": 0.04,
+  "obstacles": 0.03,
   "par": 145
 }

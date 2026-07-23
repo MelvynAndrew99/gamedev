@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
+import { axisValue, buttonDown, dpadDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { RACER } from '../systems/RacerState.js';
 import { applyEmergencyTow, buyRepair, repairQuote } from '../systems/Economy.js';
 
@@ -73,16 +74,15 @@ export class GarageScene extends Phaser.Scene {
   }
 
   update() {
-    const gp = this.input.gamepad;
-    if (!gp || gp.total === 0) {
+    const pad = getPrimaryPad(this.input.gamepad);
+    if (!pad) {
       this.prevPad = null;
       return;
     }
-    const pad = gp.getPad(0);
     const now = {
-      up: pad.up || pad.leftStick.y < -0.5,
-      down: pad.down || pad.leftStick.y > 0.5,
-      a: !!pad.A,
+      up: dpadDown(pad, 'up') || axisValue(pad, 1) < -0.5,
+      down: dpadDown(pad, 'down') || axisValue(pad, 1) > 0.5,
+      a: buttonDown(pad, 0, 'A'),
     };
     const prev = this.prevPad ?? { up: false, down: false, a: true };
     if (now.up && !prev.up) this.move(-1);

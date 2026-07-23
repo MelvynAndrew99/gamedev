@@ -1,6 +1,7 @@
 {
   "id": "neon-gulch",
   "name": "NEON GULCH",
+  "seed": 2202,
   "laps": 3,
   "intro": "The Gulch pays double for drivers who don't lift.",
   "pieces": [
@@ -63,6 +64,6 @@
       18
     ]
   ],
-  "obstacles": 0.07,
+  "obstacles": 0.055,
   "par": 170
 }
