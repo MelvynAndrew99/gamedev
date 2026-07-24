@@ -17,6 +17,20 @@ import { Popularity } from '../systems/Popularity.js';
 import { RACER } from '../systems/RacerState.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { TRACKS } from '../tracks/index.js';
+import { MUSIC } from '../audio/MusicEngine.js';
+import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
+import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
+import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
+import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
+
+// One theme per campaign track (see GAME_DESIGN.md for each track's role);
+// Endless Mode keeps the original high-speed theme since it has no fixed
+// identity of its own to score against.
+const CAMPAIGN_THEMES = {
+  'training-loop': TRAINING_LOOP_THEME,
+  'neon-gulch': NEON_GULCH_THEME,
+  'syndicate-run': SYNDICATE_RUN_THEME,
+};
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -97,6 +111,15 @@ export class GameScene extends Phaser.Scene {
     // shakes and zooms this scene will accumulate. Stopped with us.
     this.scene.launch('HudScene');
     this.events.once('shutdown', () => this.scene.stop('HudScene'));
+
+    // Procedural score — synthesized live, not a loaded file (see
+    // audio/MusicEngine.js). Starting it here rides the ENTER/click that
+    // got us into this scene, which satisfies browsers' audio-autoplay
+    // gesture requirement.
+    MUSIC.setVolume(TUNING.musicVolume);
+    const theme = this.trackData ? CAMPAIGN_THEMES[this.trackData.id] ?? HIGH_SPEED_THEME : HIGH_SPEED_THEME;
+    MUSIC.start(theme);
+    this.events.once('shutdown', () => MUSIC.stop());
   }
 
   update(_time, delta) {
@@ -369,6 +392,15 @@ export class GameScene extends Phaser.Scene {
     hook('cameraHeight', (v) => (TUNING.cameraHeight = v));
     hook('drawDistance', (v) => (TUNING.drawDistance = v));
     hook('fogDensity',   (v) => (TUNING.fogDensity = v));
+
+    // Sync the track picker to however we actually got here (title menu,
+    // garage "next race", or the picker itself) so it never shows a stale
+    // selection. Not a `hook()` control — it drives scene changes rather
+    // than a live TUNING value, so it's read-only sync here, not two-way.
+    const trackSelect = document.getElementById('trackSelect');
+    if (trackSelect) {
+      trackSelect.value = this.mode === 'endless' ? 'endless' : String(this.trackIndex);
+    }
 
     const fps = document.getElementById('fps');
     if (fps) {

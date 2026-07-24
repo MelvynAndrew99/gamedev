@@ -3,6 +3,8 @@ import { TUNING } from '../config/tuning.js';
 import { axisValue, buttonDown, dpadDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { RACER } from '../systems/RacerState.js';
 import { applyEmergencyTow, buyRepair, repairQuote } from '../systems/Economy.js';
+import { MUSIC } from '../audio/MusicEngine.js';
+import { SHOP_THEME } from '../audio/tracks/shopTheme.js';
 
 export class GarageScene extends Phaser.Scene {
   constructor() {
@@ -71,6 +73,12 @@ export class GarageScene extends Phaser.Scene {
     kb.on('keydown-ENTER', () => this.activate());
     this.prevPad = null;
     this.refresh();
+
+    // Wrench-down music: warmer, slower, swung — the shop should not feel
+    // like the race it just interrupted (see audio/tracks/shopTheme.js).
+    MUSIC.setVolume(TUNING.musicVolume);
+    MUSIC.start(SHOP_THEME);
+    this.events.once('shutdown', () => MUSIC.stop());
   }
 
   update() {
