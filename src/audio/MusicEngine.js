@@ -33,7 +33,28 @@ class MusicEngine {
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
     this.master.gain.value = this.volume;
-    this.master.connect(this.ctx.destination);
+
+    // Safety chain, master -> destination. Individual voices are tuned to
+    // sound right in isolation, but a strong downbeat can stack kick + bass
+    // + pad + lead at once; without a ceiling that sum clips at the DAC —
+    // the harsh "blown speaker" distortion, not a volume/EQ complaint.
+    //   subCut:  laptop speakers can't reproduce ~50Hz and below; driving
+    //            them there doesn't add bass, it adds rattle. Removing it
+    //            costs nothing audible on real speakers/headphones either.
+    //   limiter: a fast brickwall on whatever peak survives subCut, so no
+    //            combination of simultaneous voices can exceed 0dBFS.
+    const subCut = this.ctx.createBiquadFilter();
+    subCut.type = 'highpass';
+    subCut.frequency.value = 48;
+
+    const limiter = this.ctx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.1;
+
+    this.master.connect(subCut).connect(limiter).connect(this.ctx.destination);
     this.noiseBuffer = this.makeNoiseBuffer();
   }
 
@@ -134,7 +155,7 @@ class MusicEngine {
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.9, time + 0.008); // punchy pluck attack
+    gain.gain.linearRampToValueAtTime(0.75, time + 0.008); // was 0.9 — headroom for the limiter
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
 
     // Gritty engine-pulse bass (F-Zero's punchy analog low end) instead of
@@ -157,7 +178,7 @@ class MusicEngine {
     if (this._driveCurve) return this._driveCurve;
     const n = 256;
     const curve = new Float32Array(n);
-    const amount = 18; // fixed grit amount — one flavor of drive, not a knob
+    const amount = 6; // was 18 — that was closer to a hard square-wave clip than grit
     for (let i = 0; i < n; i++) {
       const x = (i / (n - 1)) * 2 - 1;
       curve[i] = Math.tanh(x * amount) / Math.tanh(amount);
@@ -257,10 +278,10 @@ class MusicEngine {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(150, time);
-    osc.frequency.exponentialRampToValueAtTime(45, time + 0.12);
+    osc.frequency.exponentialRampToValueAtTime(58, time + 0.12); // was 45 — below the master highpass anyway
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(1, time);
+    gain.gain.setValueAtTime(0.85, time); // was 1.0, the loudest voice in the engine
     gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
 
     osc.connect(gain).connect(this.master);
