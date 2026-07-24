@@ -72,6 +72,9 @@ export const TUNING = {
   fovSpeedBoost: 22,   // degrees added to fov at max speed. Dynamic FOV is the
                        // cheapest speed drug there is: the world stretches.
 
+  // ---- Audio -----------------------------------------------------------
+  musicVolume: 0.32,   // master gain for the procedural score (0..1)
+
   // ---- Colors (F-Zero sunset / Wipeout neon) -------------------------
   colors: {
     skyBands: [0x0b0630, 0x1a0b45, 0x2c1157, 0x53207a, 0x8a2d8b, 0xe75480], // top -> horizon
