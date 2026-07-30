@@ -18,6 +18,10 @@ export class RoadRenderer {
 
     this.sky = scene.add.graphics().setDepth(-2);
     this.g = scene.add.graphics().setDepth(-1);
+    // Warp streaks: over the road and props, UNDER the car (depth 10). Radiate
+    // from the vanishing point so they read as the world rushing past, not as
+    // an overlay pasted on top.
+    this.streaks = scene.add.graphics().setDepth(8);
     this.drawSky();
 
     // Sprite pool for world objects (obstacles, roadside props). Created
@@ -46,7 +50,7 @@ export class RoadRenderer {
     });
   }
 
-  render(model, player, speedPercent = 0) {
+  render(model, player, speedPercent = 0, speedBurst = 0) {
     const t = this.t;
     const g = this.g;
     g.clear();
@@ -56,6 +60,8 @@ export class RoadRenderer {
     // doesn't change when the lens does.
     const fov = t.fov + t.fovSpeedBoost * speedPercent;
     this.frameDepth = 1 / Math.tan(((fov / 2) * Math.PI) / 180);
+    this.speedPercent = speedPercent;
+    this.speedBurst = speedBurst;
 
     const base = model.findSegment(player.position);
     const basePercent = (player.position % t.segmentLength) / t.segmentLength;
@@ -101,6 +107,52 @@ export class RoadRenderer {
     }
 
     this.renderSprites(model, base);
+    this.drawSpeedLines();
+  }
+
+  // Warp streaks — the cheapest, loudest "sense of speed" there is. Rays fly
+  // OUTWARD from the vanishing point; each one's length and brightness scale
+  // with speed, and past maxSpeed (speedPercent > 1) they run longer and
+  // brighter so overspeed reads on-screen, not just on the HUD. The center
+  // lane is kept clear (|dirX| gate) so the streaks frame the action instead
+  // of smearing across the road you're trying to read.
+  //
+  // A ramp/boost fires a `speedBurst` (0..1, decayed by the scene). The burst
+  // both LIGHTS the streaks below the passive speed floor AND reads like
+  // overspeed — extra length, brightness, and scroll rate — so a well-hit ramp
+  // or a nitro pop always looks like a speed reward, teaching route optimization.
+  drawSpeedLines() {
+    const s = this.streaks;
+    s.clear();
+    const t = this.t;
+    const sp = this.speedPercent;
+    const burst = this.speedBurst;
+    // Ramp 0->1 from the floor up to maxSpeed; the burst floors it independently.
+    const passive = (sp - t.speedLineFloor) / (1 - t.speedLineFloor);
+    const intensity = Math.max(passive, burst);
+    if (intensity <= 0) return;
+
+    const cx = this.w / 2;
+    const cy = this.h * 0.46; // vanishing point, just under the horizon
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    const over = Math.max(0, sp - 1) + burst * 0.7; // overspeed AND the burst add reach + glow
+    const count = 16;
+
+    s.lineStyle(2, t.speedLineColor, Math.min(0.65, 0.15 + intensity * 0.35 + over * 0.6));
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      const dirX = Math.cos(a);
+      const dirY = Math.sin(a);
+      if (Math.abs(dirX) < 0.4) continue; // keep the driving lane clear
+      // Phase scrolls outward with speed; the burst accelerates it for a "surge" whoosh.
+      const phase = (now * (2 + sp * 4 + burst * 5) + i * 0.41) % 1;
+      const near = 90 + phase * this.w * 0.7;
+      const len = (30 + intensity * 140 + over * 120) * (0.5 + phase * 0.8);
+      s.lineBetween(
+        cx + dirX * near,        cy + dirY * near,
+        cx + dirX * (near + len), cy + dirY * (near + len)
+      );
+    }
   }
 
   // Second pass, far -> near, so close sprites draw over distant ones.

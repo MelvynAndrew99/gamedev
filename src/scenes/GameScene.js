@@ -60,6 +60,7 @@ export class GameScene extends Phaser.Scene {
     this.player = new Player(TUNING);
     this.pop = new Popularity(TUNING);
     this.nitro = 0; // pocketed boosts (see TUNING.nitroMax)
+    this.speedLineBurst = 0; // ramp/boost streak-bloom, decays over speedLineBurstTime
     this.wasOnZipper = false;
     this.prevNitroHeld = false;
     this.done = false;
@@ -182,6 +183,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.iframes = Math.max(0, this.iframes - dt);
     this.boostCooldown = Math.max(0, this.boostCooldown - dt);
+    this.speedLineBurst = Math.max(0, this.speedLineBurst - dt / TUNING.speedLineBurstTime);
     this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
 
     if (this.mode === 'endless') {
@@ -197,7 +199,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const speedPercent = this.player.speed / TUNING.maxSpeed;
-    this.renderer.render(this.model, this.player, speedPercent);
+    this.renderer.render(this.model, this.player, speedPercent, this.speedLineBurst);
 
     // Steering FRAMES: 0=hard-left, 1=left, 2=straight, 3=right, 4=hard-right.
     // Five buckets instead of three — needed once airbrakes are in the mix:
@@ -234,6 +236,7 @@ export class GameScene extends Phaser.Scene {
     if (this.boostCooldown > 0) return;
     this.boostCooldown = 0.5;
     this.player.boost();
+    this.speedLineBurst = 1; // the pop reads as speed even from a standstill
     this.popup('BOOST', '#2ee56b');
     this.cameras.main.shake(50, 0.002);
   }
@@ -247,6 +250,7 @@ export class GameScene extends Phaser.Scene {
   onRamp(def) {
     const earned = this.pop.add(def.pop);
     this.player.launch();
+    this.speedLineBurst = 1; // takeoff streaks: the ramp was the fast line
     this.popup(`+${earned} AIR!`, '#00e5ff');
     this.cameras.main.shake(60, 0.003); // takeoff kick
   }
@@ -383,6 +387,7 @@ export class GameScene extends Phaser.Scene {
     };
 
     hook('maxSpeed',      (v) => (TUNING.maxSpeed = v));
+    hook('torqueLow',     (v) => (TUNING.torqueLow = v));
     hook('steerRate',     (v) => (TUNING.steerRate = v));
     hook('centrifugal',   (v) => (TUNING.centrifugal = v));
     hook('airbrakeForce', (v) => (TUNING.airbrakeForce = v));

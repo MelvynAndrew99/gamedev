@@ -34,7 +34,13 @@ export const TUNING = {
 
   // ---- Terrain physics ------------------------------------------------
   overspeedCap: 1.25,  // the overspeed ceiling: HUD 150 — the top of the fun band Melvyn found (140-150). Everything that grants speed clamps here.
-  torqueLow: 1.4,      // engine multiplier at standstill (weight feel: strong launch)
+  torqueLow: 3.6,      // engine multiplier at standstill. Sized to BEAT gravity on
+                       // the steepest authored grade (~0.14 → 6720 u/s²): accel*3.6 =
+                       // 8640 > 6720, so a standing hill-start pulls away cleanly
+                       // rather than merely holding. 3.6 is Melvyn's dialed-in feel
+                       // from the debug panel. Only touches the low end — the curve
+                       // still tapers to torqueHigh at maxSpeed, so top-end grind is
+                       // unchanged.
   torqueHigh: 0.6,     // engine multiplier near maxSpeed (top end pulls like a loaded truck)
   climbFloor: 0.28,    // under throttle, grades can't drag you below this fraction of max
   nitroMax: 3,         // pocket size for boost pickups
@@ -70,8 +76,15 @@ export const TUNING = {
 
 
   // ---- Speed feel ----------------------------------------------------
-  fovSpeedBoost: 22,   // degrees added to fov at max speed. Dynamic FOV is the
+  fovSpeedBoost: 28,   // degrees added to fov at max speed. Dynamic FOV is the
                        // cheapest speed drug there is: the world stretches.
+  speedLineFloor: 0.5, // speedPercent where warp streaks begin. Below cruise the
+                       // screen stays clean; the smear is a HIGH-speed reward.
+  speedLineColor: 0xbfffff, // cool white — reads over the neon road without fighting it.
+  speedLineBurstTime: 0.9,  // seconds a ramp/boost streak-bloom takes to fade. The burst
+                            // fires the streaks even below the passive floor, so a speed
+                            // reward always READS as one — that's the route-optimization
+                            // carrot: you SEE the payoff of a well-hit ramp or a nitro pop.
 
   // ---- Audio -----------------------------------------------------------
   musicVolume: 0.32,   // master gain for the procedural score (0..1)
