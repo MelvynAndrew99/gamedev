@@ -19,9 +19,14 @@ is satisfied.
 - Run a single test file: `node --test src/road/RoadModel.test.js`
 
 Asset generation (regenerate pixel-art sprites into `public/assets/`):
-- `node tools/gen-car.js` — car sprite (steering frames), needs `pngjs`
-- `node tools/gen-props.js` — cone/rock/post sprites
-- `tools/design.py` / `tools/CarRenderer.py` — Python helpers used when iterating on sprite layout
+- `node tools/gen-car.js` — car sprite sheet, needs `pngjs`. Builds a small 3D
+  jeep mesh (boxes/discs) and rasterizes 5 steering frames from real camera
+  yaws with a z-buffer, then quantizes shading into flat bands so it still
+  reads as pixel art. Deliberately not a 2D pixel map sheared per frame —
+  that technique (the old `tools/design.py` + `tools/CarRenderer.py`, since
+  removed) can bank a single rear-view raster but can never reveal the front
+  fenders/headlamps a real turn would show.
+- `node tools/gen-props.js` — cone/rock/post/ramp/boost sprites
 
 Nix users: `flake.nix` provides a devShell with node, git, and typescript.
 

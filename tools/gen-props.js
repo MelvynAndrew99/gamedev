@@ -24,6 +24,8 @@ const PALETTE = {
   N: [0x2e, 0xe5, 0x6b], // nitro green (canister metal reuses rock gray G)
   Y: [0xff, 0xcf, 0x3f], // ramp chevron yellow
   y: [0xc9, 0x9a, 0x12], // ramp chevron shade
+  L: [0xff, 0xe9, 0x8a], // ramp lip highlight / arrow paint
+  B: [0x8a, 0x4a, 0x1e], // ramp support strut, rust (matches car body rust)
   E: [0x2e, 0xe5, 0x6b], // boost green
   e: [0x14, 0x8f, 0x3f], // boost green shade
 };
@@ -48,16 +50,35 @@ const SPRITES = {
     '.....KNNK.....',
     '......KK......',
   ],
-  // Seen from behind: a low wedge, chevron warning face, neon lip on top.
+  // A scrap-metal wedge, not a flat painted bar: silhouette tapers from a
+  // narrow bright lip (top — the launch edge, farthest away/highest) down
+  // to a wide riveted base plate (bottom — ground contact), the taper
+  // itself being the "this surface tilts up and away from you" cue that a
+  // flat rectangle can't give. Rust support struts brace the sides, tread
+  // bands carry a single bold center arrow (paint, not texture noise), and
+  // two beacon lights on the lip match the roadside posts' night-visibility
+  // language so it reads before collision distance same as they do.
   ramp: [
-    '..KKKKKKKKKKKKKKKKKKKK..',
-    '.KCCCCCCCCCCCCCCCCCCCCK.',
-    'KKYYKKYYKKYYKKYYKKYYKKKK',
-    'KYYKKYYKKYYKKYYKKYYKKYYK',
-    'KYKKYYKKYYKKYYKKYYKKYYKK',
-    'KKKYYKKYYKKYYKKYYKKYYKKK',
-    'KyyKKyyKKyyKKyyKKyyKKyyK',
-    'KKKKKKKKKKKKKKKKKKKKKKKK',
+    '......KLCLLLLLLLLLLCLLK.....',
+    '.......LLLLLLLLLLLLLLL......',
+    '.....KBggggggggggggggBgK....',
+    '.....KBYYYYYYLYLYYYYYBYK....',
+    '.....KBYYYYYYLYLYYYYYBYK....',
+    '....KByyyyyyyLyLyyyyyyByK...',
+    '....KByyyyyyLyyyLyyyyyByK...',
+    '....KBYYYYYYLYYYLYYYYYBYK...',
+    '...KBYYYYYYLYYYYYLYYYYYBYK..',
+    '...KByyyyyyLyyyyyLyyyyyByK..',
+    '...KByyyyyLyyyyyyyLyyyyByK..',
+    '...KBYYYYYLYYYYYYYLYYYYBYK..',
+    '..KBYYYYYLYYYYYYYYYLYYYYBYK.',
+    '..KByyyyLyyyyyyyyyyyLyyyByK.',
+    '..KByyyyLyyyyyyyyyyyLyyyByK.',
+    '.KBYYYYLYYYYYYYYYYYYYLYYYBYK',
+    'KKBKKKKKKKKKKKKKKKKKKKKKKBKK',
+    'dddKdddddKddddddddKdddddKddd',
+    'dddddddddddddddddddddddddddd',
+    'KKKKKKKKKKKKKKKKKKKKKKKKKKKK',
   ],
   cone: [
     '.......KK.......',
