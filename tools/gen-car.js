@@ -1,45 +1,41 @@
-// tools/gen-car.js — apocalypse Jeep, v5: real 3D yaw, not 2D shear.
+// tools/gen-car.js — F-Zero-style hover racer, v6: reskinned from the
+// apocalypse jeep, same 3D-yaw pipeline.
 //
-// v3/v4 drew ONE rear-view pixel map and faked steering by horizontally
-// shearing rows of that same raster. That can only ever bank the existing
-// pixels — it can't reveal geometry that was never drawn, so turn frames
-// never showed any hint of the front of the car (playtest feedback).
-//
-// v5 replaces that with an actual low-poly 3D jeep (boxes + discs), lit
-// and rasterized with a z-buffer, palette-quantized into flat shading
-// bands so it still reads as pixel art. The five steering frames are real
-// camera yaws (with a light bank into the turn): as the car rotates, the
-// front corner — fender, headlamp, front wheel — genuinely swings into
-// view past the edge of the (nearer, at-rest-visible) tailgate. This is
-// the same technique tools/CarRenderer.py used for the sci-fi ship that
-// briefly replaced this jeep; it's ported to JS here so the whole asset
-// pipeline stays on `node tools/gen-car.js` + pngjs, no Python/Pillow step.
+// The brief for this pass was a reference sheet of F-Zero SNES Mode-7 ship
+// sprites (Blue Falcon etc.) — but that sheet is drawn TOP-DOWN (bird's-eye,
+// as Mode-7 racers render their vehicles), while this game's camera sits
+// BEHIND the car at eye level (Outrun-style chase cam, see CAM_PITCH below).
+// Pasting a top-down sprite into an eye-level view would look like a toy
+// glued flat to the screen — the perspective doesn't transfer. So instead of
+// tracing the sheet's pixels, this ports its *aesthetic* (blue hull, warm
+// racing stripe, glass canopy, glowing twin engines) onto the existing v5
+// technique: build a real low-poly 3D mesh and rasterize actual camera yaws,
+// so turning frames genuinely reveal the nose/fenders instead of faking it
+// with a 2D shear. See the v5 header (removed) and tools/CarRenderer.py
+// (also removed) for why that shear approach was abandoned.
 import { PNG } from 'pngjs';
 import fs from 'fs';
 import path from 'path';
 
+// Every color lives here so a future palette swap (AI racers, unlockable
+// liveries) only means editing this table, not the mesh below.
 const MATERIALS = {
-  body:     { color: [0xa8, 0x50, 0x1f], bands: 3 },        // rust orange
-  skirt:    { color: [0x4a, 0x4f, 0x42], bands: 2 },         // lower olive skirt/bumper
-  rust:     { color: [0x7a, 0x38, 0x14], bands: 2 },         // battle-damage patch, driver's side only
-  cab:      { color: [0x14, 0x16, 0x22], bands: 2 },         // window glass
-  pillar:   { color: [0x5c, 0x5c, 0x6c], bands: 3 },         // roof rail + A/C pillars
-  hazard:   { color: [0xff, 0xcf, 0x3f], emissive: true },   // hazard stripe paint
-  tire:     { color: [0x16, 0x16, 0x1a], bands: 2 },         // rubber
-  hub:      { color: [0xc9, 0xc9, 0xd4], emissive: true },   // hubcap
-  tail:     { color: [0xff, 0x2d, 0x55], emissive: true },   // taillight
-  amber:    { color: [0xff, 0x8a, 0x1a], emissive: true },   // amber taillight lens
-  headlamp: { color: [0xff, 0xf2, 0xc8], emissive: true },   // nose corner lamp — hidden at rest, revealed on turn
-  grille:   { color: [0x1a, 0x18, 0x18], bands: 2 },         // front cap
-  jerry:    { color: [0x4a, 0x4f, 0x42], bands: 2 },         // roof-lashed fuel can
-  jerryHi:  { color: [0xd0, 0xc9, 0x3f], emissive: true },   // fuel-can handle glint
-  pole:     { color: [0x0a, 0x0a, 0x14], bands: 1 },         // whip antenna
-  flag:     { color: [0xff, 0x2d, 0x55], emissive: true },   // rag flag
+  hull:      { color: [0x1f, 0x4f, 0xc7], bands: 3 },        // Blue Falcon-ish body blue
+  hullDark:  { color: [0x12, 0x2a, 0x66], bands: 2 },         // lower skirt/undercarriage
+  wing:      { color: [0x27, 0x3d, 0x7a], bands: 2 },         // side wing pods
+  fin:       { color: [0x4a, 0x50, 0x66], bands: 2 },         // rear spoiler
+  cab:       { color: [0x2a, 0x7a, 0x9c], bands: 2 },         // cockpit canopy glass
+  pillar:    { color: [0x8a, 0x8f, 0x9c], bands: 2 },         // canopy frame
+  stripe:    { color: [0xff, 0xa8, 0x1a], emissive: true },   // racing stripe decal
+  noseLight: { color: [0xff, 0xef, 0xb0], emissive: true },   // nose tip lamp — hidden at rest, revealed on turn
+  engineHousing: { color: [0x55, 0x58, 0x66], bands: 2 },     // rear thruster housing
+  engineGlow:    { color: [0x5a, 0xd8, 0xff], emissive: true }, // rear thruster core
+  underglow:     { color: [0x7a, 0xc8, 0xff], emissive: true }, // belly hover light
 };
 
 // A tapered box: rear face at z0 (half-width w0), front face at z1
 // (half-width w1), each face independently sized top/bottom — enough to
-// build every panel, skirt, and cab wall below without a real mesh tool.
+// build every hull panel, fin, and pod below without a real mesh tool.
 function box(z0, z1, w0, w1, yBot0, yTop0, yBot1, yTop1, xOff = 0) {
   const r = [[-w0 + xOff, yBot0, z0], [w0 + xOff, yBot0, z0], [w0 + xOff, yTop0, z0], [-w0 + xOff, yTop0, z0]];
   const f = [[-w1 + xOff, yBot1, z1], [w1 + xOff, yBot1, z1], [w1 + xOff, yTop1, z1], [-w1 + xOff, yTop1, z1]];
@@ -56,8 +52,7 @@ function box(z0, z1, w0, w1, yBot0, yTop0, yBot1, yTop1, xOff = 0) {
   return tris;
 }
 
-// Flat disc facing -z (toward the camera at rest) — wheels, spare tire,
-// hubcaps, taillight lenses.
+// Flat disc facing -z (toward the camera at rest) — engine nacelle rings.
 function disc(cx, cy, cz, radius, segments = 10) {
   const tris = [];
   const pts = [];
@@ -70,69 +65,54 @@ function disc(cx, cy, cz, radius, segments = 10) {
   return tris;
 }
 
-// ---------------- the jeep ----------------
-// Coordinates: x right, y up, z forward (nose/hood at +z, tailgate at
-// -z). Camera sits behind the car looking toward +z, so the tailgate
-// (-z, nearest) is what's visible at rest; the nose (+z) is hidden behind
-// it until the car yaws and the nose swings out to a different x.
-function buildJeep() {
+// ---------------- the racer ----------------
+// Coordinates: x right, y up, z forward (nose at +z, tail/engines at -z).
+// Camera sits behind the car looking toward +z, so the twin engine nacelles
+// (-z, nearest) are what's visible at rest; the pointed nose (+z) is hidden
+// behind the hull until the car yaws and swings it out to a different x.
+function buildRacer() {
   const T = [];
   const add = (tris, mat) => { for (const t of tris) T.push([t, mat]); };
 
-  // Main body: tailgate wide/square, hood slightly narrower and lower —
-  // a real front, not a mirrored rear.
-  add(box(-13, 9, 12.5, 11.5, 0, 7.2, 0, 5.6), 'body');
-  add(box(-13.2, 9, 11.8, 11.0, -1.4, 0.3, -1.2, 0.4), 'skirt');
-  // Battle-damage patch, driver's side (x<0) only — asymmetric weathering.
-  // Small decal on the flank, well inside the body's own half-width so it
-  // stays hidden behind the (nearer) tailgate face at rest and only shows
-  // on the turn frames, same as the headlamps.
-  add(box(-8, -1, 1.6, 1.6, 1.0, 4.2, 1.0, 4.2, -9.5), 'rust');
+  // Main hull: wide flared tail tapering to a low, pointed nose.
+  add(box(-14, 12, 8, 2.5, 0, 5.2, 0, 2.8), 'hull');
+  add(box(-14.1, 11, 7.6, 2.2, -0.6, 0.2, -0.5, 0.1), 'hullDark');
 
-  // Cab: full-width dark window box, thin pillars + roof rail drawn
-  // fractionally nearer (larger local |z|) so they read as a frame
-  // around the glass instead of the glass itself.
-  add(box(-13, -3, 10.2, 10.2, 7.2, 12.6, 7.2, 11.4), 'cab');
-  add(box(-13.05, -3, 1.6, 1.6, 7.2, 12.7, 7.2, 11.5, -8.7), 'pillar');
-  add(box(-13.05, -3, 1.6, 1.6, 7.2, 12.7, 7.2, 11.5, 8.7), 'pillar');
-  add(box(-13.1, -3.2, 10.6, 10.6, 12.4, 13.4, 11.2, 12.0), 'pillar');
+  // Side wing pods flanking the hull at mid-height, tapering off before the
+  // nose — kept off the ground line so they don't read as extra wheels.
+  for (const s of [-1, 1]) add(box(-11, 5, 1.6, 1.2, 1.0, 3.2, 1.0, 2.8, s * 9.4), 'wing');
 
-  // Hazard stripe wraps the body above the skirt.
-  add(box(-12.9, 8.9, 12.1, 11.1, 3.4, 4.2, 3.2, 4.0), 'hazard');
+  // Small tail fins, kept well inside the hull's own rear half-width (8)
+  // so they stay within the hull's silhouette at yaw instead of swinging
+  // out past it — a wider bar here rotated into a disconnected floating
+  // rod on turn frames (read as a gun barrel, not a spoiler).
+  for (const s of [-1, 1]) add(box(-14.1, -11.5, 0.3, 0.3, 5.2, 6.0, 5.1, 5.7, s * 5.5), 'fin');
 
-  // Rear wheels, flanking the spare — visible at rest.
-  for (const s of [-1, 1]) add(disc(s * 9.5, -0.6, -13.05, 3.1, 12), 'tire');
-  for (const s of [-1, 1]) add(disc(s * 9.5, -0.6, -13.1, 1.3, 8), 'hub');
+  // Cockpit canopy: glass bubble with a thin frame, set back of center.
+  // The frame is deliberately kept inside the glass's own footprint —
+  // an earlier version spanned the canopy's full length as a separate
+  // slab and, at yaw, projected past the hull as a stray floating bar
+  // (read as a gun barrel rather than a cockpit).
+  add(box(-4, 6, 2.8, 2.0, 5.2, 7.6, 5.2, 6.8), 'cab');
+  for (const s of [-1, 1]) add(box(-4.05, 6, 0.3, 0.3, 5.2, 7.7, 5.2, 6.9, s * 2.9), 'pillar');
+  add(box(4.8, 5.6, 1.9, 1.7, 6.5, 6.9, 6.3, 6.6), 'pillar');
 
-  // Front wheels, tucked at the nose corners — self-occluded at yaw 0,
-  // revealed by the turn frames.
-  for (const s of [-1, 1]) add(disc(s * 9.2, -0.6, 8.4, 3.0, 12), 'tire');
-  for (const s of [-1, 1]) add(disc(s * 9.2, -0.6, 8.5, 1.2, 8), 'hub');
+  // Racing stripe: a raised ridge sitting flush on the hull's spine so it
+  // reads as a stripe along the whole visible length, not a rear decal.
+  add(box(-13.6, 10, 2.0, 0.8, 5.2, 5.8, 2.8, 3.4), 'stripe');
 
-  // Grille cap + headlamp pods at the very nose. Edge-on and invisible at
-  // yaw 0; this is what actually swings into view on the turn frames.
-  add(box(8.9, 9.15, 6.0, 5.8, 3.0, 5.6, 3.0, 5.6), 'grille');
-  for (const s of [-1, 1]) add(box(9.0, 10.3, 1.1, 1.0, 3.4, 5.8, 3.4, 5.8, s * 10.6), 'headlamp');
+  // Nose tip lamp — edge-on and invisible at yaw 0; swings into view on turns.
+  add(box(11.5, 12.3, 0.9, 0.7, 2.4, 3.1, 2.4, 3.1), 'noseLight');
 
-  // Spare tire on the tailgate.
-  add(disc(0, 2.4, -13.1, 4.2, 14), 'tire');
-  add(disc(0, 2.4, -13.15, 3.2, 14), 'hub');
-  add(disc(0, 2.4, -13.2, 2.5, 14), 'tire');
-
-  // Taillights flanking the spare.
+  // Twin rear thrusters, flanking the tail, set above ground height so
+  // they read as engines rather than wheels.
   for (const s of [-1, 1]) {
-    add(box(-13.1, -13.1, 1.4, 1.4, 1.2, 3.6, 1.2, 3.6, s * 6.4), 'tail');
-    add(box(-13.15, -13.15, 0.7, 0.7, 1.2, 3.6, 1.2, 3.6, s * 5.3), 'amber');
+    add(disc(s * 6.5, 2.6, -14.05, 2.1, 12), 'engineHousing');
+    add(disc(s * 6.5, 2.6, -14.1, 1.2, 10), 'engineGlow');
   }
 
-  // Roof cargo: lashed jerry can, off-centre (raider improvisation, not a
-  // symmetric factory rack).
-  add(box(-4, -1, 1.6, 1.6, 12.7, 15.1, 12.7, 15.1, 3.2), 'jerry');
-  add(disc(3.2, 14.6, -2.5, 0.35, 6), 'jerryHi');
-
-  // Whip antenna + rag flag, off-centre by the pillar.
-  add(box(-8.7, -8.7, 0.22, 0.22, 12.7, 18.5, 12.7, 18.5), 'pole');
-  add(box(-8.5, -6.6, 0.1, 0.1, 17.2, 18.3, 17.2, 18.3, 1.6), 'flag');
+  // Belly hover glow, a thin line just under the skirt.
+  add(box(-13.9, 9, 7.5, 2.0, -0.68, -0.6, -0.55, -0.48), 'underglow');
 
   return T;
 }
@@ -248,10 +228,10 @@ function renderFrame(tris, yawDeg, rollDeg) {
   return { data: out, alpha };
 }
 
-const tris = buildJeep();
-// Real camera yaws with a light bank into the turn (F-Zero-style lean,
-// but subtle — this is a ground vehicle, not a hovercraft).
-const STEER_FRAMES = [[-28, 5], [-14, 2.5], [0, 0], [14, -2.5], [28, -5]];
+const tris = buildRacer();
+// Real camera yaws with a bank into the turn — a bit more roll than the old
+// jeep since a hover racer leans harder than a ground vehicle.
+const STEER_FRAMES = [[-28, 7], [-14, 3.5], [0, 0], [14, -3.5], [28, -7]];
 const sheet = new PNG({ width: FRAME_W * FRAMES, height: FRAME_H });
 STEER_FRAMES.forEach(([yaw, roll], i) => {
   const { data, alpha } = renderFrame(tris, yaw, roll);

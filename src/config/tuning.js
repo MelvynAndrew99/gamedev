@@ -19,11 +19,12 @@ export const TUNING = {
   maxSpeed: 12000,     // (derived-input) world units/sec. 12000 = 1 segment per frame at 60fps
   centrifugal: 0.3,    // how hard curves fling you outward. THE core risk knob of the game.
   playerW: 0.14,       // car collision half-width in road-half units
-  carScale: 2.4,         // on-screen size of the car sprite. My first projection-derived
+  carScale: 4.5,         // on-screen size of the car sprite. My first projection-derived
                         // estimate (6.0, ~48% of canvas width) was too large in practice —
-                        // 3.0 is the measured-by-eye value from the debug panel. Eyes beat
-                        // math for "looks believable," which is exactly why this knob lives
-                        // on the panel instead of being hardcoded.
+                        // 4.5 is the measured-by-eye value from the debug panel, re-checked
+                        // after the F-Zero racer reskin. Eyes beat math for "looks
+                        // believable," which is exactly why this knob lives on the panel
+                        // instead of being hardcoded.
   iframes: 0.9,        // seconds of post-hit invulnerability (no combo-wrecks by cluster)
 
   // ---- Handling feel (all live on the debug panel) --------------------
