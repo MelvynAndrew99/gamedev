@@ -134,8 +134,15 @@ export class Player {
       this.speed += t.dirtDrag * dt;
     }
 
-    // Visual lean for the sprite: steering plus airbrake attitude.
-    this.steer = clamp(input.steer + ab * 0.6, -1, 1);
+    // Visual lean for the sprite: the airbrake alone reaches the "hard
+    // turn" frames at the edges of the sheet — plain steering (keyboard,
+    // d-pad, or a full-deflection stick) is capped below that threshold
+    // so it can only ever show the "slight turn" frames. Blending the two
+    // by magnitude (as this used to) meant a hard stick push and a light
+    // one both looked identical once digital keyboard input saturated to
+    // ±1, and a full-deflection stick could cross the hard threshold on
+    // its own with no airbrake held at all.
+    this.steer = ab !== 0 ? ab : clamp(input.steer * 0.5, -0.5, 0.5);
 
     // Off the road (|x| > 1): heavy drag down to a crawl. Not while
     // airborne — flight doesn't care what's under you.
