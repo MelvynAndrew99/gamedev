@@ -24,16 +24,16 @@ finished until its effect on both modes has been considered.
 
 ## Object language
 
-- **Cones are indicators.** A line of cones says that something is coming in
-  that lane. For now, the payload is always a rock, ramp, or ramp-and-rock
-  formation. Cones never announce nitro pickups or ground zippers. Cones are
-  harmless and grant no reward. They communicate location without revealing
-  which hazard/route offer is coming, so the player must decide whether to
-  commit or move.
+- **Cones are danger indicators.** A line of cones says that rocks are closing
+  that lane. Cones never announce ramps, nitro pickups, or ground zippers.
+  Cones are harmless and grant no reward: they communicate where to move away
+  from without becoming another collision tax.
 - **Rocks are momentum hazards.** They punish an unread or poorly executed
   line. They should not create unavoidable full-road walls.
-- **Ramps are route offers.** A ramp should lead to a benefit: clearing a
-  hazard, reaching a speed line, chaining fame, or satisfying an objective.
+- **Ramps are route offers.** A projected yellow/cyan runway may identify the
+  approach, but the ramp itself remains a distinct raised object with its
+  existing jump physics. A ramp should lead to a benefit: clearing a hazard,
+  reaching a speed line, chaining fame, or satisfying an objective.
 - **Zippers are execution rewards.** Their line should be visible early enough
   to choose, then demand steering precision at speed.
 - **Nitro is stored agency.** Place it before a climb or demanding section,
@@ -61,6 +61,8 @@ unless the section is explicitly a late-game combo line.
 Purpose: teach the visual language and establish trust.
 
 - Lowest event density and generous recovery space.
+- Authored event rhythm: isolated rocks, isolated ramp, open-lane gate, then
+  ramp-over-rocks. This teaches each read before combining them.
 - Introduce isolated warnings before mixing payloads.
 - Favor center-lane reads and obvious safe alternatives.
 - Objectives should teach one action at a time, such as hit one ramp or cross
@@ -71,6 +73,8 @@ Purpose: teach the visual language and establish trust.
 Purpose: teach momentum management across hills, dirt, and stronger curves.
 
 - Nitro before sustained climbs.
+- Alternate crest/sweeper and compact chicane sections with straight settling
+  zones; its authored pattern sequence introduces the airborne combo line.
 - Downhill speed should feed a readable curve or optional committed line.
 - Alternate technical sections with fast release sections.
 - Objectives can combine actions, such as maintain a speed threshold through a
@@ -81,6 +85,8 @@ Purpose: teach momentum management across hills, dirt, and stronger curves.
 Purpose: test route memory and chained execution.
 
 - Denser events, but retain a valid clean line through every formation.
+- Favor combo lines and open-lane gates, with shorter recovery spacing than
+  Neon Gulch but no more than two technical geometry pieces back-to-back.
 - Combo lines may require a mid-air lane change or quick return line.
 - Use the sharpest curves after adequate sightline and braking room.
 - Objectives can span a lap: ramps hit, hazards avoided, or a multi-part
@@ -105,8 +111,8 @@ construction, decoration, and object rules live in `src/road/RoadModel.js` and
   straights, stronger terrain, and tighter pattern spacing.
 - Preserve at least one valid response to every formation, even at maximum
   difficulty.
-- Keep cone language identical to campaign mode: cones resolve into rocks or
-  ramps, never boosts.
+- Keep cone language identical to campaign mode: cones resolve into rocks,
+  never ramps or boosts.
 - Maintain the read–choose–execute–payoff–breathe rhythm. Later difficulty may
   shorten the breath, but should not delete readability.
 - Keep pickups useful and fair as the road is generated. A newly stamped
@@ -124,7 +130,9 @@ construction, decoration, and object rules live in `src/road/RoadModel.js` and
 Automated generation tests should cover growth and trimming over a meaningful
 distance. Validate that:
 
-- every cone warning receives a rock or ramp payload;
+- every cone warning receives a rock payload;
+- every ramp has a visible yellow/cyan approach while remaining a raised
+  launch object;
 - no unresolved cone warning points at nitro or a ground zipper;
 - formations are fully built before becoming visible;
 - absolute segment indices continue increasing after trims;

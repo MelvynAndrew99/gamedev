@@ -41,7 +41,9 @@ export const OBSTACLES = {
     damage: 0,
     slow: 1.0,
     w: 0.13,
-    view: 0.3,
+    // Larger visual footprint only. Collision and launch precision remain
+    // governed by `w`, so this readability pass does not soften the mechanic.
+    view: 0.38,
   },
 };
 

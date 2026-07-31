@@ -487,6 +487,30 @@ export class RoadRenderer {
     this.quad(g, roadColor,
       x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2);
 
+    // Ramp runway: projected paint that leads to, but never replaces, the
+    // raised ramp sprite. Wide alternating gold slabs acquire the correct
+    // lane at distance; cyan edge rails connect visually to the ramp beacons.
+    if (seg.launchApproach) {
+      const a = seg.launchApproach;
+      const ax1 = x1 + a.offset * w1, aw1 = a.w * w1;
+      const ax2 = x2 + a.offset * w2, aw2 = a.w * w2;
+      const panel = Math.floor(a.distanceToRamp / 2) % 2 === 0
+        ? c.launchA
+        : c.launchB;
+      this.quad(g, panel,
+        ax1 - aw1, y1, ax1 + aw1, y1,
+        ax2 + aw2, y2, ax2 - aw2, y2);
+
+      const ew1 = Math.max(1, aw1 * 0.08);
+      const ew2 = Math.max(1, aw2 * 0.08);
+      this.quad(g, c.launchEdge,
+        ax1 - aw1, y1, ax1 - aw1 + ew1, y1,
+        ax2 - aw2 + ew2, y2, ax2 - aw2, y2);
+      this.quad(g, c.launchEdge,
+        ax1 + aw1 - ew1, y1, ax1 + aw1, y1,
+        ax2 + aw2, y2, ax2 + aw2 - ew2, y2);
+    }
+
     // Zipper paint: part of the ROAD, not an object on it — drawn in the
     // road pass so perspective is exact and it can never float. Band
     // alternation scrolls the two greens as the road moves: free animation.

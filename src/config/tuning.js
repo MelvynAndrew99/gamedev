@@ -109,6 +109,9 @@ export const TUNING = {
     zipperA:     0x2ee56b, // zipper paint (band-alternates with B: free scroll animation)
     zipperB:     0x18b04b,
     zipperGlow:  0xbfffd9,
+    launchA:     0xffcf3f, // ramp runway: reward yellow, distinct from orange cones
+    launchB:     0x8a6615,
+    launchEdge:  0x00e5ff, // cyan rails terminate at the ramp's cyan beacons
     dirtLight:   0x4a3a35,
     dirtDark:    0x423330,
     dirtEdgeA:   0x6b4f35,

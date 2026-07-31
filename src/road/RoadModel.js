@@ -63,6 +63,12 @@ export class RoadModel {
   addCurve(n, curve, hill=0) { this.addRoad(n, n, n, curve, hill); }
   addHill(n, hill)           { this.addRoad(n, n, n, 0, hill); }
   addDirt(n, curve = 0, hill = 0) { this.addRoad(n, n, n, curve, hill, 'dirt'); }
+  addChicane(n, curve, hill = 0) {
+    // One compact left/right precision test. Split elevation between its
+    // halves so the authored height change is not accidentally doubled.
+    this.addCurve(n, curve, hill * 0.5);
+    this.addCurve(n, -curve, hill * 0.5);
+  }
   addSCurves() {
     this.addCurve(25, -2);
     this.addCurve(25, 2);
@@ -73,7 +79,8 @@ export class RoadModel {
 
   // Build from data (see src/tracks/index.js for the format):
   //   ["straight", len]  ["curve", len, curve, hill?]  ["hill", len, hill]
-  //   ["dirt", len, curve?, hill?]  ["scurves"]
+  //   ["dirt", len, curve?, hill?]  ["chicane", len, curve, hill?]
+  //   ["scurves"] (legacy long-form preset)
   buildFromData(data) {
     this.segments = [];
     // Campaign layouts must be learnable. A stable per-course RNG keeps
@@ -86,6 +93,7 @@ export class RoadModel {
       else if (type === 'curve')   this.addCurve(len ?? 25, a ?? 2, b ?? 0);
       else if (type === 'hill')    this.addHill(len ?? 25, a ?? 2);
       else if (type === 'dirt')    this.addDirt(len ?? 20, a ?? 0, b ?? 0);
+      else if (type === 'chicane') this.addChicane(len ?? 12, a ?? 3, b ?? 0);
       else if (type === 'scurves') this.addSCurves();
       else throw new Error(`Unknown track piece: ${type}`);
     }
@@ -109,12 +117,12 @@ export class RoadModel {
       this.segments[k].startLine = true; // checkered paint across the asphalt
     }
 
-    this.decorate(data.obstacles ?? 0.05);
+    this.decorate(data.obstacles ?? 0.05, 0, 30, data.patterns);
   }
 
   // Roadside posts (speed perception — the eye reads velocity from things
   // streaming past the edges) and authored hazard patterns (patterns.js).
-  decorate(obstacleDensity, from = 0, endMargin = 30) {
+  decorate(obstacleDensity, from = 0, endMargin = 30, patternRules = {}) {
     for (let i = from; i < this.segments.length; i++) {
       const seg = this.segments[i];
       if (this.segments[i].index % 10 === 0) { // absolute index: cadence survives trimming
@@ -131,18 +139,63 @@ export class RoadModel {
     this.placeBoostPads(from);
     if (obstacleDensity <= 0) return;
 
-    const gap = Math.min(130, Math.max(25, Math.round(4 / obstacleDensity)));
-    const start = Math.max(from, 30);
-    const end = this.segments.length - endMargin - 45;
-    let i = start + Math.floor(this.rng() * gap * 0.5);
-    while (i < end) {
-      const consumed = stampPattern(this, i, this.rng);
-      i += Math.max(1, (consumed || 0) + gap + Math.floor(this.rng() * gap * 0.5));
+    const densityGap = Math.min(130, Math.max(25, Math.round(4 / obstacleDensity)));
+    const gapMin = Math.max(20, patternRules.gap?.[0] ?? densityGap);
+    const gapMax = Math.max(gapMin, patternRules.gap?.[1] ?? Math.round(gapMin * 1.5));
+    const start = Math.max(from, patternRules.startClear ?? 30);
+    // The longer high-speed warning language needs enough paved road for the
+    // complete approach and payload to exist before a pattern is stamped.
+    const finishClear = Math.max(endMargin, patternRules.finishClear ?? endMargin);
+    const end = this.segments.length - finishClear - 80;
+    if (patternRules.placements?.length) {
+      // Campaign races align decisions to authored geometry. Lanes and minor
+      // variations remain seeded, but the read/execute/payoff beat lands on
+      // the same crest, straight, dirt transition, or corner every lap.
+      for (const { at, kind } of patternRules.placements) {
+        const placementEnd = this.segments.length - finishClear;
+        if (at < start || at >= placementEnd) {
+          throw new Error(
+            `${kind} pattern at ${at} is outside ${start}..${placementEnd - 1}`
+          );
+        }
+        const consumed = stampPattern(
+          this,
+          at,
+          this.rng,
+          patternRules.weights,
+          kind
+        );
+        if (at + consumed > placementEnd) {
+          throw new Error(
+            `${kind} pattern at ${at} overlaps the finish recovery`
+          );
+        }
+      }
+    } else {
+      let i = start + Math.floor(this.rng() * gapMin * 0.5);
+      let patternIndex = 0;
+      while (i < end) {
+        const sequence = patternRules.sequence;
+        const forcedKind = sequence?.length
+          ? sequence[patternIndex % sequence.length]
+          : null;
+        const consumed = stampPattern(
+          this,
+          i,
+          this.rng,
+          patternRules.weights,
+          forcedKind
+        );
+        patternIndex++;
+        const breathingRoom =
+          gapMin + Math.floor(this.rng() * (gapMax - gapMin + 1));
+        i += Math.max(1, (consumed || 0) + breathingRoom);
+      }
     }
 
     // Pickups were scattered before hazard patterns. Move any that ended up
-    // directly after same-lane cones, otherwise the warning appears to point
-    // at the boost instead of its rock/ramp payload.
+    // directly after same-lane cones, otherwise danger signage appears to
+    // point at a reward.
     this.moveBoostsOutOfConeWarnings(from);
 
     // Zippers LAST, so their hazard-clearance check sees the finished
@@ -177,13 +230,13 @@ export class RoadModel {
     }
   }
 
-  hasConeWarningBehind(at, lane, distance = 20) {
+  hasConeWarningBehind(at, lane, distance = 60) {
     for (let i = at - 1; i >= Math.max(0, at - distance); i--) {
       const sameLane = this.segments[i].sprites
         .filter((s) => Math.abs(s.offset - lane) < 0.25);
-      // Once its rock/ramp payload has appeared, the cone warning is resolved
+      // Once its rock payload has appeared, the danger warning is resolved
       // and a later boost cannot be mistaken for what the cones announced.
-      if (sameLane.some((s) => s.key === 'rock' || s.key === 'ramp')) return false;
+      if (sameLane.some((s) => s.key === 'rock')) return false;
       if (sameLane.some((s) => s.key === 'cone')) return true;
     }
     return false;
@@ -223,6 +276,13 @@ export class RoadModel {
       for (let k = i - 3; k < i + 8 && clear; k++) {
         const seg = this.segments[k];
         if (!seg) continue;
+        if (
+          seg.launchApproach &&
+          Math.abs(seg.launchApproach.offset - lane) < 0.35
+        ) {
+          clear = false;
+          break;
+        }
         for (const s of seg.sprites) {
           if (s.key === 'cone' && Math.abs(s.offset - lane) < 0.35) { clear = false; break; }
           if (s.def && s.def.damage > 0 && Math.abs(s.offset - lane) < 0.35) { clear = false; break; }

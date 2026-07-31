@@ -74,7 +74,7 @@ export class EndlessTrack extends RoadModel {
     // nextPatternAt is ABSOLUTE; convert to array space for stamping.
     // Math.max(1, ...) guard: the cursor must always advance — a stalled
     // cursor here is an infinite loop wearing a trench coat.
-    while (this.nextPatternAt - this.trimOffset < this.segments.length - 60) {
+    while (this.nextPatternAt - this.trimOffset < this.segments.length - 90) {
       const localAt = this.nextPatternAt - this.trimOffset;
       if (cleanupFrom === null) cleanupFrom = Math.max(0, localAt - 20);
       const consumed = stampPattern(this, localAt, this.rng);
