@@ -99,6 +99,16 @@ export class RoadModel {
       this.addRoad(15, 10, 15, 0, -drift / this.t.segmentLength);
     }
 
+    // The start/finish line, as a physical checkered gantry over the road.
+    // On a looping circuit this one gate IS the start, every lap line, and
+    // the finish — you launch from under it and cross it each lap. Purely
+    // visual (the renderer draws it from this flag); lap logic still keys off
+    // position 0. Endless Mode has no finish line, so it never sets a gate.
+    this.segments[0].gate = { label: 'START / FINISH' };
+    for (let k = 0; k < 3 && k < this.segments.length; k++) {
+      this.segments[k].startLine = true; // checkered paint across the asphalt
+    }
+
     this.decorate(data.obstacles ?? 0.05);
   }
 
@@ -108,8 +118,14 @@ export class RoadModel {
     for (let i = from; i < this.segments.length; i++) {
       const seg = this.segments[i];
       if (this.segments[i].index % 10 === 0) { // absolute index: cadence survives trimming
-        seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: -1.25 });
-        seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: 1.25 });
+        seg.sprites.push({
+          key: ROADSIDE.post.key, view: ROADSIDE.post.view,
+          speedMarker: ROADSIDE.post.speedMarker, offset: -1.25,
+        });
+        seg.sprites.push({
+          key: ROADSIDE.post.key, view: ROADSIDE.post.view,
+          speedMarker: ROADSIDE.post.speedMarker, offset: 1.25,
+        });
       }
     }
     this.placeBoostPads(from);

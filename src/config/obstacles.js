@@ -47,5 +47,7 @@ export const OBSTACLES = {
 
 // Roadside decoration — can't be hit.
 export const ROADSIDE = {
-  post: { key: 'post', w: 0, view: 0.09 },
+  // Repeated pickets deliberately wink at the horizon as projected scanlines
+  // merge. That cadence is a speed cue, not gameplay-object visibility.
+  post: { key: 'post', w: 0, view: 0.09, speedMarker: true },
 };

@@ -56,3 +56,21 @@ test('cones never appear to announce ground boosts', () => {
     }
   }
 });
+
+test('every campaign track gets a start/finish gate and painted line', () => {
+  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+    const model = new RoadModel(TUNING);
+    model.buildFromData(track);
+
+    // Exactly one gate (the start/finish gantry), on the lap line at index 0.
+    const gated = model.segments.filter((segment) => segment.gate);
+    assert.equal(gated.length, 1, track.id);
+    assert.equal(model.segments[0].gate.label, 'START / FINISH', track.id);
+
+    // The checkered road paint spans the first few segments and starts on the
+    // lap line, so it renders under the gantry.
+    assert.equal(model.segments[0].startLine, true, track.id);
+    const painted = model.segments.filter((segment) => segment.startLine).length;
+    assert.ok(painted >= 1 && painted <= 3, track.id);
+  }
+});

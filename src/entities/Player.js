@@ -123,7 +123,11 @@ export class Player {
     // speed, they never confiscate motion.
     const floor = t.maxSpeed * t.climbFloor;
     if (input.throttle > 0 && slope > 0.02 && this.speed < floor) {
-      this.speed = Math.min(floor, this.speed + t.accel * 2 * dt);
+      // Grind at accel*3 (was *2): even on the steepest authored grade, where
+      // gravity cancels the whole engine, a dead-stop start reaches crawl speed
+      // in under half a second. That's the difference between "first gear bites"
+      // and "the car is stuck" — the launch has to FEEL decided, not tentative.
+      this.speed = Math.min(floor, this.speed + t.accel * 3 * dt);
     }
     // Above maxSpeed, drag claws you back toward it — hold overspeed only
     // while gravity keeps winning the tug-of-war.
