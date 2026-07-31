@@ -28,11 +28,12 @@ Asset generation (regenerate pixel-art sprites into `public/assets/`):
   fenders/headlamps a real turn would show.
 - `node tools/gen-props.js` — cone/rock/post/ramp/boost sprites
 
-Nix users: `flake.nix` provides a devShell with node, git, and typescript.
+Nix users: run `nix develop`, then `npm ci`. The flake pins Node and the
+tracked npm lockfile pins the JavaScript dependency graph.
 
 ## Architecture
 
-This is a pseudo-3D (Outrun-style) racer built on Phaser 3, entry point `src/game.js`. There is
+This is a pseudo-3D (Outrun-style) racer built on Phaser 4, entry point `src/game.js`. There is
 **no Phaser physics** — the road is our own data model and collision is a 1.5D interval-overlap test.
 Reading the header comment of any file below explains its contract; they're intentionally dense.
 

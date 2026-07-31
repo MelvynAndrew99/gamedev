@@ -10,7 +10,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "phaser": "^3.55.2"
+    "phaser": "^4.2.1"
   },
   "devDependencies": {
     "pngjs": "^7.0.0",

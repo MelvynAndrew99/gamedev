@@ -344,7 +344,7 @@ export class RoadRenderer {
   // is a little quad between two depth rows and two width columns). Row parity
   // keys off the absolute segment index so the pattern stays continuous across
   // the few segments the line spans.
-  drawStartLine(seg) {
+  drawStartLine(seg, nearY = seg.p1.screen.y) {
     const g = this.g;
     const OUT = 0x0a0a14;
     const WHITE = 0xffffff;
@@ -355,8 +355,8 @@ export class RoadRenderer {
     const rows = 2;
     for (let r = 0; r < rows; r++) {
       const ta = r / rows, tb = (r + 1) / rows;
-      const aL = lerp(x1 - w1, x2 - w2, ta), aR = lerp(x1 + w1, x2 + w2, ta), aY = lerp(y1, y2, ta);
-      const bL = lerp(x1 - w1, x2 - w2, tb), bR = lerp(x1 + w1, x2 + w2, tb), bY = lerp(y1, y2, tb);
+      const aL = lerp(x1 - w1, x2 - w2, ta), aR = lerp(x1 + w1, x2 + w2, ta), aY = lerp(nearY, y2, ta);
+      const bL = lerp(x1 - w1, x2 - w2, tb), bR = lerp(x1 + w1, x2 + w2, tb), bY = lerp(nearY, y2, tb);
       for (let col = 0; col < cols; col++) {
         const t0 = col / cols, t1 = (col + 1) / cols;
         const nx0 = lerp(aL, aR, t0), nx1 = lerp(aL, aR, t1);
@@ -463,9 +463,16 @@ export class RoadRenderer {
     const { x: x2, y: y2, w: w2 } = seg.p2.screen;
     const light = seg.band === 0;
 
+    // Phaser 4's WebGL renderer can leave a one-pixel rasterization crack
+    // where adjacent polygons share an exact edge. Farther segments are drawn
+    // after nearer ones, so extend this segment's near edge down one pixel.
+    // The opaque ground, rumble, and road fills then cover the shared edge
+    // without changing any projected geometry used by gameplay or sprites.
+    const nearY = y1 + 1;
+
     // Ground: full-width band behind the road slab.
     g.fillStyle(light ? c.groundLight : c.groundDark, 1);
-    g.fillRect(0, y2, this.w, y1 - y2);
+    g.fillRect(0, y2, this.w, Math.max(1, nearY - y2));
 
     // Rumble strips: 1/6th of road width each side. Neon on asphalt;
     // dusty berms on dirt — the glow dies where the pavement does, which
@@ -475,9 +482,9 @@ export class RoadRenderer {
                           : (light ? c.rumbleA : c.rumbleB);
     const r1 = w1 / 6, r2 = w2 / 6;
     this.quad(g, rumble,
-      x1 - w1 - r1, y1, x1 - w1, y1, x2 - w2, y2, x2 - w2 - r2, y2);
+      x1 - w1 - r1, nearY, x1 - w1, nearY, x2 - w2, y2, x2 - w2 - r2, y2);
     this.quad(g, rumble,
-      x1 + w1 + r1, y1, x1 + w1, y1, x2 + w2, y2, x2 + w2 + r2, y2);
+      x1 + w1 + r1, nearY, x1 + w1, nearY, x2 + w2, y2, x2 + w2 + r2, y2);
 
     // Road surface. Dirt drops the asphalt grays for dusty umber.
     const dirt = seg.surface === 'dirt';
@@ -485,7 +492,7 @@ export class RoadRenderer {
       ? (light ? c.dirtLight : c.dirtDark)
       : (light ? c.roadLight : c.roadDark);
     this.quad(g, roadColor,
-      x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2);
+      x1 - w1, nearY, x1 + w1, nearY, x2 + w2, y2, x2 - w2, y2);
 
     // Ramp runway: projected paint that leads to, but never replaces, the
     // raised ramp sprite. Wide alternating gold slabs acquire the correct
@@ -498,16 +505,16 @@ export class RoadRenderer {
         ? c.launchA
         : c.launchB;
       this.quad(g, panel,
-        ax1 - aw1, y1, ax1 + aw1, y1,
+        ax1 - aw1, nearY, ax1 + aw1, nearY,
         ax2 + aw2, y2, ax2 - aw2, y2);
 
       const ew1 = Math.max(1, aw1 * 0.08);
       const ew2 = Math.max(1, aw2 * 0.08);
       this.quad(g, c.launchEdge,
-        ax1 - aw1, y1, ax1 - aw1 + ew1, y1,
+        ax1 - aw1, nearY, ax1 - aw1 + ew1, nearY,
         ax2 - aw2 + ew2, y2, ax2 - aw2, y2);
       this.quad(g, c.launchEdge,
-        ax1 + aw1 - ew1, y1, ax1 + aw1, y1,
+        ax1 + aw1 - ew1, nearY, ax1 + aw1, nearY,
         ax2 + aw2, y2, ax2 + aw2 - ew2, y2);
     }
 
@@ -519,9 +526,9 @@ export class RoadRenderer {
       const zo = seg.zipper.offset, zw = seg.zipper.w;
       const zx1 = x1 + zo * w1, zW1 = zw * w1;
       const zx2 = x2 + zo * w2, zW2 = zw * w2;
-      this.quad(g, zc, zx1 - zW1, y1, zx1 + zW1, y1, zx2 + zW2, y2, zx2 - zW2, y2);
+      this.quad(g, zc, zx1 - zW1, nearY, zx1 + zW1, nearY, zx2 + zW2, y2, zx2 - zW2, y2);
       // center glow stripe — the aiming line
-      this.quad(g, c.zipperGlow, zx1 - zW1 * 0.12, y1, zx1 + zW1 * 0.12, y1, zx2 + zW2 * 0.12, y2, zx2 - zW2 * 0.12, y2);
+      this.quad(g, c.zipperGlow, zx1 - zW1 * 0.12, nearY, zx1 + zW1 * 0.12, nearY, zx2 + zW2 * 0.12, y2, zx2 - zW2 * 0.12, y2);
     }
 
     // Lane lines, dashed by drawing only on light bands.
@@ -532,7 +539,7 @@ export class RoadRenderer {
       let lx1 = x1 - w1 + laneW1;
       let lx2 = x2 - w2 + laneW2;
       for (let lane = 1; lane < this.t.lanes; lane++) {
-        this.quad(g, c.lane, lx1 - l1 / 2, y1, lx1 + l1 / 2, y1, lx2 + l2 / 2, y2, lx2 - l2 / 2, y2);
+        this.quad(g, c.lane, lx1 - l1 / 2, nearY, lx1 + l1 / 2, nearY, lx2 + l2 / 2, y2, lx2 - l2 / 2, y2);
         lx1 += laneW1;
         lx2 += laneW2;
       }
@@ -541,13 +548,13 @@ export class RoadRenderer {
     // Start/finish line: checkered paint across the asphalt, drawn like the
     // zippers (part of the ROAD pass so its perspective is exact and it can
     // never float). On top of the lane lines, under the fog.
-    if (seg.startLine) this.drawStartLine(seg);
+    if (seg.startLine) this.drawStartLine(seg, nearY);
 
     // Fog: translucent wash of the horizon color over the whole band.
     // Cheap depth cue + hides the pop-in at drawDistance.
     if (fogAmount > 0.01) {
       g.fillStyle(c.fog, fogAmount);
-      g.fillRect(0, y2, this.w, y1 - y2);
+      g.fillRect(0, y2, this.w, Math.max(1, nearY - y2));
     }
   }
 

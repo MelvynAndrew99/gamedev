@@ -1,8 +1,10 @@
 {
-  description = "Phaser.js game development environment";
+  description = "Phaser 4 game development environment";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    # 26.05 is the final nixpkgs release supporting Intel Macs. Keeping this
+    # branch lets flake-utils' full default system set continue to evaluate.
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-26.05-darwin";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -15,7 +17,7 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             # Node.js runtime and package manager (npm included)
-            nodejs
+            nodejs_24
 
             # Build and development tools
             git
@@ -35,7 +37,7 @@
           ];
 
           shellHook = ''
-            echo "🎮 Phaser.js development environment loaded"
+            echo "🎮 Phaser 4 development environment loaded"
             echo "Node version: $(node --version)"
             echo "npm version: $(npm --version)"
           '';

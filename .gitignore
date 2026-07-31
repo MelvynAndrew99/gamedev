@@ -1,6 +1,6 @@
 # Node.js and npm
 node_modules/
-package-lock.json
+# package-lock.json is tracked so `npm ci` is reproducible in the Nix shell.
 yarn.lock
 pnpm-lock.yaml
 npm-debug.log*

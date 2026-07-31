@@ -275,7 +275,9 @@ export class GameScene extends Phaser.Scene {
     // car flashes red. The player should FEEL the difference between a
     // cone and a rock before the health bar finishes updating.
     this.cameras.main.shake(140, def.damage >= 20 ? 0.012 : 0.004);
-    this.carSprite.setTintFill(0xff4444);
+    this.carSprite
+      .setTint(0xff4444)
+      .setTintMode(Phaser.TintModes.FILL);
     this.time.delayedCall(120, () => this.carSprite.clearTint());
     if (wrecked) this.onWrecked();
   }

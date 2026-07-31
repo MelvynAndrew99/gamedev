@@ -40,27 +40,3 @@ export function dpadDown(pad, direction) {
   const [index, name] = map[direction];
   return buttonDown(pad, index, name);
 }
-
-// Phaser 3.90 stores pads by their browser hardware index, which makes the
-// array sparse when macOS assigns a DualSense index other than zero. Its
-// stopListeners() implementation does not guard empty slots and crashes on a
-// scene transition. Patch only that lifecycle method, leaving pad discovery
-// and updates owned by Phaser.
-export function installGamepadShutdownFix(GamepadPlugin) {
-  const proto = GamepadPlugin?.prototype;
-  if (!proto || proto.gamepadSparseArrayFixInstalled) return;
-
-  proto.stopListeners = function stopListenersSafely() {
-    this.target?.removeEventListener('gamepadconnected', this.onGamepadHandler);
-    this.target?.removeEventListener('gamepaddisconnected', this.onGamepadHandler);
-    this.sceneInputPlugin?.pluginEvents?.off('update', this.update);
-
-    for (const pad of this.gamepads ?? []) {
-      pad?.removeAllListeners();
-    }
-  };
-
-  Object.defineProperty(proto, 'gamepadSparseArrayFixInstalled', {
-    value: true,
-  });
-}
