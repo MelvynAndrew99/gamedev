@@ -18,6 +18,10 @@ export class RoadRenderer {
 
     this.sky = scene.add.graphics().setDepth(-2);
     this.g = scene.add.graphics().setDepth(-1);
+    // Start/finish gantries: world geometry that rises ABOVE the road, so it
+    // lives on its own layer over the asphalt (depth -1) and roadside props
+    // (depth 5), but under the car (depth 10) — the car drives beneath it.
+    this.gates = scene.add.graphics().setDepth(6);
     // Warp streaks: over the road and props, UNDER the car (depth 10). Radiate
     // from the vanishing point so they read as the world rushing past, not as
     // an overlay pasted on top.
@@ -106,8 +110,123 @@ export class RoadRenderer {
       maxY = seg.p2.screen.y;
     }
 
+    this.renderGates(model, base);
     this.renderSprites(model, base);
     this.drawSpeedLines();
+  }
+
+  // Start/finish gantry pass. Far -> near so a nearer gate would draw over a
+  // farther one (only one exists per lap line, but the ordering is free). Uses
+  // the road edges' already-projected screen coords, so the gate sits exactly
+  // on the road in perspective and shrinks with distance like everything else.
+  renderGates(model, base) {
+    const g = this.gates;
+    g.clear();
+    for (let n = this.t.drawDistance - 1; n >= 0; n--) {
+      const seg = model.segmentAt(base, n);
+      if (!seg.gate || seg.clipped) continue;
+      this.drawGate(seg.p1.screen);
+    }
+  }
+
+  // A checkered gantry arched over the road: two chunky pillars at the edges
+  // and a checkered banner beam between them — the universal start/finish
+  // signal. Built to the game's pixel-art language: hard dark outlines, the
+  // roadside posts' pole gray + cyan lamp accent, and a magenta/cyan neon glow.
+  // All sizes are proportional to the projected road half-width (`w`), so the
+  // structure scales naturally as the camera nears the line.
+  drawGate({ x, y, w }) {
+    if (w < 3) return; // too far to read — skip the sub-pixel clutter
+    const c = this.t.colors;
+    const OUT = 0x0a0a14;     // sprite outline color (K)
+    const PILLAR = 0x2a2a3a;  // roadside post pole color (P)
+    const WHITE = 0xffffff;
+    const g = this.gates;
+
+    const postW = Math.max(4, w * 0.15);   // chunky, not spindly
+    const postH = w * 2.3;                  // pillar height above the road
+    const beamH = Math.max(8, w * 0.62);    // banner thickness
+    const over = w * 0.16;                  // pillars stand just past the rumble
+    const lx = x - w - over;                // left pillar centerline
+    const rx = x + w + over;                // right pillar centerline
+    const postTop = y - postH;
+    const beamTop = postTop - beamH;
+    const beamL = lx - postW;
+    const beamR = rx + postW;
+    const beamW = beamR - beamL;
+    const ol = Math.max(1, Math.round(w * 0.03)); // outline thickness
+    const glow = Math.max(2, w * 0.10);
+
+    // Hard-outlined filled box — the pixel-art border every sprite has.
+    const box = (bx, by, bw, bh, fill) => {
+      g.fillStyle(OUT, 1);
+      g.fillRect(bx - ol, by - ol, bw + ol * 2, bh + ol * 2);
+      g.fillStyle(fill, 1);
+      g.fillRect(bx, by, bw, bh);
+    };
+
+    // Neon bloom behind everything (cyan haze, like the rumble glow).
+    g.fillStyle(c.rumbleB, 0.16);
+    g.fillRect(lx - postW / 2 - glow, postTop, postW + glow * 2, postH);
+    g.fillRect(rx - postW / 2 - glow, postTop, postW + glow * 2, postH);
+    g.fillRect(beamL - glow, beamTop - glow, beamW + glow * 2, beamH + glow * 2);
+
+    // Pillars: outlined pole, a cyan neon strip down the face (echoing the
+    // roadside posts' lamp), and a wider foot so they plant on the ground.
+    const pillar = (px) => {
+      box(px - postW / 2, postTop, postW, postH, PILLAR);
+      g.fillStyle(c.rumbleB, 1);
+      g.fillRect(px - postW * 0.16, postTop + ol, Math.max(1, postW * 0.32), postH - ol);
+      box(px - postW * 0.9, y - Math.max(4, w * 0.16), postW * 1.8, Math.max(4, w * 0.16), PILLAR);
+    };
+    pillar(lx);
+    pillar(rx);
+
+    // Banner: outlined frame, checkered cloth, magenta/cyan neon trim lines.
+    g.fillStyle(OUT, 1);
+    g.fillRect(beamL - ol, beamTop - ol, beamW + ol * 2, beamH + ol * 2);
+    const cols = 16;
+    const cell = beamW / cols;
+    const rows = Math.max(2, Math.round(beamH / cell));
+    const ch = beamH / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let col = 0; col < cols; col++) {
+        g.fillStyle((r + col) % 2 === 0 ? WHITE : OUT, 1);
+        g.fillRect(beamL + col * cell, beamTop + r * ch, Math.ceil(cell), Math.ceil(ch));
+      }
+    }
+    g.lineStyle(ol, c.rumbleA, 1); // magenta above
+    g.lineBetween(beamL - ol, beamTop - ol, beamR + ol, beamTop - ol);
+    g.lineStyle(ol, c.rumbleB, 1); // cyan below
+    g.lineBetween(beamL - ol, beamTop + beamH + ol, beamR + ol, beamTop + beamH + ol);
+  }
+
+  // The start/finish line painted across the asphalt: a checkerboard filling
+  // the gate segment's trapezoid, drawn cell-by-cell in perspective (each cell
+  // is a little quad between two depth rows and two width columns). Row parity
+  // keys off the absolute segment index so the pattern stays continuous across
+  // the few segments the line spans.
+  drawStartLine(seg) {
+    const g = this.g;
+    const OUT = 0x0a0a14;
+    const WHITE = 0xffffff;
+    const { x: x1, y: y1, w: w1 } = seg.p1.screen;
+    const { x: x2, y: y2, w: w2 } = seg.p2.screen;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const cols = 12;
+    const rows = 2;
+    for (let r = 0; r < rows; r++) {
+      const ta = r / rows, tb = (r + 1) / rows;
+      const aL = lerp(x1 - w1, x2 - w2, ta), aR = lerp(x1 + w1, x2 + w2, ta), aY = lerp(y1, y2, ta);
+      const bL = lerp(x1 - w1, x2 - w2, tb), bR = lerp(x1 + w1, x2 + w2, tb), bY = lerp(y1, y2, tb);
+      for (let col = 0; col < cols; col++) {
+        const t0 = col / cols, t1 = (col + 1) / cols;
+        const nx0 = lerp(aL, aR, t0), nx1 = lerp(aL, aR, t1);
+        const fx0 = lerp(bL, bR, t0), fx1 = lerp(bL, bR, t1);
+        const white = (seg.index + r + col) % 2 === 0;
+        this.quad(g, white ? WHITE : OUT, nx0, aY, nx1, aY, fx1, bY, fx0, bY);
+      }
+    }
   }
 
   // Warp streaks — the cheapest, loudest "sense of speed" there is. Rays fly
@@ -252,6 +371,11 @@ export class RoadRenderer {
         lx2 += laneW2;
       }
     }
+
+    // Start/finish line: checkered paint across the asphalt, drawn like the
+    // zippers (part of the ROAD pass so its perspective is exact and it can
+    // never float). On top of the lane lines, under the fog.
+    if (seg.startLine) this.drawStartLine(seg);
 
     // Fog: translucent wash of the horizon color over the whole band.
     // Cheap depth cue + hides the pop-in at drawDistance.
