@@ -198,6 +198,7 @@ class MusicEngine {
       const freq = bar.leadRootFreq * semitoneRatio(tone);
       if (bar.leadSynth === 'keys') this.playKeys(freq, time, dur * 3);
       else if (bar.leadSynth === 'saw') this.playSawLead(freq, time, dur * 1.4);
+      else if (bar.leadSynth === 'metal') this.playMetalLead(freq, time, dur * 1.65);
       else if (bar.leadSynth === 'guitar') this.playGuitar(freq, time, dur * 1.9);
       else this.playLead(freq, time, dur * 1.4);
     }
@@ -213,8 +214,35 @@ class MusicEngine {
       this.playArp((bar.arpRootFreq ?? bar.leadRootFreq) * semitoneRatio(tone), time, dur * 1.05);
     }
 
+    // Optional cyber-metal rhythm layer. Unlike the chord-tone-indexed lead,
+    // these patterns hold semitone offsets directly, which lets a track write
+    // pedal-tone chugs and octave jumps without distorting its pad voicing.
+    // The voice is an inharmonic FM/distortion synth rather than a sampled or
+    // modeled guitar, keeping the score futuristic even when its rhythm comes
+    // from metal.
+    const chugOffset = bar.chug?.[step];
+    if (chugOffset != null) {
+      const freq = (bar.chugRootFreq ?? bar.bassRootFreq * 2) * semitoneRatio(chugOffset);
+      this.playCyberChug(freq, time, dur * 0.9);
+    }
+
+    // A real power-chord voice remains available as a supporting accent. It
+    // is separate from bar.lead so a synthetic hook can stay in front while
+    // occasional dual-tracked hits add rock weight underneath it.
+    const guitarOffset = bar.guitar?.[step];
+    if (guitarOffset != null) {
+      const freq = (bar.guitarRootFreq ?? bar.leadRootFreq / 2) * semitoneRatio(guitarOffset);
+      this.playGuitar(freq, time, dur * 1.9);
+    }
+
     if (step === 0) {
-      this.playPad(bar.chordTones.map((t) => bar.padRootFreq * semitoneRatio(t)), time, dur * bar.padStepsHeld, bar.padSaw);
+      this.playPad(
+        bar.chordTones.map((t) => bar.padRootFreq * semitoneRatio(t)),
+        time,
+        dur * bar.padStepsHeld,
+        bar.padSaw,
+        bar.padCutoff,
+      );
     }
 
     if (bar.kick.includes(step)) {
@@ -223,6 +251,9 @@ class MusicEngine {
     }
     if (bar.snare.includes(step)) this.playSnare(time, bar.punkSnare);
     if (bar.hat.includes(step)) this.playHat(time, bar.openHat?.includes(step));
+    if (bar.industrial?.includes(step)) {
+      this.playIndustrialHit(time, bar.industrialAccent?.includes(step));
+    }
   }
 
   // ---- Instruments ------------------------------------------------------
@@ -423,6 +454,111 @@ class MusicEngine {
     });
   }
 
+  // Palm-muted rhythm translated into overtly synthetic sound design:
+  // two stereo "tracks" each carry a root/fifth saw pair, while one
+  // inharmonic FM oscillator roughens every carrier before a fast-closing
+  // filter and waveshaper. The result has a power-chord silhouette and the
+  // hard gaps of a metal chug, but its metallic sidebands belong to a neon
+  // machine rather than an amp in a garage.
+  playCyberChug(freq, time, dur) {
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.15, time + 0.002);
+    gain.gain.setValueAtTime(0.15, time + dur * 0.42);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+
+    const drive = ctx.createWaveShaper();
+    drive.curve = this.driveCurve();
+    drive.oversample = '2x';
+
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = 105;
+
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.setValueAtTime(3400, time);
+    tone.frequency.exponentialRampToValueAtTime(620, time + dur);
+    tone.Q.value = 1.8;
+
+    const pre = ctx.createGain();
+    pre.gain.value = 0.42;
+    pre.connect(drive).connect(highpass).connect(tone).connect(gain).connect(this.duckable);
+
+    const mod = ctx.createOscillator();
+    mod.type = 'sine';
+    mod.frequency.value = freq * 2.73;
+    const modDepth = ctx.createGain();
+    modDepth.gain.value = freq * 0.34;
+    mod.connect(modDepth);
+
+    [-11, 11].forEach((cents) => {
+      [0, 7].forEach((interval) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq * semitoneRatio(interval);
+        osc.detune.value = cents;
+        modDepth.connect(osc.frequency);
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = cents < 0 ? -0.52 : 0.52;
+        osc.connect(pan).connect(pre);
+        osc.start(time);
+        osc.stop(time + dur + 0.02);
+      });
+    });
+
+    mod.start(time);
+    mod.stop(time + dur + 0.02);
+  }
+
+  // Inharmonic square/saw lead used for chrome-edged hooks. The 2.41:1 FM
+  // ratio keeps the overtones deliberately non-acoustic, and a narrow
+  // bandpass gives it the cutting "metallic lead" register without adding
+  // more low-mid energy on top of bass and chugs.
+  playMetalLead(freq, time, dur) {
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.16, time + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = Math.min(freq * 3.4, 7200);
+    filter.Q.value = 1.3;
+    filter.connect(gain).connect(this.master);
+
+    const wet = ctx.createGain();
+    wet.gain.value = 0.08;
+    gain.connect(wet).connect(this.reverbBus);
+
+    const mod = ctx.createOscillator();
+    mod.type = 'sine';
+    mod.frequency.value = freq * 2.41;
+    const modDepth = ctx.createGain();
+    modDepth.gain.value = freq * 0.22;
+    mod.connect(modDepth);
+
+    ['square', 'sawtooth'].forEach((type, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.value = freq;
+      osc.detune.value = i === 0 ? -6 : 6;
+      modDepth.connect(osc.frequency);
+      const voiceGain = ctx.createGain();
+      voiceGain.gain.value = i === 0 ? 0.62 : 0.38;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = i === 0 ? -0.22 : 0.22;
+      osc.connect(voiceGain).connect(pan).connect(filter);
+      osc.start(time);
+      osc.stop(time + dur + 0.02);
+    });
+
+    mod.start(time);
+    mod.stop(time + dur + 0.02);
+  }
+
   // Gated 16th-note arp voice: a detuned saw pair with a hard gate — near-
   // instant attack, short decay, done well before the next 16th so the gaps
   // *are* the rhythm (that silence-between-notes is what "gated arp" means
@@ -503,7 +639,7 @@ class MusicEngine {
   // withSaw (opt-in via bar.padSaw) blends a quiet centered sawtooth per
   // tone under the triangle pairs — the triangle/saw-blend pad brighter
   // synthwave briefs call for, without changing any theme that doesn't ask.
-  playPad(freqs, time, dur, withSaw) {
+  playPad(freqs, time, dur, withSaw, cutoff = 1400) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
@@ -513,7 +649,7 @@ class MusicEngine {
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 1400;
+    filter.frequency.value = cutoff ?? 1400;
     filter.connect(gain);
     gain.connect(this.duckable);
 
@@ -627,6 +763,41 @@ class MusicEngine {
     noise.connect(filter).connect(gain).connect(this.master);
     noise.start(time);
     noise.stop(time + dur + 0.01);
+  }
+
+  // Short inharmonic impact for urban/industrial accents: a filtered noise
+  // strike supplies the attack while three unrelated partials ring for a
+  // few milliseconds. Kept centered and brief so it reads as trackside
+  // steel without smearing the double-kick rhythm.
+  playIndustrialHit(time, accent) {
+    const ctx = this.ctx;
+    const level = accent ? 0.28 : 0.18;
+    const dur = accent ? 0.11 : 0.075;
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = accent ? 3600 : 2900;
+    noiseFilter.Q.value = 1.7;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(level, time);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    noise.connect(noiseFilter).connect(noiseGain).connect(this.master);
+    noise.start(time);
+    noise.stop(time + dur + 0.01);
+
+    [487, 733, 1091].forEach((frequency, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = i === 1 ? 'square' : 'sine';
+      osc.frequency.value = frequency;
+      const partialGain = ctx.createGain();
+      partialGain.gain.setValueAtTime(level * (0.3 - i * 0.06), time);
+      partialGain.gain.exponentialRampToValueAtTime(0.001, time + dur * (0.7 + i * 0.15));
+      osc.connect(partialGain).connect(this.master);
+      osc.start(time);
+      osc.stop(time + dur + 0.01);
+    });
   }
 }
 
