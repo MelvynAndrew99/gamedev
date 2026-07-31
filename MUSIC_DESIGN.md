@@ -219,9 +219,32 @@ engine default:
 | `hatGain` | Closed/open hat gain | Preserve motion without high-frequency fatigue |
 | `sidechainDepth` | Duckable-bus minimum gain | Set pump intensity when `sidechain` is enabled |
 | `padCutoff` | Pad low-pass cutoff in Hz | Create dark-to-bright section motion |
+| `padGain` | Sustained pad gain | Place long chords behind the hook and rhythm without changing other themes |
 
 Unset gain fields preserve the engine's defaults, so expression can be added to
 one theme without remixing every other track.
+
+Open Circuit is a deliberate low-pad exception: its four-tone, detuned chord
+stack uses `padGain` values from `0.11` to `0.18`. The held chord supplies quiet
+harmony beneath the hook and percussion; do not restore the earlier `0.28`–
+`0.42` range without a three-loop playtest against cone impacts and instructions.
+
+Music and gameplay feedback use independent gain buses before the shared mix
+limiter. The current defaults are `musicVolume: 0.32` and `sfxVolume: 0.48`,
+which places objective feedback forward without rewriting the musical balance.
+Both values are live controls in the Projection Lab's collapsible Audio group;
+use them to audition a mix while driving before changing individual patches.
+
+## Repeated gameplay audio
+
+Frequently repeated contacts use variation pools, not one sample or patch with
+identical settings. Change at least pitch contour, filtering, timbre, level, or
+stereo position, and prevent immediate repetition. Cone destruction currently
+uses five synthetic composite-impact variants. Each one covers a broad range by
+layering a low body thump, a midrange plastic knock, and a short filtered high
+crack; variation changes the balance without turning successive contacts into
+pitched chirps. Milestones may add grounded harmony or a fanfare, but should not
+erase the physical-impact family shared by ordinary hits.
 
 ## Futuristic 16-bit palette
 

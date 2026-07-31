@@ -7,6 +7,11 @@
   "design": {
     "focus": "Chain high-speed lines through sharp bends, airborne lane changes, and short recoveries."
   },
+  "objectives": [
+    { "id": "finish", "type": "complete_laps", "value": 3, "label": "FINISH 3 LAPS", "points": 1000 },
+    { "id": "ramps", "type": "count_event", "event": "ramp_hit", "value": 5, "label": "HIT 5 RAMPS", "points": 1000 },
+    { "id": "zippers", "type": "count_event", "event": "zipper_hit", "value": 8, "label": "CROSS 8 SPEED LINES", "points": 1000 }
+  ],
   "patterns": {
     "startClear": 65,
     "finishClear": 50,

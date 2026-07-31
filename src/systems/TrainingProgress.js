@@ -1,0 +1,129 @@
+// TrainingProgress.js — medal evaluation and defensive local persistence.
+// A lesson records its best result once; replaying Gold cannot farm stars.
+// Those best-earned stars are the future unlock currency for optional gear,
+// mods, and cosmetics, while simple lesson completion can unlock the next
+// lesson without turning onboarding into a skill gate.
+
+const KEY = 'destruction-racer.training.v1';
+
+function load() {
+  try {
+    return JSON.parse(globalThis.localStorage.getItem(KEY)) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function save(progress) {
+  try {
+    globalThis.localStorage.setItem(KEY, JSON.stringify(progress));
+  } catch {
+    // Storage is a convenience, never a reason to interrupt a race result.
+  }
+}
+
+export function trophyFor(scoring, progress, metrics = {}) {
+  const damageHits = metrics.damageHits ?? 0;
+  const thresholds = [...(scoring?.thresholds ?? [])]
+    .filter((threshold) => Number.isFinite(threshold.minimum))
+    .sort((a, b) => b.minimum - a.minimum);
+  const earned = thresholds.find((threshold) =>
+    progress >= threshold.minimum &&
+    (
+      threshold.maximumDamageHits == null ||
+      damageHits <= threshold.maximumDamageHits
+    )
+  );
+  return earned
+    ? {
+      rank: earned.rank,
+      stars: earned.stars ?? 0,
+      minimum: earned.minimum,
+      ...(earned.maximumDamageHits == null
+        ? {}
+        : { maximumDamageHits: earned.maximumDamageHits }),
+    }
+    : null;
+}
+
+export function getTrainingResult(trackId, version = null) {
+  const result = load()[trackId] ?? null;
+  if (version != null && result?.version !== version) return null;
+  return result;
+}
+
+export function totalTrainingStars() {
+  return Object.values(load()).reduce(
+    (total, result) => total + (result.stars ?? 0),
+    0,
+  );
+}
+
+export function submitTrainingResult(track, progress, time, metrics = {}) {
+  const results = load();
+  const version = track.scoring?.version ?? 1;
+  const stored = results[track.id] ?? null;
+  const previous = stored?.version === version ? stored : null;
+  const damageHits = metrics.damageHits ?? 0;
+  const objectiveTargetCount = track.objects?.filter(
+    (object) => object?.objective === track.scoring?.objective,
+  ).length ?? 0;
+  const total = metrics.total ?? (
+    objectiveTargetCount || track.objects?.length || progress
+  );
+  const trophy = trophyFor(track.scoring, progress, { damageHits });
+  const stars = trophy?.stars ?? 0;
+  const newBest = previous == null ||
+    stars > (previous.stars ?? 0) ||
+    (
+      stars === (previous.stars ?? 0) &&
+      (
+        progress > previous.bestProgress ||
+        (
+          progress === previous.bestProgress &&
+          (
+            damageHits < (previous.damageHits ?? Infinity) ||
+            (
+              damageHits === (previous.damageHits ?? Infinity) &&
+              time < previous.bestTime
+            )
+          )
+        )
+      )
+    );
+
+  if (newBest) {
+    results[track.id] = {
+      version,
+      completed: true,
+      bestProgress: progress,
+      total,
+      bestTime: time,
+      damageHits,
+      trophy: trophy?.rank ?? null,
+      stars,
+    };
+    save(results);
+  } else if (!previous.completed) {
+    previous.completed = true;
+    save(results);
+  }
+
+  return {
+    trophy,
+    newBest,
+    best: results[track.id] ?? previous,
+  };
+}
+
+export function highestUnlockedTrainingIndex(tracks) {
+  let unlocked = 0;
+  for (let index = 0; index < tracks.length - 1; index++) {
+    const track = tracks[index];
+    const nextTrack = tracks[index + 1];
+    const result = getTrainingResult(track.id, track.scoring?.version ?? 1);
+    if (!result?.completed || nextTrack?.status === 'placeholder') break;
+    unlocked = index + 1;
+  }
+  return unlocked;
+}

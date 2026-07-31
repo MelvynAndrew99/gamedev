@@ -92,6 +92,7 @@ export const TUNING = {
 
   // ---- Audio -----------------------------------------------------------
   musicVolume: 0.32,   // master gain for the procedural score (0..1)
+  sfxVolume: 0.48,     // gameplay feedback bus; slightly forward of the score
 
   // ---- Colors (F-Zero sunset / Wipeout neon) -------------------------
   colors: {

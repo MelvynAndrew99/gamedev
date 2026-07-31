@@ -42,3 +42,21 @@ test('a finished race stops reporting events', () => {
   assert.equal(crossLine(race), 'finished');
   assert.equal(crossLine(race), null);
 });
+
+test('objective races continue past par until completion arms the next line', () => {
+  const race = new RaceState(model, 3, { finishOnLapLimit: false });
+  assert.equal(crossLine(race), 'start');
+  assert.equal(crossLine(race), 'lap');
+  assert.equal(crossLine(race), 'lap');
+  assert.equal(crossLine(race), 'lap');
+  assert.equal(race.lap, 4);
+  assert.equal(race.completedLaps, 3);
+  assert.equal(race.finished, false);
+
+  race.armFinish();
+  assert.equal(race.finished, false);
+  assert.equal(crossLine(race), 'finished');
+  assert.equal(race.finished, true);
+  assert.equal(race.completedLaps, 4);
+  assert.equal(crossLine(race), null);
+});

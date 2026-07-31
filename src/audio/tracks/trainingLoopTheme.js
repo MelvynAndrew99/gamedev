@@ -1,19 +1,16 @@
-// trainingLoopTheme.js — Training Loop's theme: a high-energy Outrun/
-// synthwave track following the full genre arc — atmospheric intro →
-// rhythmic build → main drive → breakdown → final push — around one
-// repeated melodic hook (not a scale-run arpeggio). Under the hook a quiet
-// gated 16th arp (the engine's opt-in bar.arp voice) supplies constant
-// forward momentum, and the pad runs the triangle/saw blend (bar.padSaw)
-// for a brighter, more cinematic wash. Earlier drafts lacked either a
-// hook, an intro, or — before the engine grew a second melodic voice —
-// the ability to have hook and arp at once. This one is meant to be
-// hummable *and* driving.
+// trainingLoopTheme.js — "Open Circuit": bright synthwave for a first-time
+// driver learning to scan, steer, and settle the car at speed. Its energy arc
+// is welcoming runway → confident groove → celebratory final lap, with enough
+// space around the hook that instruction and driving never feel frantic.
+// Synthetic saws, gated voltage-like pulses, and drum-machine transients carry
+// the identity; there are no acoustic-like voices.
 //
 // Key: A minor, i-VII-VI-VII (Am-G-F-G) — a "pendulum" progression (root,
 // down a step, down another, back up to the pivot chord) instead of the
 // climbing i-VI-III-VII an earlier draft used in the same key. 128 BPM,
-// 24 bars = 45 seconds (GAME_DESIGN.md requires >=30s). Every section is
-// four bars so section boundaries always land on the progression's Am.
+// 24 bars = 45 seconds (GAME_DESIGN.md requires >=30s). Form: 4-bar intro,
+// 4-bar build, 8-bar groove, 4-bar subtractive reset, 4-bar payoff/turnaround.
+// Every boundary lands on the progression's Am.
  
 const A2 = 110;
 const A3 = 220;
@@ -35,9 +32,12 @@ const SPARSE_BASS = [
   0, null, null, null, null, null, null, null,
   7, null, null, null, null, null, null, null,
 ];
-const DRIVE_BASS = [
-  0, null, 7, null, 0, null, 12, null,
-  0, null, 7, null, 0, null, 10, null,
+// The driving pocket deliberately does not copy the four-on-the-floor kick:
+// anticipations on 3/5/13 and a final-step pickup make bass + drums groove on
+// their own, while the root on 0 and octave on 8 keep a novice-friendly pulse.
+const POCKET_BASS = [
+  0, null, null, 7, null, 0, null, null,
+  12, null, 7, null, null, 10, null, 12,
 ];
  
 // The hook: a spaced-out root-5th-3rd skip mostly on the quarter, with
@@ -45,10 +45,10 @@ const DRIVE_BASS = [
 // the harmony moves under it. (Distinct from Neon Gulch's double-hit-and-
 // octave-jump future-funk riff, per GAME_DESIGN.md's no-shared-songwriting
 // rule.)
-const HOOK_A = [0, null, 2, null, 1, null, 0, null, 2, null, 1, null, 0, null, null, null];
+const HOOK_A = [0, null, null, 2, null, 1, null, null, 0, null, 2, null, null, 1, null, null];
 // Same shape with a passing run at the end, so the loop's second pass isn't
 // a note-for-note repeat of the first.
-const HOOK_B = [0, null, 2, null, 1, null, 0, null, 2, null, 3, 2, 1, null, null, null];
+const HOOK_B = [0, null, null, 2, null, 1, null, null, 0, null, 2, null, 3, 2, 1, null];
 // A two-note preview of the hook's opening, used in the intro's last bar
 // and echoed on keys through the breakdown, so both arrivals of the main
 // drive land as payoffs instead of cold starts.
@@ -58,11 +58,10 @@ const HOOK_TEASE = [0, null, null, null, null, null, null, null, 2, null, null, 
 // so it reads as a fill, not the main event the hook already owns.
 const ARP_FILL = [0, 1, 2, 3, 2, 1, 0, 1, 0, 1, 2, 3, 2, 1, 0, 1];
  
-// Background gated arp (bar.arp voice, an octave below the hook):
-// root-5th-octave-5th rolling every beat — constant 16th motion that gives
-// the drive sections their forward pull without competing with the hook's
-// register or rhythm. Distinct shape from ARP_FILL so fills still pop.
-const ARP_BG = [0, 2, 3, 2, 0, 2, 3, 2, 0, 2, 3, 2, 0, 2, 3, 2];
+// The gated pulse is an earned lift, not permanent wallpaper. Eighth-note
+// holes keep it underneath the hook; it appears late in the build, in the
+// varied groove, and in the payoff, then vanishes completely in the reset.
+const ARP_LIFT = [0, null, 2, null, 3, null, 2, null, 0, null, 2, null, 3, null, 2, null];
  
 const KICK_HALF = [0, 8];
 const KICK_FULL = [0, 4, 8, 12];
@@ -84,16 +83,23 @@ function bar(index, section) {
     driveBass: section.driveBass,
     bassFM: section.bassFM,
     sidechain: section.sidechain,
+    sidechainDepth: section.sidechainDepth,
+    bassGain: section.bassGain,
     chordTones: chord.chordTones,
     lead: section.lead,
     leadSynth: section.leadSynth,
     arp: section.arp,
     padStepsHeld: 16,
-    padSaw: true, // triangle/saw-blend pad for the whole theme
+    padSaw: section.padSaw,
+    padCutoff: section.padCutoff,
+    padGain: section.padGain,
     kick: section.kick,
     snare: section.snare,
     hat: section.hat,
     openHat: section.openHat,
+    kickGain: section.kickGain,
+    snareGain: section.snareGain,
+    hatGain: section.hatGain,
   };
 }
  
@@ -101,63 +107,76 @@ function bar(index, section) {
 // yet — the "notable intro" before the song commits to its groove.
 const INTRO = {
   bass: SPARSE_BASS, driveBass: false, lead: SILENT, leadSynth: 'keys',
+  padSaw: false, padCutoff: 650, padGain: 0.18, bassGain: 0.72,
   kick: KICK_HALF, snare: [], hat: [8], openHat: [],
+  kickGain: 0.72, snareGain: 0.7, hatGain: 0.48,
 };
 const INTRO_TEASE = { ...INTRO, lead: HOOK_TEASE };
  
-// Rhythmic build: the four-on-the-floor kick and the background arp arrive
-// together over a still-sparse top end, then BUILD_B adds backbeat snare,
-// 16th hats, and the FM grit — each pass of the section audibly escalating
-// toward the FILL that launches the main drive.
+// Rhythmic build: four-on-the-floor arrives over a still-sparse top end;
+// BUILD_B then adds the gated lift, backbeat, FM grit, and brighter pad.
 const BUILD_A = {
-  bass: DRIVE_BASS, driveBass: true, sidechain: true,
-  lead: SILENT, leadSynth: 'saw', arp: ARP_BG,
+  bass: POCKET_BASS, driveBass: true, sidechain: true, sidechainDepth: 0.68,
+  lead: SILENT, leadSynth: 'saw',
+  padSaw: true, padCutoff: 1050, padGain: 0.15, bassGain: 0.82,
   kick: KICK_FULL, snare: [], hat: HAT_8TH, openHat: [],
+  kickGain: 0.78, snareGain: 0.72, hatGain: 0.54,
 };
 const BUILD_B = {
-  bass: DRIVE_BASS, driveBass: true, bassFM: true, sidechain: true,
-  lead: SILENT, leadSynth: 'saw', arp: ARP_BG,
-  kick: KICK_FULL, snare: SNARE_BACKBEAT, hat: HAT_16TH, openHat: OPEN_HAT,
+  bass: POCKET_BASS, driveBass: true, bassFM: true,
+  sidechain: true, sidechainDepth: 0.62,
+  lead: SILENT, leadSynth: 'saw', arp: ARP_LIFT,
+  padSaw: true, padCutoff: 1400, padGain: 0.14, bassGain: 0.86,
+  kick: KICK_FULL, snare: SNARE_BACKBEAT, hat: HAT_8TH, openHat: OPEN_HAT,
+  kickGain: 0.82, snareGain: 0.76, hatGain: 0.56,
 };
  
-// Main drive: four-on-the-floor kick, pumping FM/driven bass with the
-// sidechain duck, the hook on the saw lead, the gated arp running
-// underneath — the danceable core of the track.
-function main(lead) {
+// Main drive: the independent bass pocket, controlled eighth-note hats, and
+// saw hook are the danceable core. The gated lift waits until the varied pass.
+function main(lead, withLift = false) {
   return {
-    bass: DRIVE_BASS, driveBass: true, bassFM: true, sidechain: true,
-    lead, leadSynth: 'saw', arp: ARP_BG,
-    kick: KICK_FULL, snare: SNARE_BACKBEAT, hat: HAT_16TH, openHat: OPEN_HAT,
+    bass: POCKET_BASS, driveBass: true, bassFM: true,
+    sidechain: true, sidechainDepth: 0.62,
+    lead, leadSynth: 'saw', arp: withLift ? ARP_LIFT : undefined,
+    padSaw: true, padCutoff: withLift ? 1800 : 1600,
+    padGain: withLift ? 0.11 : 0.12, bassGain: 0.88,
+    kick: KICK_FULL, snare: SNARE_BACKBEAT, hat: HAT_8TH, openHat: OPEN_HAT,
+    kickGain: 0.84, snareGain: 0.78, hatGain: 0.58,
   };
 }
  
-// One-bar transition: a snare roll and a fast arp burst, every hat forced
-// open for a riser-like shimmer — the "fill between sections." No bar.arp
-// here: two simultaneous 16th arps would smear into mud.
+// One-bar transition: a snare roll and fast lead burst over 16th hats. Only
+// selected hats open, and bar.arp stays absent so the fill remains legible.
 const FILL = {
-  bass: DRIVE_BASS, driveBass: true, bassFM: true, sidechain: true,
+  bass: POCKET_BASS, driveBass: true, bassFM: true,
+  sidechain: true, sidechainDepth: 0.58,
   lead: ARP_FILL, leadSynth: 'saw',
-  kick: KICK_FULL, snare: SNARE_ROLL, hat: HAT_16TH, openHat: HAT_16TH,
+  padSaw: true, padCutoff: 1950, padGain: 0.12, bassGain: 0.88,
+  kick: KICK_FULL, snare: SNARE_ROLL, hat: HAT_16TH, openHat: OPEN_HAT_FULL,
+  kickGain: 0.86, snareGain: 0.84, hatGain: 0.58,
 };
  
 // Breakdown: drums thin back to the intro's half-time kick, the driven bass
-// drops to the sparse clean one, and the hook shrinks to its keys tease —
-// but the gated arp keeps running, so the momentum never fully stops (the
-// road doesn't slow down just because the song breathes).
+// drops to the sparse clean one, the saw pad becomes a dark triangle, and the
+// hook shrinks to its keys tease. The gated pulse disappears completely.
 const BREAK = {
   bass: SPARSE_BASS, driveBass: false, lead: HOOK_TEASE, leadSynth: 'keys',
-  arp: ARP_BG,
+  padSaw: false, padCutoff: 620, padGain: 0.16, bassGain: 0.7,
   kick: KICK_HALF, snare: [], hat: [4, 12], openHat: [],
+  kickGain: 0.68, snareGain: 0.68, hatGain: 0.44,
 };
  
-// Final push: same groove as the main drive but with every off-beat hat
-// open; the last bar adds the snare roll as the turnaround into the intro.
+// Final push: 16th hats, stronger pump, brightest pad, and the gated lift
+// create the earned celebration; the last snare roll turns into the intro.
 function final(lead, isLast) {
   return {
-    bass: DRIVE_BASS, driveBass: true, bassFM: true, sidechain: true,
-    lead, leadSynth: 'saw', arp: ARP_BG,
+    bass: POCKET_BASS, driveBass: true, bassFM: true,
+    sidechain: true, sidechainDepth: 0.54,
+    lead, leadSynth: 'saw', arp: ARP_LIFT,
+    padSaw: true, padCutoff: 2200, padGain: 0.11, bassGain: 0.92,
     kick: KICK_FULL, snare: isLast ? SNARE_ROLL : SNARE_BACKBEAT,
     hat: HAT_16TH, openHat: OPEN_HAT_FULL,
+    kickGain: 0.88, snareGain: 0.82, hatGain: 0.6,
   };
 }
  
@@ -165,7 +184,7 @@ const SECTIONS = [
   INTRO, INTRO, INTRO, INTRO_TEASE,                                     // atmospheric intro
   BUILD_A, BUILD_A, BUILD_B, FILL,                                      // rhythmic build
   main(HOOK_A), main(HOOK_A), main(HOOK_A), main(HOOK_A),               // main drive, first pass
-  main(HOOK_B), main(HOOK_B), main(HOOK_B), main(HOOK_B),               // main drive, varied pass
+  main(HOOK_B, true), main(HOOK_B, true), main(HOOK_B, true), main(HOOK_B, true), // varied lift
   BREAK, BREAK, BREAK, FILL,                                            // breakdown + relaunch
   final(HOOK_B, false), final(HOOK_B, false), final(HOOK_B, false), final(HOOK_B, true), // final push
 ];

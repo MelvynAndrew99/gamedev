@@ -1,0 +1,64 @@
+{
+  "id": "training-top-speed",
+  "name": "REDLINE",
+  "status": "placeholder",
+  "seed": 1103,
+  "laps": 2,
+  "finish": "laps",
+  "music": "training-loop",
+  "environment": "training-loop",
+  "intro": "Build to top speed and learn how the car feels at the redline.",
+  "design": {
+    "focus": "Teach acceleration, speed retention, and the visual and audio language of maximum velocity.",
+    "placeholderNotes": "Choose a readable top-speed hold duration and trophy thresholds before enabling this track. Do not add hazards until the speed lesson works on clean road."
+  },
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": false
+  },
+  "objectives": [
+    {
+      "id": "top-speed",
+      "type": "count_event",
+      "event": "top_speed",
+      "value": 1,
+      "label": "REACH TOP SPEED",
+      "hudLabel": "TOP SPEED",
+      "points": 1000
+    },
+    {
+      "id": "finish",
+      "type": "complete_laps",
+      "value": 2,
+      "label": "FINISH 2 LAPS",
+      "hudLabel": "FINISH",
+      "points": 1000
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 1,
+    "objective": "top-speed",
+    "thresholds": [
+      { "rank": "gold", "minimum": 1, "stars": 3 }
+    ]
+  },
+  "objects": [],
+  "pieces": [
+    ["straight", 40],
+    ["curve", 32, -1],
+    ["straight", 22],
+    ["curve", 36, 1],
+    ["straight", 28],
+    ["curve", 36, -2],
+    ["straight", 24],
+    ["curve", 40, 2],
+    ["straight", 28],
+    ["chicane", 18, 2],
+    ["curve", 30, -3],
+    ["straight", 40]
+  ],
+  "obstacles": 0,
+  "par": 2
+}

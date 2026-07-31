@@ -12,7 +12,7 @@ route-and-objective play of SSX Tricky and Tony Hawk:
 - **Speed creates risk.** Curves, slopes, dirt, and narrow lines become harder
   when the player protects momentum.
 - **The road offers choices.** Safe lines preserve a run; committed lines earn
-  speed, airtime, fame, or objective progress.
+  speed, airtime, score, or objective progress.
 - **Mistakes cost a beat, not the whole song.** Hazards punish the immediate
   line and combo, then return control quickly.
 - **Tracks become learnable.** Campaign geometry and object placement are
@@ -22,18 +22,26 @@ Campaign and Endless Mode are two implementations of the same game language.
 A rule, object, asset, physics change, or readability improvement is not
 finished until its effect on both modes has been considered.
 
+[training_levels.md](./training_levels.md) is the source of truth for ordering,
+authoring, scoring, and validating Training mode lessons. Training is a focused
+introduction to this game language and may declare narrow, documented exceptions
+before Story mode recombines the learned skills.
+
 ## Object language
 
-- **Cones are danger indicators.** A line of cones says that rocks are closing
-  that lane. Cones never announce ramps, nitro pickups, or ground zippers.
-  Cones are harmless and grant no reward: they communicate where to move away
-  from without becoming another collision tax.
+- **Cones are danger indicators in Story and Endless.** A line of ordinary
+  cones says that rocks are closing that lane. Cones never announce ramps,
+  nitro pickups, or ground zippers. They are harmless and grant no economy
+  reward. Objective-linked cones are the documented Training mode exception:
+  the HUD explicitly asks the player to hit them, and contact grants persistent
+  objective progress, points, and impact feedback. See
+  [training_levels.md](./training_levels.md).
 - **Rocks are momentum hazards.** They punish an unread or poorly executed
   line. They should not create unavoidable full-road walls.
 - **Ramps are route offers.** A projected yellow/cyan runway may identify the
   approach, but the ramp itself remains a distinct raised object with its
   existing jump physics. A ramp should lead to a benefit: clearing a hazard,
-  reaching a speed line, chaining fame, or satisfying an objective.
+  reaching a speed line, chaining score, or satisfying an objective.
 - **Zippers are execution rewards.** Their line should be visible early enough
   to choose, then demand steering precision at speed. Green zipper paint and
   yellow ramp-approach paint never overlap in the same lane; combo lines
@@ -58,17 +66,32 @@ unless the section is explicitly a late-game combo line.
 
 ## Campaign track roles
 
-### Training Loop
+### Training mode and Proving Ground
 
-Purpose: teach the visual language and establish trust.
+Training mode teaches one verb at a time on the shared Training Loop geometry;
+the detailed curriculum and level contract live in
+[training_levels.md](./training_levels.md). Cone Control is the first lesson:
+cone-only, asphalt-only, and a fixed two-lap scored attempt. Its cone layout uses
+straight runs, gentle tapers, a staggered two-route work zone, one airbrake
+transfer, and a slalom. Missed cones persist for lap two and lower the trophy if
+they remain at finish.
 
-- Lowest event density and generous recovery space.
-- Authored event rhythm: isolated rocks, isolated ramp, open-lane gate, then
-  ramp-over-rocks. This teaches each read before combining them.
-- Introduce isolated warnings before mixing payloads.
-- Favor center-lane reads and obvious safe alternatives.
-- Objectives should teach one action at a time, such as hit one ramp or cross
-  two zippers in a lap.
+Hazard Weave is Training Level 2. Cone breadcrumbs thread six open lanes between
+rock pairs. Rock contact adds one of four persistent camera-glass crack stages
+but never reduces speed, hull, money, or access to completion. Cone count and
+crack count combine only at the finish to determine the trophy.
+
+Redline and Air School are Training Levels 3 and 4 on that same geometry.
+Redline introduces reaching and retaining top speed; Air School introduces
+ramps and measured airtime. Both are currently staged data placeholders and
+must remain locked until their events, trophy balance, feedback, and result
+language are complete. Training result screens explicitly offer Retry and Next
+Track instead of treating completion as an automatic return to the title.
+
+Proving Ground is the first Story race. It uses the same geometry with campaign
+warnings, hazards, route offers, rewards, normal three-lap finish rules, and the
+Training Loop music/environment identity. Its job is to validate learned skills,
+not introduce them simultaneously for the first time.
 
 ### Neon Gulch
 
@@ -199,6 +222,15 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
 - `tools/gen-car.test.js` protects the rear-view proportions, visible glass,
   frame dimensions, and left/right symmetry. Update the generator and its
   expectations together when deliberately changing the vehicle.
+
+### Projection Lab
+
+- Track, Audio, Physics, Handling, Camera, Graphics, and Status controls live in
+  separate collapsible groups so the active tuning surface can remain visible.
+- Music and SFX sliders update their independent audio buses during a race.
+  Their values persist through scene and track changes for the current session.
+- Keep control defaults synchronized with `TUNING`; a lab value must not silently
+  change production behavior just because a race scene initializes its hooks.
 
 ### Roadside speed pylons
 
@@ -338,21 +370,41 @@ where the rule is introduced.
 
 ## Objective and persistence direction
 
-Track objectives should be data, not scene-specific code. A future track entry
-can define stable objective IDs and typed rules such as:
+Track objectives are data, not scene-specific code. Training currently ships a
+`hit_all` objective linked to authored objects by stable IDs. Story courses use
+`complete_laps` and `count_event` goals for ramps and speed lines. Each objective
+has a point value; normal objectives contribute it only when complete. Collection
+lessons may use `pointsPerUnit` when partial progress is itself the scored result.
 
 ```json
 {
   "objectives": [
-    { "id": "speed-demon", "type": "reach_speed", "value": 1.2 },
-    { "id": "frequent-flyer", "type": "hit_ramps", "value": 3 }
+    { "id": "finish", "type": "complete_laps", "value": 3, "points": 1000 },
+    {
+      "id": "frequent-flyer",
+      "type": "count_event",
+      "event": "ramp_hit",
+      "value": 3,
+      "points": 750
+    }
   ]
 }
 ```
 
-Persist completion by track ID and objective ID. Runtime counters should listen
-to gameplay events (`zip`, `ramp`, `pickup`, `hazard_hit`, speed samples, lap,
-finish) so new objective types do not become hard-coded track exceptions.
+Persist completion by track ID and objective ID. Training stores completion and
+the best trophy separately: completion unlocks the next lesson, while the best
+Bronze/Silver/Gold result contributes one/two/three non-farmable trophy stars to
+future optional gear, mods, cosmetics, or tracks. Runtime counters listen to
+gameplay events (`object_hit`, `zipper_hit`, `ramp_hit`, and `lap_complete`);
+future pickup, hazard, speed, and finish goals should extend that event language
+rather than becoming track-ID branches.
+
+Objectives animate into an acknowledged pre-race briefing. Movement and race
+time remain paused until A or Enter dismisses it; the same goals then settle into
+the bottom-left HUD panel. That panel is the global race-purpose display and
+replaces the old Fame readout. It shows each goal, live progress, completion
+checkmarks, and objective points. Time-based race cash remains separate from
+objective score until the economy has enough playtest evidence to price goals.
 
 ## Playtest questions
 

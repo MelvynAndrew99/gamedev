@@ -17,14 +17,32 @@ function semitoneRatio(semitones) {
   return Math.pow(2, semitones / 12);
 }
 
+export function nonRepeatingIndex(previous, count, random = Math.random) {
+  if (count <= 1) return 0;
+  const rolled = Math.min(count - 1, Math.floor(random() * count));
+  return rolled === previous ? (rolled + 1) % count : rolled;
+}
+
+const CONE_HIT_VARIATIONS = [
+  { body: 90, noiseFreq: 920, q: 0.9, tone: 220, wave: 'triangle', sweep: 0.82, pan: -0.16, level: 0.96 },
+  { body: 104, noiseFreq: 1080, q: 1.2, tone: 246.94, wave: 'square', sweep: 0.9, pan: 0.12, level: 1 },
+  { body: 118, noiseFreq: 1260, q: 1.45, tone: 261.63, wave: 'triangle', sweep: 1.04, pan: -0.06, level: 0.9 },
+  { body: 132, noiseFreq: 1420, q: 1.1, tone: 293.66, wave: 'sine', sweep: 0.86, pan: 0.18, level: 0.94 },
+  { body: 98, noiseFreq: 1180, q: 1.35, tone: 329.63, wave: 'square', sweep: 0.96, pan: 0.02, level: 0.88 },
+];
+
 class MusicEngine {
   constructor() {
     this.ctx = null;
-    this.master = null;
+    this.master = null; // music bus (kept as master for existing voice routing)
+    this.sfxBus = null;
+    this.mixBus = null;
     this.noiseBuffer = null;
     this.timer = null;
     this.track = null;
     this.volume = 0.32;
+    this.sfxVolume = 0.48;
+    this.lastConeVariation = -1;
   }
 
   ensureContext() {
@@ -33,6 +51,10 @@ class MusicEngine {
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
     this.master.gain.value = this.volume;
+    this.sfxBus = this.ctx.createGain();
+    this.sfxBus.gain.value = this.sfxVolume;
+    this.mixBus = this.ctx.createGain();
+    this.mixBus.gain.value = 1;
 
     // Sidechain-style pump bus. Sustained/harmonic voices (bass, keys, pad)
     // connect here instead of straight to master; kick/snare/hat and the
@@ -84,7 +106,12 @@ class MusicEngine {
     limiter.attack.value = 0.002;
     limiter.release.value = 0.1;
 
-    this.master.connect(saturate).connect(subCut).connect(limiter).connect(this.ctx.destination);
+    // Music and gameplay feedback share the safety/color chain but have
+    // independent trims. This keeps repeated targets audible without making
+    // the catchy score quieter or pushing the final mix past the limiter.
+    this.master.connect(this.mixBus);
+    this.sfxBus.connect(this.mixBus);
+    this.mixBus.connect(saturate).connect(subCut).connect(limiter).connect(this.ctx.destination);
     this.noiseBuffer = this.makeNoiseBuffer();
   }
 
@@ -140,6 +167,11 @@ class MusicEngine {
   setVolume(v) {
     this.volume = v;
     if (this.master) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+  }
+
+  setSfxVolume(v) {
+    this.sfxVolume = v;
+    if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
 
   start(track) {
@@ -253,6 +285,7 @@ class MusicEngine {
         dur * bar.padStepsHeld,
         bar.padSaw,
         bar.padCutoff,
+        bar.padGain,
       );
     }
 
@@ -650,12 +683,13 @@ class MusicEngine {
   // withSaw (opt-in via bar.padSaw) blends a quiet centered sawtooth per
   // tone under the triangle pairs — the triangle/saw-blend pad brighter
   // synthwave briefs call for, without changing any theme that doesn't ask.
-  playPad(freqs, time, dur, withSaw, cutoff = 1400) {
+  playPad(freqs, time, dur, withSaw, cutoff = 1400, level = 1) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.1, time + 0.25); // slow pad swell
-    gain.gain.setValueAtTime(0.1, time + Math.max(0.26, dur - 0.3));
+    const peak = 0.1 * (level ?? 1);
+    gain.gain.linearRampToValueAtTime(peak, time + 0.25); // slow pad swell
+    gain.gain.setValueAtTime(peak, time + Math.max(0.26, dur - 0.3));
     gain.gain.linearRampToValueAtTime(0, time + dur);
 
     const filter = ctx.createBiquadFilter();
@@ -707,6 +741,132 @@ class MusicEngine {
         saw.start(time);
         saw.stop(time + dur + 0.05);
       }
+    });
+  }
+
+  // Each cone contact is one composite impact: low body thump, mid plastic
+  // knock, and a restrained high crack. Like a footstep/gunshot pool, five
+  // layer balances rotate without immediate repeats. Milestones add harmony.
+  playConeHit({ milestone = false, complete = false } = {}) {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const variationIndex = nonRepeatingIndex(
+      this.lastConeVariation,
+      CONE_HIT_VARIATIONS.length,
+    );
+    this.lastConeVariation = variationIndex;
+    const variation = CONE_HIT_VARIATIONS[variationIndex];
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = complete ? 1500 : variation.noiseFreq;
+    filter.Q.value = variation.q;
+    const impact = ctx.createGain();
+    impact.gain.setValueAtTime(
+      (complete ? 0.105 : milestone ? 0.085 : 0.065) * variation.level,
+      time,
+    );
+    impact.gain.exponentialRampToValueAtTime(0.001, time + 0.055);
+    const impactPan = ctx.createStereoPanner();
+    impactPan.pan.value = variation.pan;
+    noise.connect(filter).connect(impact).connect(impactPan).connect(this.sfxBus);
+    noise.start(time);
+    noise.stop(time + 0.065);
+
+    const body = ctx.createOscillator();
+    body.type = 'sine';
+    body.frequency.setValueAtTime(variation.body * 1.55, time);
+    body.frequency.exponentialRampToValueAtTime(variation.body, time + 0.085);
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(
+      (complete ? 0.105 : milestone ? 0.09 : 0.075) * variation.level,
+      time,
+    );
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+    body.connect(bodyGain).connect(this.sfxBus);
+    body.start(time);
+    body.stop(time + 0.11);
+
+    const notes = complete
+      ? [220, 261.63, 329.63, 440] // A3-C4-E4-A4: broad, grounded fanfare
+      : milestone
+        ? [variation.tone, variation.tone * 1.5]
+        : [variation.tone];
+    notes.forEach((frequency, index) => {
+      const start = time + index * 0.045;
+      const osc = ctx.createOscillator();
+      osc.type = index === 0 && !complete ? variation.wave : 'sine';
+      osc.frequency.setValueAtTime(frequency, start);
+      osc.frequency.exponentialRampToValueAtTime(
+        frequency * (complete ? 1.08 : variation.sweep),
+        start + 0.07,
+      );
+      const chirp = ctx.createGain();
+      chirp.gain.setValueAtTime(0.0001, start);
+      chirp.gain.exponentialRampToValueAtTime(complete ? 0.07 : 0.05, start + 0.006);
+      chirp.gain.exponentialRampToValueAtTime(0.001, start + 0.11);
+      const chirpPan = ctx.createStereoPanner();
+      chirpPan.pan.value = variation.pan * 0.65;
+      osc.connect(chirp).connect(chirpPan).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.12);
+    });
+  }
+
+  playGlassCrack(stage = 1) {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const high = ctx.createBiquadFilter();
+    high.type = 'highpass';
+    high.frequency.value = 2600 + stage * 280;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.08 + stage * 0.008, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    noise.connect(high).connect(gain).connect(this.sfxBus);
+    noise.start(time);
+    noise.stop(time + 0.13);
+
+    for (let i = 0; i < Math.min(4, stage + 1); i++) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      const start = time + i * 0.012;
+      const freq = 1500 + stage * 170 + i * 420;
+      osc.frequency.setValueAtTime(freq, start);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.68, start + 0.08);
+      const shard = ctx.createGain();
+      shard.gain.setValueAtTime(0.035, start);
+      shard.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
+      osc.connect(shard).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.1);
+    }
+  }
+
+  playTrainingComplete({ perfect = false, stars = 0 } = {}) {
+    if (!this.ctx || !this.sfxBus) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const notes = perfect
+      ? [440, 523.25, 659.25, 880, 1046.5]
+      : [440, 523.25, 659.25].slice(0, Math.max(2, stars + 1));
+    notes.forEach((frequency, index) => {
+      const start = time + index * 0.085;
+      const osc = ctx.createOscillator();
+      osc.type = index % 2 === 0 ? 'triangle' : 'sine';
+      osc.frequency.value = frequency;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(perfect ? 0.085 : 0.065, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.32);
+      osc.connect(gain).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.34);
     });
   }
 

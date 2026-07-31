@@ -1,0 +1,44 @@
+{
+  "id": "training-validation",
+  "name": "PROVING GROUND",
+  "environment": "training-loop",
+  "music": "training-loop",
+  "seed": 1101,
+  "laps": 3,
+  "intro": "Cones warn of rocks. Gold lanes offer ramps. Choose the fast line.",
+  "design": {
+    "focus": "Validate the steering, warning, route, and recovery skills introduced in training."
+  },
+  "objectives": [
+    { "id": "finish", "type": "complete_laps", "value": 3, "label": "FINISH 3 LAPS", "points": 1000 },
+    { "id": "ramps", "type": "count_event", "event": "ramp_hit", "value": 3, "label": "HIT 3 RAMPS", "points": 750 },
+    { "id": "zippers", "type": "count_event", "event": "zipper_hit", "value": 3, "label": "CROSS 3 SPEED LINES", "points": 500 }
+  ],
+  "patterns": {
+    "startClear": 90,
+    "finishClear": 60,
+    "placements": [
+      { "at": 95, "kind": "rocks" },
+      { "at": 350, "kind": "ramp" },
+      { "at": 615, "kind": "gate" },
+      { "at": 870, "kind": "combo" },
+      { "at": 1030, "kind": "rampRocks" }
+    ]
+  },
+  "pieces": [
+    ["straight", 40],
+    ["curve", 32, -1],
+    ["straight", 22],
+    ["curve", 36, 1],
+    ["straight", 28],
+    ["curve", 36, -2],
+    ["straight", 24],
+    ["curve", 40, 2],
+    ["straight", 28],
+    ["chicane", 18, 2],
+    ["curve", 30, -3],
+    ["straight", 40]
+  ],
+  "obstacles": 0.03,
+  "par": 150
+}

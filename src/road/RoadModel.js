@@ -117,15 +117,31 @@ export class RoadModel {
       this.segments[k].startLine = true; // checkered paint across the asphalt
     }
 
-    this.decorate(data.obstacles ?? 0.05, 0, 30, data.patterns);
+    this.decorate(
+      data.obstacles ?? 0.05,
+      0,
+      30,
+      data.patterns,
+      data.decoration,
+    );
+    this.placeAuthoredObjects(data.objects);
   }
 
   // Roadside posts (speed perception — the eye reads velocity from things
   // streaming past the edges) and authored hazard patterns (patterns.js).
-  decorate(obstacleDensity, from = 0, endMargin = 30, patternRules = {}) {
+  decorate(
+    obstacleDensity,
+    from = 0,
+    endMargin = 30,
+    patternRules = {},
+    decoration = {},
+  ) {
     for (let i = from; i < this.segments.length; i++) {
       const seg = this.segments[i];
-      if (this.segments[i].index % 10 === 0) { // absolute index: cadence survives trimming
+      if (
+        decoration.roadsidePosts !== false &&
+        this.segments[i].index % 10 === 0
+      ) { // absolute index: cadence survives trimming
         seg.sprites.push({
           key: ROADSIDE.post.key, view: ROADSIDE.post.view,
           speedMarker: ROADSIDE.post.speedMarker, offset: -1.25,
@@ -136,7 +152,7 @@ export class RoadModel {
         });
       }
     }
-    this.placeBoostPads(from);
+    if (decoration.nitro !== false) this.placeBoostPads(from);
     if (obstacleDensity <= 0) return;
 
     const densityGap = Math.min(130, Math.max(25, Math.round(4 / obstacleDensity)));
@@ -200,7 +216,35 @@ export class RoadModel {
 
     // Zippers LAST, so their hazard-clearance check sees the finished
     // road — paint never goes down where rocks or cone warnings already live.
-    this.placeZippers(from, endMargin);
+    if (decoration.zippers !== false) this.placeZippers(from, endMargin);
+  }
+
+  // Exact track objects are data, just like exact pattern placements. Stable
+  // IDs let objectives remember which targets were hit across lap wraps; the
+  // objective link also makes those hits persistent instead of re-arming with
+  // ordinary campaign hazards and pickups.
+  placeAuthoredObjects(objects = []) {
+    const seen = new Set();
+    for (const object of objects) {
+      const { id, at, kind, offset = 0, objective = null } = object;
+      if (!id || seen.has(id)) throw new Error(`Authored track object needs a unique id: ${id}`);
+      if (!Number.isInteger(at) || !this.segments[at]) {
+        throw new Error(`${kind} object ${id} is outside the track at segment ${at}`);
+      }
+      const def = OBSTACLES[kind];
+      if (!def) throw new Error(`Unknown authored track object kind: ${kind}`);
+      seen.add(id);
+      this.segments[at].sprites.push({
+        def,
+        key: def.key,
+        view: def.view,
+        offset,
+        hit: false,
+        trackObjectId: id,
+        objectiveId: objective,
+        persistentHit: objective != null,
+      });
+    }
   }
 
   // Nitro pickups: a consumable, not a pad. The track scatters them every
@@ -314,7 +358,7 @@ export class RoadModel {
   resetLapSprites() {
     for (const segment of this.segments) {
       for (const sprite of segment.sprites) {
-        if (sprite.def) sprite.hit = false;
+        if (sprite.def && !sprite.persistentHit) sprite.hit = false;
       }
     }
   }

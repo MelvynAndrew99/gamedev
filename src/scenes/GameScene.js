@@ -1,7 +1,6 @@
 // GameScene.js — orchestration for both modes. Owns the loop, wires input,
-// HUD, debug panel. Mode differences are contained to create() (which model,
-// which race rules) and one branch in update(). All interesting logic lives
-// in road/, entities/, and systems/.
+// HUD, debug panel. Mode differences select a track collection, race finish
+// rule, and result flow; gameplay logic lives in road/, entities/, and systems/.
 
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
@@ -14,18 +13,19 @@ import { submitScore } from '../systems/HighScores.js';
 import { checkObstacleHit } from '../systems/Collision.js';
 import { Controls } from '../systems/Controls.js';
 import { Popularity } from '../systems/Popularity.js';
+import { ObjectiveState } from '../systems/ObjectiveState.js';
+import { submitTrainingResult } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
-import { TRACKS } from '../tracks/index.js';
+import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
 import { MUSIC } from '../audio/MusicEngine.js';
 import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
 import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
 import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
 import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
 
-// One theme per campaign track (see GAME_DESIGN.md for each track's role);
-// Endless Mode keeps the original high-speed theme since it has no fixed
-// identity of its own to score against.
+// Theme identities can be shared by geometry variants (Training Loop and its
+// Story validation race). Endless keeps the original high-speed score.
 const CAMPAIGN_THEMES = {
   'training-loop': TRAINING_LOOP_THEME,
   'neon-gulch': NEON_GULCH_THEME,
@@ -51,15 +51,19 @@ export class GameScene extends Phaser.Scene {
       this.race = null;
       this.trackData = null;
     } else {
-      this.trackData = TRACKS[this.trackIndex];
+      const trackList = this.mode === 'training' ? TRAINING_TRACKS : TRACKS;
+      this.trackData = trackList[this.trackIndex];
       this.model = new RoadModel(TUNING);
       this.model.buildFromData(this.trackData);
-      this.race = new RaceState(this.model, this.trackData.laps ?? 3);
+      this.race = new RaceState(this.model, this.trackData.laps ?? 3, {
+        finishOnLapLimit: this.trackData.finish !== 'objectives',
+      });
     }
+    this.objectives = new ObjectiveState(this.trackData?.objectives, this.model);
     this.renderer = new RoadRenderer(
       this,
       TUNING,
-      this.trackData?.id ?? 'endless',
+      this.trackData?.environment ?? this.trackData?.id ?? 'endless',
     );
     this.player = new Player(TUNING);
     // Player.position wraps at a campaign lap line. Scenery distance does not,
@@ -79,6 +83,8 @@ export class GameScene extends Phaser.Scene {
     this.speedLineBurst = 0; // ramp/boost streak-bloom, decays over speedLineBurstTime
     this.wasOnZipper = false;
     this.prevNitroHeld = false;
+    this.trainingDamageHits = 0;
+    this.trainingDamageMax = this.trackData?.trainingDamage?.maxHits ?? 0;
     this.done = false;
 
     // Bottom-anchored (origin 0.5,1): the sprite's y IS its rear-bumper
@@ -96,7 +102,8 @@ export class GameScene extends Phaser.Scene {
 
     this.controls = new Controls(this);
     this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
-    this.input.keyboard.on('keydown-ENTER', () => this.advance());
+    this.input.keyboard.on('keydown-ENTER', () => this.confirm());
+    this.input.keyboard.on('keydown-R', () => this.retryTraining());
 
     this.iframes = 0; // post-hit invulnerability countdown
     this.boostCooldown = 0; // one pad = one kick, even if we overlap for 2 frames
@@ -117,16 +124,18 @@ export class GameScene extends Phaser.Scene {
       .setDepth(30);
 
     if (this.trackData) {
-      this.showBanner(`${this.trackData.name}\n${this.trackData.intro}`, 3500);
+      if (this.objectives.active) this.showObjectiveIntro();
+      else this.showBanner(`${this.trackData.name}\n${this.trackData.intro}`, 3500);
     } else {
       this.showBanner('ENDLESS\nThe road never ends. You will.', 3000);
     }
 
     this.hookDebugPanel();
 
-    // Instruments run in a parallel scene: own camera, immune to the
-    // shakes and zooms this scene will accumulate. Stopped with us.
-    this.scene.launch('HudScene');
+    // Keep the briefing visually clean. The parallel HUD comes online when
+    // the player acknowledges the objectives and the race clock can start.
+    this.hudLaunched = false;
+    if (!this.awaitingBriefing) this.launchHud();
     this.events.once('shutdown', () => this.scene.stop('HudScene'));
 
     // Procedural score — synthesized live, not a loaded file (see
@@ -134,7 +143,9 @@ export class GameScene extends Phaser.Scene {
     // got us into this scene, which satisfies browsers' audio-autoplay
     // gesture requirement.
     MUSIC.setVolume(TUNING.musicVolume);
-    const theme = this.trackData ? CAMPAIGN_THEMES[this.trackData.id] ?? HIGH_SPEED_THEME : HIGH_SPEED_THEME;
+    MUSIC.setSfxVolume(TUNING.sfxVolume);
+    const themeId = this.trackData?.music ?? this.trackData?.id;
+    const theme = this.trackData ? CAMPAIGN_THEMES[themeId] ?? HIGH_SPEED_THEME : HIGH_SPEED_THEME;
     MUSIC.start(theme);
     this.events.once('shutdown', () => MUSIC.stop());
   }
@@ -146,14 +157,26 @@ export class GameScene extends Phaser.Scene {
     const padNow = {
       a: buttonDown(pad, 0, 'A'),
       b: buttonDown(pad, 1, 'B'),
+      x: buttonDown(pad, 2, 'X'),
     };
-    const padPrev = this.prevPad ?? { a: true, b: true };
+    const padPrev = this.prevPad ?? { a: true, b: true, x: true };
     this.prevPad = padNow;
 
     if (this.done) {
       if (padNow.a && !padPrev.a) this.advance();
       if (padNow.b && !padPrev.b) this.quitToTitle();
+      if (padNow.x && !padPrev.x) this.retryTraining();
       return; // banner is up; keyboard ENTER/ESC still work too
+    }
+
+    if (this.awaitingBriefing) {
+      if (
+        padNow.a && !padPrev.a &&
+        this.time.now >= this.briefingAcceptAt
+      ) this.dismissObjectiveIntro();
+      if (padNow.b && !padPrev.b) this.quitToTitle();
+      this.renderer.render(this.model, this.player, 0, 0, this.sceneryDistance);
+      return; // no movement, collisions, or race time behind the briefing
     }
 
     const dt = Math.min(delta, 50) / 1000;
@@ -179,8 +202,9 @@ export class GameScene extends Phaser.Scene {
         Math.abs(this.player.x - z.offset) < z.w + TUNING.playerW * 0.5;
       if (on && !this.wasOnZipper) {
         this.player.zip();
-        const earned = this.pop.add(TUNING.zipPop); // zips build the combo
-        this.popup(`ZIP +${earned}`, '#2ee56b');
+        if (this.mode === 'endless') this.pop.add(TUNING.zipPop);
+        this.recordObjective('zipper_hit');
+        this.popup('SPEED LINE!', '#2ee56b');
       }
       this.wasOnZipper = on;
     }
@@ -191,7 +215,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.player.airborne) {
       const s = checkObstacleHit(this.player, this.model, TUNING);
       if (s) {
-        if (s.def.kind === 'candy') this.onCandy(s.def);
+        if (s.def.kind === 'candy') this.onCandy(s);
         else if (s.def.kind === 'launch') this.onRamp(s.def);
         else if (s.def.kind === 'pickup') this.onPickup(s);
         else if (this.iframes <= 0) this.onHit(s.def);
@@ -210,9 +234,19 @@ export class GameScene extends Phaser.Scene {
       if (event === 'start') {
         this.showBanner('GO!', 800);
       } else if (event === 'lap') {
+        this.recordObjective('lap_complete');
         this.model.resetLapSprites();
-        this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
+        if (this.mode === 'training') {
+          const lessonMessage = this.trackData.lapMessages?.[this.race.lap];
+          this.showBanner(
+            lessonMessage ?? `LAP ${this.race.lap} / ${this.race.laps}`,
+            1800,
+          );
+        } else {
+          this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
+        }
       } else if (event === 'finished') {
+        this.recordObjective('lap_complete', {}, false);
         this.finishRace();
       }
     }
@@ -266,22 +300,61 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(50, 0.002);
   }
 
-  onCandy(def) {
-    if (def.pop <= 0) return; // warning cone: knocked flat, no fanfare
-    const earned = this.pop.add(def.pop);
-    this.popup(`+${earned}`, '#ffcf3f');
+  onCandy(sprite) {
+    const { def } = sprite;
+    const result = this.objectives.record('object_hit', { sprite });
+    const objective = result?.changes[0];
+    if (objective) {
+      this.juiceConeHit(sprite, objective);
+      this.popup(`CONE  ${objective.progress} / ${objective.total}`, '#ffcf3f');
+      if (
+        result.allComplete &&
+        this.trackData.finish === 'objectives' &&
+        !this.race.finishArmed
+      ) {
+        this.race.armFinish();
+        this.showBanner(
+          `${objective.total} / ${objective.total} CONES\nOBJECTIVE COMPLETE\nFINISH THIS LAP`,
+          2200,
+        );
+      }
+    }
+    if (def.pop <= 0) return; // no economy reward; objectives already gave feedback
+    if (this.mode === 'endless') {
+      const earned = this.pop.add(def.pop);
+      this.popup(`+${earned}`, '#ffcf3f');
+    }
   }
 
   onRamp(def) {
-    const earned = this.pop.add(def.pop);
+    if (this.mode === 'endless') this.pop.add(def.pop);
+    this.recordObjective('ramp_hit');
     this.player.launch();
     this.speedLineBurst = 1; // takeoff streaks: the ramp was the fast line
-    this.popup(`+${earned} AIR!`, '#00e5ff');
+    this.popup('AIR!', '#00e5ff');
     this.cameras.main.shake(60, 0.003); // takeoff kick
   }
 
   onHit(def) {
-    if (this.pop.bust()) this.popup('COMBO LOST', '#ff2d55');
+    if (this.mode === 'training' && this.trainingDamageMax > 0) {
+      this.trainingDamageHits = Math.min(
+        this.trainingDamageMax,
+        this.trainingDamageHits + 1,
+      );
+      this.iframes = TUNING.iframes;
+      MUSIC.playGlassCrack(this.trainingDamageHits);
+      this.popup(
+        `WINDSCREEN  ${this.trainingDamageHits} / ${this.trainingDamageMax}`,
+        '#ff6b6b',
+      );
+      // Training damage is communication, not punishment: no speed loss,
+      // campaign hull damage, wreck, or restart. The cracks affect the medal.
+      this.cameras.main.shake(140, 0.01);
+      this.carSprite.setTint(0xff5555).setTintMode(Phaser.TintModes.FILL);
+      this.time.delayedCall(120, () => this.carSprite.clearTint());
+      return;
+    }
+    if (this.mode === 'endless') this.pop.bust();
     this.player.speed *= def.slow;       // momentum is the immediate price
     const wrecked = RACER.damage(def.damage); // health is the long-term one
     this.iframes = TUNING.iframes;
@@ -304,36 +377,82 @@ export class GameScene extends Phaser.Scene {
       RACER.money += this.pop.cash; // the crowd tips even a spectacular ending
       this.showBanner(
         `WRECKED\n${dist}m${record ? '  NEW RECORD' : ''}\nTIPS $${this.pop.cash}\n\nENTER FOR TITLE`, 0);
-    } else {
+    } else if (this.mode === 'story') {
       this.garageData = {
         wrecked: true,
         retryTrackIndex: this.trackIndex,
         receipt: 'WRECKED — NO RACE PURSE',
       };
       this.showBanner('WRECKED\n\nENTER FOR GARAGE', 0);
+    } else {
+      this.showBanner('TRAINING ENDED\n\nENTER FOR TITLE', 0);
     }
   }
 
   finishRace() {
     this.done = true;
     const t = this.race.time;
+    if (this.mode === 'training') {
+      const target = this.objectives.views.find(
+        (objective) => objective.id === this.trackData.scoring.objective,
+      ) ?? this.objectives.primary;
+      const result = submitTrainingResult(this.trackData, target.progress, t, {
+        damageHits: this.trainingDamageHits,
+        total: target.total,
+      });
+      const firstTrophy = [...this.trackData.scoring.thresholds]
+        .sort((a, b) => a.minimum - b.minimum)[0];
+      const trophyLine = result.trophy
+        ? `${result.trophy.rank.toUpperCase()} TROPHY  ${'★'.repeat(result.trophy.stars)}`
+        : `NO TROPHY  •  ${firstTrophy.rank.toUpperCase()} AT ${firstTrophy.minimum}` +
+          (firstTrophy.maximumDamageHits == null
+            ? ''
+            : ` / ${firstTrophy.maximumDamageHits} HITS MAX`);
+      const perfect = target.complete && this.trainingDamageHits === 0;
+      const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
+      this.trainingAdvanceTo = nextTrack && nextTrack.status !== 'placeholder'
+        ? this.trackIndex + 1
+        : null;
+      const damageLine = this.trainingDamageMax > 0
+        ? `WINDSCREEN ${this.trainingDamageHits} / ${this.trainingDamageMax} HITS\n`
+        : '';
+      const nextLine = this.trainingAdvanceTo == null
+        ? (nextTrack
+          ? `NEXT: ${nextTrack.name} — COMING SOON`
+          : 'TRAINING TRACK COMPLETE')
+        : `LEVEL ${this.trainingAdvanceTo + 1} UNLOCKED: ` +
+          `${TRAINING_TRACKS[this.trainingAdvanceTo].name}`;
+      this.showBanner(
+        `${perfect ? 'PERFECT CLEAR!' : 'TRAINING COMPLETE'}\n` +
+          `${target.hudLabel}  ${target.progress} / ${target.total}\n` +
+          damageLine +
+          `${trophyLine}\n${fmtTime(t)}  •  ${this.objectives.score} PTS` +
+          `${result.newBest ? '  •  NEW BEST' : ''}\n\n` +
+          nextLine,
+        0,
+      );
+      this.celebrateTrainingFinish(perfect, result.trophy?.stars ?? 0);
+      this.showTrainingResultActions(this.trainingAdvanceTo != null);
+      return;
+    }
     const record = submitScore(this.trackData.id, t, 'min');
-    // The two careers, side by side on every receipt: racing income
-    // (base + beating par) and fame income. Players see which one is
-    // funding their garage — that's the payout screen teaching playstyle.
+    // Race cash remains time-based while the new course score comes from
+    // completed objectives. Objective points can be balanced independently
+    // without turning every stunt contact into currency.
     const par = this.trackData.par ?? 120;
     const timeCash = TUNING.basePayout + Math.max(0, Math.round((par - t) * TUNING.parRate));
-    const fameCash = this.pop.cash;
-    RACER.money += timeCash + fameCash;
+    RACER.money += timeCash;
     const last = this.trackIndex >= TRACKS.length - 1;
     this.garageData = {
       nextTrackIndex: this.trackIndex + 1,
       complete: last,
-      receipt: `RACING +$${timeCash}   FAME +$${fameCash}`,
+      receipt: `RACING +$${timeCash}   OBJECTIVES ${this.objectives.score} PTS`,
     };
     this.showBanner(
       `FINISH  ${fmtTime(t)}${record ? '  NEW RECORD' : ''}\n` +
-        `RACING $${timeCash}  +  FAME $${fameCash}\n` +
+        `OBJECTIVES ${this.objectives.completedCount}/${this.objectives.views.length}` +
+        `  •  ${this.objectives.score} PTS\n` +
+        `RACING $${timeCash}\n` +
         `WALLET $${RACER.money}\n\n` +
         (last ? 'CAMPAIGN COMPLETE\nENTER FOR GARAGE' : 'ENTER FOR GARAGE'),
       0
@@ -342,6 +461,17 @@ export class GameScene extends Phaser.Scene {
 
   advance() {
     if (!this.done) return;
+    if (this.mode === 'training') {
+      if (this.trainingAdvanceTo != null) {
+        this.scene.start('GameScene', {
+          mode: 'training',
+          trackIndex: this.trainingAdvanceTo,
+        });
+      } else {
+        this.scene.start('TitleScene');
+      }
+      return;
+    }
     if (this.mode === 'story' && this.garageData) {
       this.scene.start('GarageScene', this.garageData);
       return;
@@ -357,6 +487,22 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  confirm() {
+    if (this.awaitingBriefing) {
+      if (this.time.now >= this.briefingAcceptAt) this.dismissObjectiveIntro();
+      return;
+    }
+    this.advance();
+  }
+
+  retryTraining() {
+    if (!this.done || this.mode !== 'training') return;
+    this.scene.start('GameScene', {
+      mode: 'training',
+      trackIndex: this.trackIndex,
+    });
+  }
+
   quitToTitle() {
     // Walking away mid-run still banks the endless distance and tips.
     if (this.mode === 'endless' && !this.done) {
@@ -366,7 +512,265 @@ export class GameScene extends Phaser.Scene {
     this.scene.start('TitleScene');
   }
 
-  // Sub-300ms reward legibility: fame blooms at the car, not on a tally.
+  recordObjective(event, payload = {}, announce = true) {
+    const result = this.objectives.record(event, payload);
+    if (announce && result?.newlyCompleted.length) {
+      const objective = result.newlyCompleted[0];
+      this.showBanner(`OBJECTIVE COMPLETE\n${objective.label}\n+${objective.points} PTS`, 1400);
+    }
+    return result;
+  }
+
+  // A cone should leave the world with the same decisiveness that a coin
+  // leaves a kart racer: physical motion, sparks, sound, and a larger beat at
+  // each ten-count milestone and the final target. Milestones fly toward the
+  // chase camera; ordinary hits kick off-road so dense lines retain variation.
+  juiceConeHit(sprite, objective) {
+    const complete = objective.complete;
+    const milestone = complete || objective.progress % 10 === 0;
+    MUSIC.playConeHit({ milestone, complete });
+
+    const x = this.carSprite.x + (sprite.offset - this.player.x) * 22;
+    const y = this.carSprite.y - 34;
+    const cone = this.add.image(x, y, 'cone')
+      .setDisplaySize(26, 34)
+      .setDepth(milestone ? 38 : 24);
+    const baseScaleX = cone.scaleX;
+    const baseScaleY = cone.scaleY;
+    const side = objective.progress % 2 === 0 ? 1 : -1;
+
+    if (milestone) {
+      this.tweens.add({
+        targets: cone,
+        x: this.scale.width / 2 + side * (complete ? 0 : 72),
+        y: this.scale.height * 0.42,
+        angle: side * (complete ? 900 : 620),
+        scaleX: baseScaleX * (complete ? 5.5 : 3.6),
+        scaleY: baseScaleY * (complete ? 5.5 : 3.6),
+        alpha: 0,
+        duration: complete ? 620 : 500,
+        ease: 'Cubic.in',
+        onComplete: () => cone.destroy(),
+      });
+    } else {
+      this.tweens.add({
+        targets: cone,
+        x: x + side * (130 + (objective.progress % 3) * 24),
+        y: y - 135,
+        angle: side * 540,
+        scaleX: baseScaleX * 0.35,
+        scaleY: baseScaleY * 0.35,
+        alpha: 0,
+        duration: 480,
+        ease: 'Cubic.out',
+        onComplete: () => cone.destroy(),
+      });
+    }
+
+    const colors = [0xff8a32, 0xffcf3f, 0x00e5ff];
+    for (let i = 0; i < 7; i++) {
+      const angle = (Math.PI * 2 * i) / 7 + objective.progress * 0.23;
+      const spark = this.add.rectangle(x, y, 4, 4, colors[i % colors.length])
+        .setDepth(37);
+      const distance = milestone ? 92 : 54;
+      this.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * distance,
+        y: y + Math.sin(angle) * distance,
+        scale: 0.2,
+        alpha: 0,
+        duration: milestone ? 440 : 300,
+        ease: 'Quad.out',
+        onComplete: () => spark.destroy(),
+      });
+    }
+    this.cameras.main.shake(milestone ? 90 : 45, milestone ? 0.005 : 0.002);
+    if (complete) this.cameras.main.flash(120, 255, 207, 63);
+  }
+
+  celebrateTrainingFinish(perfect, stars) {
+    MUSIC.playTrainingComplete({ perfect, stars });
+    this.cameras.main.flash(perfect ? 260 : 150, 255, 207, 63);
+    const colors = [0xffcf3f, 0xff2d95, 0x00e5ff, 0x2ee56b, 0xffffff];
+    const count = perfect ? 44 : 24;
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count;
+      const radius = 30 + (i % 5) * 7;
+      const confetti = this.add.rectangle(
+        this.scale.width / 2 + Math.cos(angle) * radius,
+        250 + Math.sin(angle) * radius,
+        5 + i % 4,
+        8 + i % 3,
+        colors[i % colors.length],
+      ).setAngle(i * 37).setDepth(45);
+      this.tweens.add({
+        targets: confetti,
+        x: confetti.x + Math.cos(angle) * (190 + (i % 4) * 34),
+        y: confetti.y + Math.sin(angle) * 130 + 180,
+        angle: confetti.angle + 540 * (i % 2 ? 1 : -1),
+        alpha: 0,
+        duration: 900 + (i % 5) * 90,
+        ease: 'Quad.out',
+        onComplete: () => confetti.destroy(),
+      });
+    }
+  }
+
+  showTrainingResultActions(hasNext) {
+    const makeButton = (x, label, color, action) => {
+      const button = this.add.text(x, 520, label, {
+        fontSize: '15px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        backgroundColor: color,
+        padding: { x: 12, y: 9 },
+        stroke: '#0a0a14',
+        strokeThickness: 3,
+      })
+        .setOrigin(0.5)
+        .setDepth(60)
+        .setInteractive({ useHandCursor: true });
+      button.on('pointerover', () => button.setScale(1.06));
+      button.on('pointerout', () => button.setScale(1));
+      button.on('pointerdown', action);
+      return button;
+    };
+
+    makeButton(hasNext ? 190 : 285, 'X / R  RETRY', '#7a2458', () => this.retryTraining());
+    if (hasNext) {
+      makeButton(400, 'A / ENTER  NEXT', '#146b4a', () => this.advance());
+    }
+    makeButton(
+      hasNext ? 620 : 515,
+      hasNext ? 'B / ESC  TITLE' : 'A / ENTER  TITLE',
+      '#244c7a',
+      () => this.quitToTitle(),
+    );
+  }
+
+  showObjectiveIntro() {
+    if (!this.objectives.active) return;
+    const centerX = this.scale.width / 2;
+    const trophyThresholds = this.trackData.scoring?.thresholds;
+    const panelH = 230 + this.objectives.views.length * 30 +
+      (trophyThresholds ? 28 : 0);
+    const panelTop = (this.scale.height - panelH) / 2;
+    const panel = this.add.rectangle(
+      centerX,
+      panelTop + panelH / 2,
+      this.scale.width - 120,
+      panelH,
+      0x0a0a14,
+      0.9,
+    ).setStrokeStyle(2, 0x00e5ff, 0.65).setAlpha(0).setDepth(40);
+    const title = this.add.text(centerX + 70, panelTop + 30, this.trackData.name, {
+      fontSize: '25px', color: '#ff2d95', fontStyle: 'bold',
+      stroke: '#0a0a14', strokeThickness: 4,
+    }).setOrigin(0.5).setAlpha(0).setDepth(41);
+    const intro = this.add.text(centerX + 70, panelTop + 69, this.trackData.intro, {
+      fontSize: '16px', color: '#ffffff', align: 'center',
+      stroke: '#0a0a14', strokeThickness: 4,
+      wordWrap: { width: this.scale.width - 180 },
+    }).setOrigin(0.5).setAlpha(0).setDepth(41);
+    const header = this.add.text(centerX + 70, panelTop + 113, 'OBJECTIVES', {
+      fontSize: '14px', color: '#00e5ff', fontStyle: 'bold',
+      stroke: '#0a0a14', strokeThickness: 4,
+    }).setOrigin(0.5).setAlpha(0).setDepth(41);
+    const rows = this.objectives.views.map((objective, index) => {
+      const reward = objective.unitPoints
+        ? `${objective.unitPoints} PTS EACH`
+        : `+${objective.points} PTS`;
+      return (
+      this.add.text(centerX + 90, panelTop + 143 + index * 30,
+        `○  ${objective.label}   ${reward}`, {
+          fontSize: '17px', color: '#ffffff', fontStyle: 'bold',
+          stroke: '#0a0a14', strokeThickness: 4,
+        })
+        .setOrigin(0.5)
+        .setAlpha(0)
+        .setDepth(41)
+      );
+    });
+    const trophyLine = trophyThresholds
+      ? this.add.text(
+        centerX + 90,
+        panelTop + 143 + rows.length * 30,
+        [...trophyThresholds]
+          .sort((a, b) => a.minimum - b.minimum)
+          .map((threshold) =>
+            `${threshold.rank.toUpperCase()} ${threshold.minimum}` +
+            (threshold.maximumDamageHits == null
+              ? ''
+              : ` / ${threshold.maximumDamageHits} HITS MAX`)
+          )
+          .join('  •  '),
+        {
+          fontSize: '15px', color: '#ffcf3f', fontStyle: 'bold',
+          stroke: '#0a0a14', strokeThickness: 4,
+        },
+      ).setOrigin(0.5).setAlpha(0).setDepth(41)
+      : null;
+    const prompt = this.add.text(
+      centerX,
+      panelTop + panelH - 27,
+      'PRESS A / ENTER TO START',
+      {
+        fontSize: '16px', color: '#2ee56b', fontStyle: 'bold',
+        stroke: '#0a0a14', strokeThickness: 4,
+      },
+    ).setOrigin(0.5).setAlpha(0).setDepth(41);
+    const lines = [title, intro, header, ...rows, ...(trophyLine ? [trophyLine] : [])];
+    this.objectiveIntroElements = [panel, ...lines, prompt];
+    this.awaitingBriefing = true;
+    // Prevent the title-screen confirm that opened the race from also
+    // dismissing the briefing in the same input beat.
+    this.briefingAcceptAt = this.time.now + 350;
+    this.tweens.add({ targets: panel, alpha: 1, duration: 240, ease: 'Quad.out' });
+    lines.forEach((line, index) => {
+      this.tweens.add({
+        targets: line,
+        x: centerX,
+        alpha: 1,
+        delay: 100 + index * 90,
+        duration: 320,
+        ease: 'Back.out',
+      });
+    });
+    this.tweens.add({
+      targets: prompt,
+      alpha: { from: 0.45, to: 1 },
+      delay: 200 + lines.length * 90,
+      duration: 650,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+  }
+
+  dismissObjectiveIntro() {
+    if (!this.awaitingBriefing) return;
+    this.awaitingBriefing = false;
+    const elements = this.objectiveIntroElements ?? [];
+    this.tweens.killTweensOf(elements);
+    this.tweens.add({
+      targets: elements,
+      alpha: 0,
+      duration: 220,
+      ease: 'Quad.in',
+      onComplete: () => elements.forEach((element) => element.destroy()),
+    });
+    this.launchHud();
+    this.showBanner('GET READY', 800);
+  }
+
+  launchHud() {
+    if (this.hudLaunched) return;
+    this.hudLaunched = true;
+    // Own camera: instruments remain immune to game-world shakes and flashes.
+    this.scene.launch('HudScene');
+  }
+
+  // Sub-300ms reward legibility: feedback blooms at the car, not on a tally.
   popup(text, color) {
     const p = this.add
       .text(this.carSprite.x, this.carSprite.y - 50, text, {
@@ -424,6 +828,14 @@ export class GameScene extends Phaser.Scene {
     hook('cameraHeight', (v) => (TUNING.cameraHeight = v));
     hook('drawDistance', (v) => (TUNING.drawDistance = v));
     hook('fogDensity',   (v) => (TUNING.fogDensity = v));
+    hook('musicVolume',  (v) => {
+      TUNING.musicVolume = v;
+      MUSIC.setVolume(v);
+    });
+    hook('sfxVolume',    (v) => {
+      TUNING.sfxVolume = v;
+      MUSIC.setSfxVolume(v);
+    });
 
     // Sync the track picker to however we actually got here (title menu,
     // garage "next race", or the picker itself) so it never shows a stale
@@ -431,7 +843,9 @@ export class GameScene extends Phaser.Scene {
     // than a live TUNING value, so it's read-only sync here, not two-way.
     const trackSelect = document.getElementById('trackSelect');
     if (trackSelect) {
-      trackSelect.value = this.mode === 'endless' ? 'endless' : String(this.trackIndex);
+      trackSelect.value = this.mode === 'endless'
+        ? 'endless'
+        : `${this.mode}:${this.trackIndex}`;
     }
 
     const fps = document.getElementById('fps');
