@@ -37,6 +37,15 @@ function assertConeLanguage(track) {
         false,
         `zipper at absolute segment ${segment.index}`
       );
+      if (segment.launchApproach) {
+        const centerDistance = Math.abs(
+          segment.zipper.offset - segment.launchApproach.offset
+        );
+        assert.ok(
+          centerDistance >= segment.zipper.w + segment.launchApproach.w,
+          `zipper overlaps ramp runway at absolute segment ${segment.index}`
+        );
+      }
     }
   }
 }

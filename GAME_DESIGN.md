@@ -35,7 +35,9 @@ finished until its effect on both modes has been considered.
   existing jump physics. A ramp should lead to a benefit: clearing a hazard,
   reaching a speed line, chaining fame, or satisfying an objective.
 - **Zippers are execution rewards.** Their line should be visible early enough
-  to choose, then demand steering precision at speed.
+  to choose, then demand steering precision at speed. Green zipper paint and
+  yellow ramp-approach paint never overlap in the same lane; combo lines
+  separate them with a short clean-asphalt beat.
 - **Nitro is stored agency.** Place it before a climb or demanding section,
   but let the player choose when to spend it.
 - **Dirt is a deliberate tempo change.** Use it for a short handling test or
@@ -148,6 +150,28 @@ test multiple seeds or use a fixed seed that reproduces the relevant case.
 These presentation details are intentional parts of speed, readability, and
 game feel. Treat them as design constraints when changing art, projection,
 camera settings, HUD layout, or rendering—not as incidental implementation.
+
+### World palette and depth
+
+- Every campaign course has its own grounded near-future environment palette;
+  Endless Mode uses the same system rather than a separate rendering rule.
+- Atmospheric colors may change by course, but semantic driving colors do not:
+  cyan/magenta mark powered road edges, green marks speed, yellow marks a ramp
+  offer, and warm orange/red marks danger.
+- Background contrast stays below road-object contrast. Windows and celestial
+  lights should make the world feel inhabited without competing with a cone,
+  zipper, runway, gantry, or pickup.
+- Horizon scenery is deterministic code-native pixel art. Far and near layers
+  follow projected road curves at different rates; their small travel drift
+  must remain continuous across campaign lap wraps.
+- Large trackside landmarks are anchored to absolute road segments and use the
+  road projection, so they visibly approach and pass the player. Campaign
+  landmarks repeat consistently each lap; Endless scenery cadence survives
+  segment trimming. These objects are non-collidable and render below all
+  gameplay props.
+- Near-future landmarks favor recognizable infrastructure—renewables, power
+  lines, commuter or freight corridors, and evolving city edges—over fantasy
+  megastructures. The world should feel plausibly one generation ahead.
 
 ### Player car sprite
 

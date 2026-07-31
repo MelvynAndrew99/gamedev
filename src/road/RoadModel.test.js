@@ -98,6 +98,26 @@ test('every ramp remains a raised sprite with a same-lane painted approach', () 
   }
 });
 
+test('zipper paint never overlaps a ramp approach in the same lane', () => {
+  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+    const model = new RoadModel(TUNING);
+    model.buildFromData(track);
+
+    for (const segment of model.segments) {
+      if (!segment.zipper || !segment.launchApproach) continue;
+      const centerDistance = Math.abs(
+        segment.zipper.offset - segment.launchApproach.offset
+      );
+      const combinedHalfWidths =
+        segment.zipper.w + segment.launchApproach.w;
+      assert.ok(
+        centerDistance >= combinedHalfWidths,
+        `${track.id}: zipper overlaps ramp runway at segment ${segment.index}`
+      );
+    }
+  }
+});
+
 test('every campaign track gets a start/finish gate and painted line', () => {
   for (const track of [trainingLoop, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);

@@ -1,0 +1,214 @@
+// environments.js — art direction for the world behind the road.
+//
+// Course palettes change the atmosphere, not the driving vocabulary. Neon
+// cyan/magenta edges, green zippers, yellow ramp approaches, and orange/red
+// hazards remain stable across every mode so scenery can never change what a
+// gameplay color means.
+
+const ENVIRONMENTS = {
+  'training-loop': {
+    name: 'Coastal proving ground',
+    seed: 1101,
+    colors: {
+      skyBands: [0x071421, 0x0d2635, 0x173c4b, 0x315d68, 0x6f8784, 0xd29a69],
+      fog: 0x315d68,
+      groundLight: 0x18332f,
+      groundDark: 0x122924,
+      roadLight: 0x3b4145,
+      roadDark: 0x343a3e,
+      dirtLight: 0x51453b,
+      dirtDark: 0x473b33,
+      dirtEdgeA: 0x77634c,
+      dirtEdgeB: 0x65533f,
+    },
+    celestial: { x: 0.78, y: 0.26, radius: 24, color: 0xffd39a, glow: 0xf3ad72 },
+    stars: 0,
+    trackside: {
+      cadence: 31,
+      offset: [1.65, 2.8],
+      kinds: ['turbine', 'sensor', 'tree'],
+      structure: 0x294a47,
+      highlight: 0x91aaa0,
+      light: 0xe6ba72,
+    },
+    layers: [
+      {
+        kind: 'ridge',
+        color: 0x274b50,
+        baseY: 0.49,
+        amplitude: 34,
+        tileWidth: 520,
+        curveFactor: 0.22,
+        travelFactor: 0.025,
+        detail: 'turbines',
+      },
+      {
+        kind: 'city',
+        color: 0x152e33,
+        windowColor: 0xd6b36f,
+        baseY: 0.515,
+        amplitude: 58,
+        tileWidth: 640,
+        curveFactor: 0.52,
+        travelFactor: 0.09,
+        detail: 'commuter',
+      },
+    ],
+  },
+
+  'neon-gulch': {
+    name: 'High-desert energy corridor',
+    seed: 2202,
+    colors: {
+      skyBands: [0x090e22, 0x151b35, 0x292d48, 0x55445a, 0x976167, 0xd98a6e],
+      fog: 0x55445a,
+      groundLight: 0x3a2b2c,
+      groundDark: 0x302326,
+      roadLight: 0x3d3b40,
+      roadDark: 0x35343a,
+      dirtLight: 0x604438,
+      dirtDark: 0x51372f,
+      dirtEdgeA: 0x8a6244,
+      dirtEdgeB: 0x704d38,
+    },
+    celestial: { x: 0.2, y: 0.3, radius: 30, color: 0xffc06b, glow: 0xee835f },
+    stars: 10,
+    trackside: {
+      cadence: 27,
+      offset: [1.6, 3.0],
+      kinds: ['rock', 'solar', 'power'],
+      structure: 0x3c2b30,
+      highlight: 0x936849,
+      light: 0xe7ab67,
+    },
+    layers: [
+      {
+        kind: 'mesa',
+        color: 0x493646,
+        baseY: 0.49,
+        amplitude: 54,
+        tileWidth: 600,
+        curveFactor: 0.2,
+        travelFactor: 0.02,
+        detail: 'transmission',
+      },
+      {
+        kind: 'mesa',
+        color: 0x2d2837,
+        baseY: 0.525,
+        amplitude: 78,
+        tileWidth: 720,
+        curveFactor: 0.6,
+        travelFactor: 0.11,
+        detail: 'solar',
+      },
+    ],
+  },
+
+  'syndicate-run': {
+    name: 'Outer-city freight belt',
+    seed: 3303,
+    colors: {
+      skyBands: [0x040914, 0x091422, 0x102437, 0x223b49, 0x4d5a58, 0xa26f51],
+      fog: 0x223b49,
+      groundLight: 0x17262a,
+      groundDark: 0x101d22,
+      roadLight: 0x383d42,
+      roadDark: 0x30363b,
+      dirtLight: 0x494039,
+      dirtDark: 0x3f3631,
+      dirtEdgeA: 0x695744,
+      dirtEdgeB: 0x594837,
+    },
+    celestial: { x: 0.83, y: 0.2, radius: 16, color: 0xffd8a6, glow: 0xca8060 },
+    stars: 18,
+    trackside: {
+      cadence: 22,
+      offset: [1.55, 2.65],
+      kinds: ['cargo', 'light', 'signal'],
+      structure: 0x17262d,
+      highlight: 0x5f6c6d,
+      light: 0xe0a15e,
+    },
+    layers: [
+      {
+        kind: 'city',
+        color: 0x1b3440,
+        windowColor: 0x8da99d,
+        baseY: 0.49,
+        amplitude: 54,
+        tileWidth: 560,
+        curveFactor: 0.24,
+        travelFactor: 0.035,
+        detail: 'cranes',
+      },
+      {
+        kind: 'industrial',
+        color: 0x0b1a22,
+        windowColor: 0xe3a35c,
+        baseY: 0.53,
+        amplitude: 86,
+        tileWidth: 680,
+        curveFactor: 0.68,
+        travelFactor: 0.14,
+        detail: 'freight',
+      },
+    ],
+  },
+
+  endless: {
+    name: 'Continental service corridor',
+    seed: 4404,
+    colors: {
+      skyBands: [0x060d1c, 0x0d1b2d, 0x183044, 0x304d5a, 0x6b7370, 0xb98361],
+      fog: 0x304d5a,
+      groundLight: 0x20302f,
+      groundDark: 0x182625,
+      roadLight: 0x3a3e43,
+      roadDark: 0x32373c,
+      dirtLight: 0x514238,
+      dirtDark: 0x45382f,
+      dirtEdgeA: 0x735b43,
+      dirtEdgeB: 0x604a38,
+    },
+    celestial: { x: 0.72, y: 0.24, radius: 21, color: 0xffd19a, glow: 0xd68b65 },
+    stars: 12,
+    trackside: {
+      cadence: 28,
+      offset: [1.6, 2.9],
+      kinds: ['turbine', 'power', 'service'],
+      structure: 0x243b3d,
+      highlight: 0x718985,
+      light: 0xd6aa6b,
+    },
+    layers: [
+      {
+        kind: 'ridge',
+        color: 0x29434a,
+        baseY: 0.49,
+        amplitude: 42,
+        tileWidth: 560,
+        curveFactor: 0.22,
+        travelFactor: 0.03,
+        detail: 'turbines',
+      },
+      {
+        kind: 'industrial',
+        color: 0x12282e,
+        windowColor: 0xd5a567,
+        baseY: 0.525,
+        amplitude: 68,
+        tileWidth: 700,
+        curveFactor: 0.62,
+        travelFactor: 0.12,
+        detail: 'transmission',
+      },
+    ],
+  },
+};
+
+export function getEnvironment(id = 'endless') {
+  return ENVIRONMENTS[id] ?? ENVIRONMENTS.endless;
+}
+
+export const ENVIRONMENT_IDS = Object.freeze(Object.keys(ENVIRONMENTS));
