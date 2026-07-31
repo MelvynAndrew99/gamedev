@@ -3,52 +3,35 @@
   "name": "TRAINING LOOP",
   "seed": 1101,
   "laps": 2,
-  "intro": "Every syndicate driver starts somewhere. Keep it on the road.",
-  "pieces": [
-    [
-      "straight",
-      25
-    ],
-    [
-      "hill",
-      30,
-      4
-    ],
-    [
-      "scurves"
-    ],
-    [
-      "hill",
-      25,
-      -4
-    ],
-    [
-      "straight",
-      15
-    ],
-    [
-      "curve",
-      50,
-      4
-    ],
-    [
-      "dirt",
-      20
-    ],
-    [
-      "curve",
-      50,
-      -4,
-      -2
-    ],
-    [
-      "scurves"
-    ],
-    [
-      "straight",
-      25
+  "intro": "Read the lane. Choose your line. Make it clean.",
+  "design": {
+    "focus": "Acquire a lane early, hold a clean arc, and recover before the next input."
+  },
+  "patterns": {
+    "startClear": 90,
+    "finishClear": 60,
+    "placements": [
+      { "at": 95, "kind": "rocks" },
+      { "at": 320, "kind": "ramp" },
+      { "at": 505, "kind": "gate" },
+      { "at": 713, "kind": "rampRocks" }
     ]
+  },
+  "pieces": [
+    ["straight", 30],
+    ["curve", 22, -2],
+    ["straight", 14],
+    ["curve", 22, 2],
+    ["straight", 18],
+    ["hill", 20, 3],
+    ["straight", 18],
+    ["curve", 24, -3, -2],
+    ["straight", 14],
+    ["chicane", 14, 3],
+    ["straight", 20],
+    ["dirt", 14],
+    ["straight", 30]
   ],
   "obstacles": 0.03,
-  "par": 145
+  "par": 105
 }

@@ -8,6 +8,21 @@ function assertConeLanguage(track) {
   for (let i = 0; i < track.segments.length; i++) {
     const segment = track.segments[i];
     for (const sprite of segment.sprites) {
+      if (sprite.key === 'cone') {
+        let resolvesToRock = false;
+        for (let j = i + 1; j < Math.min(track.segments.length, i + 70); j++) {
+          resolvesToRock = track.segments[j].sprites.some((candidate) =>
+            candidate.key === 'rock' &&
+            Math.abs(candidate.offset - sprite.offset) < 0.25
+          );
+          if (resolvesToRock) break;
+        }
+        assert.equal(
+          resolvesToRock,
+          true,
+          `cone at absolute segment ${segment.index} must announce rocks`
+        );
+      }
       if (sprite.key === 'boost') {
         assert.equal(
           track.hasConeWarningBehind(i, sprite.offset),

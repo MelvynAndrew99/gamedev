@@ -50,7 +50,10 @@ const SPRITES = {
     '.....KNNK.....',
     '......KK......',
   ],
-  // A scrap-metal wedge, not a flat painted bar: silhouette tapers from a
+  // A scrap-metal wedge, not a flat painted bar. Cyan marker poles make its
+  // wide horizontal silhouette survive distance without changing the fact
+  // that this is a physical raised object the car launches from.
+  // The silhouette tapers from a
   // narrow bright lip (top — the launch edge, farthest away/highest) down
   // to a wide riveted base plate (bottom — ground contact), the taper
   // itself being the "this surface tilts up and away from you" cue that a
@@ -59,6 +62,9 @@ const SPRITES = {
   // two beacon lights on the lip match the roadside posts' night-visibility
   // language so it reads before collision distance same as they do.
   ramp: [
+    '....KCCK............KCCK....',
+    '....KCCK............KCCK....',
+    '....KCCK............KCCK....',
     '......KLCLLLLLLLLLLCLLK.....',
     '.......LLLLLLLLLLLLLLL......',
     '.....KBggggggggggggggBgK....',
@@ -81,22 +87,24 @@ const SPRITES = {
     'KKKKKKKKKKKKKKKKKKKKKKKKKKKK',
   ],
   cone: [
-    '.......KK.......',
-    '......KOOK......',
-    '......KOoK......',
-    '.....KOOOoK.....',
-    '.....KWWWWK.....',
-    '....KWWWWWWK....',
-    '....KOOOOOoK....',
-    '...KOOOOOOooK...',
-    '...KWWWWWWWWK...',
-    '..KWWWWWWWWWWK..',
-    '..KOOOOOOOOooK..',
-    '.KOOOOOOOOOoooK.',
-    '.KOOOOOOOOOoooK.',
-    'KKKKKKKKKKKKKKKK',
-    'KooooooooooooooK',
-    '.KKKKKKKKKKKKKK.',
+    '.....KK.....',
+    '....KOOK....',
+    '....KooK....',
+    '....KOOoK...',
+    '...KOOOOoK..',
+    '...KWWWWWK..',
+    '...KWWWWWK..',
+    '..KOOOOOOoK.',
+    '..KOOOOOOoK.',
+    '..KWWWWWWWK.',
+    '..KWWWWWWWK.',
+    '.KOOOOOOOOoK',
+    '.KOOOOOOOOoK',
+    '.KOOOOOOOOoK',
+    'KKKKKKKKKKKK',
+    'KooooooooooK',
+    'KooooooooooK',
+    'KKKKKKKKKKKK',
   ],
   rock: [
     '......KKKKK.........',

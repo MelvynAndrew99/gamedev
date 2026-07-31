@@ -3,67 +3,38 @@
   "name": "NEON GULCH",
   "seed": 2202,
   "laps": 3,
-  "intro": "The Gulch pays double for drivers who don't lift.",
-  "pieces": [
-    [
-      "straight",
-      20
-    ],
-    [
-      "curve",
-      30,
-      -3,
-      2
-    ],
-    [
-      "curve",
-      30,
-      5
-    ],
-    [
-      "dirt",
-      22,
-      2
-    ],
-    [
-      "scurves"
-    ],
-    [
-      "hill",
-      25,
-      6
-    ],
-    [
-      "curve",
-      60,
-      6,
-      -5
-    ],
-    [
-      "straight",
-      12
-    ],
-    [
-      "dirt",
-      18,
-      -2,
-      2
-    ],
-    [
-      "curve",
-      25,
-      -5
-    ],
-    [
-      "hill",
-      20,
-      -5
-    ],
-    [
-      "straight",
-      18
+  "intro": "Carry speed over the crest. Settle the car before the next bend.",
+  "design": {
+    "focus": "Manage momentum through elevation, dirt, and medium-speed direction changes."
+  },
+  "patterns": {
+    "startClear": 75,
+    "finishClear": 55,
+    "placements": [
+      { "at": 90, "kind": "ramp" },
+      { "at": 205, "kind": "rocks" },
+      { "at": 390, "kind": "combo" },
+      { "at": 522, "kind": "edge" },
+      { "at": 650, "kind": "rampRocks" },
+      { "at": 800, "kind": "gate" }
     ]
+  },
+  "pieces": [
+    ["straight", 28],
+    ["curve", 22, -3, 2],
+    ["straight", 12],
+    ["hill", 22, 5],
+    ["straight", 18],
+    ["curve", 28, 5, -5],
+    ["straight", 14],
+    ["dirt", 16, 2, 2],
+    ["straight", 14],
+    ["chicane", 16, 4],
+    ["straight", 16],
+    ["hill", 18, -5],
+    ["curve", 24, -5, 3],
+    ["straight", 28]
   ],
   "obstacles": 0.055,
-  "par": 170
+  "par": 140
 }

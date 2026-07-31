@@ -1,20 +1,28 @@
 // patterns.js — road formations, third revision. The grammar, simplified:
 //
-//   A CONE MEANS "SOMETHING IS COMING." Two or three cones in a lane are
-//   the universal warning — the payload behind them might be rocks, might
-//   be a ramp, might be a ramp with rocks to fly over. The warning is
-//   honest about WHERE and silent about WHAT. That ambiguity is the
-//   design: a parsed-once fixed grammar goes invisible; an ambiguous one
-//   makes every cone line a live decision (commit or cover the brake).
+//   CONES MEAN DANGER. Two or three cones in a lane warn that rocks are
+//   closing that line. They are tall, vertical markers, never invitations.
 //
-//   Cones are harmless to hit (0 damage) — signage, not candy, not tax.
+//   RAMPS MEAN OPPORTUNITY. A yellow/cyan launch lane leads to a physical
+//   raised ramp. The paint is only a sightline aid: the ramp, jump arc,
+//   airborne steering, and landing reward remain the actual interaction.
 //
-// Everything stays lane-anchored and learnable at the WHERE level; only
-// the WHAT is variable.
+// Cones remain harmless to hit (0 damage) — signage, not candy, not tax.
 
 import { OBSTACLES } from '../config/obstacles.js';
 
 export const LANES = [-0.66, 0, 0.66];
+
+const CONE_INTERVAL = 12;
+const CONE_TO_PAYLOAD = 18;
+const RAMP_APPROACH = 28;
+
+export const DEFAULT_PATTERN_WEIGHTS = Object.freeze({
+  lane: 0.55,
+  combo: 0.18,
+  gate: 0.14,
+  edge: 0.13,
+});
 
 function put(model, i, def, offset) {
   const seg = model.segments[i];
@@ -22,15 +30,34 @@ function put(model, i, def, offset) {
   seg.sprites.push({ def, key: def.key, view: def.view, offset, hit: false });
 }
 
-// The universal warning: 2-3 cones down the lane. Returns segments used.
+// A readable danger countdown. At max speed the old four-segment cadence
+// collapsed the full warning into a few tenths of a second. Widely spaced
+// markers let the eye acquire the lane first, then make the steering choice.
 function warn(model, at, lane, rng) {
   const count = 2 + Math.floor(rng() * 2);
   let i = at;
-  for (let c = 0; c < count; c++, i += 4) put(model, i, OBSTACLES.cone, lane);
-  return i - at + 2; // small gap after the last cone
+  for (let c = 0; c < count; c++, i += CONE_INTERVAL) {
+    put(model, i, OBSTACLES.cone, lane);
+  }
+  return i - at + CONE_TO_PAYLOAD;
 }
 
-// --- Payloads: what the warning was about --------------------------------
+// Yellow/cyan paint is projected as part of the road, but terminates at a
+// separate raised sprite. This is a runway leading TO a ramp, not a flat ramp.
+function markRampApproach(model, rampAt, lane) {
+  const start = Math.max(0, rampAt - RAMP_APPROACH);
+  for (let i = start; i < rampAt; i++) {
+    const seg = model.segments[i];
+    if (!seg) continue;
+    seg.launchApproach = {
+      offset: lane,
+      w: 0.27,
+      distanceToRamp: rampAt - i,
+    };
+  }
+}
+
+// --- Payloads -------------------------------------------------------------
 
 function rocksPayload(model, at, lane) {
   let i = at;
@@ -39,6 +66,7 @@ function rocksPayload(model, at, lane) {
 }
 
 function rampPayload(model, at, lane) {
+  markRampApproach(model, at, lane);
   put(model, at, OBSTACLES.ramp, lane);
   return 5;
 }
@@ -46,6 +74,7 @@ function rampPayload(model, at, lane) {
 // Ramp with a rock field behind it — commit and fly, or brake and thread.
 // Rocks start 6 past the ramp: inside the jump arc even at half speed.
 function rampOverRocksPayload(model, at, lane) {
+  markRampApproach(model, at, lane);
   put(model, at, OBSTACLES.ramp, lane);
   const rockStart = at + 6;
   for (let r = 0; r < 4; r++) put(model, rockStart + r * 4, OBSTACLES.rock, lane);
@@ -67,6 +96,36 @@ function pickPayload(rng) {
   return PAYLOADS[0].fn;
 }
 
+function laneEvent(model, at, rng) {
+  const lane = LANES[Math.floor(rng() * LANES.length)];
+  const payload = pickPayload(rng);
+
+  // Rocks get danger markers. Ramps get an equally early launch runway and
+  // no cones, so a player never has to guess whether a warning is a reward.
+  if (payload === rocksPayload) {
+    const used = warn(model, at, lane, rng);
+    return used + payload(model, at + used, lane);
+  }
+
+  return RAMP_APPROACH + payload(model, at + RAMP_APPROACH, lane);
+}
+
+function rocksLine(model, at, rng) {
+  const lane = LANES[Math.floor(rng() * LANES.length)];
+  const used = warn(model, at, lane, rng);
+  return used + rocksPayload(model, at + used, lane);
+}
+
+function rampLine(model, at, rng) {
+  const lane = LANES[Math.floor(rng() * LANES.length)];
+  return RAMP_APPROACH + rampPayload(model, at + RAMP_APPROACH, lane);
+}
+
+function rampRocksLine(model, at, rng) {
+  const lane = LANES[Math.floor(rng() * LANES.length)];
+  return RAMP_APPROACH + rampOverRocksPayload(model, at + RAMP_APPROACH, lane);
+}
+
 // --- The combo line (Tony Hawk foundation) -------------------------------
 // An authored chain: zip runway -> ramp -> landing strip in the ADJACENT
 // lane -> return strip. Rocks guard the launch lane's landing zone
@@ -86,7 +145,8 @@ function comboLine(model, at, rng) {
   let i = at;
   for (let k = 0; k < 5; k++) setZip(model, i + k, laneA);   // runway
   i += 7;
-  put(model, i, OBSTACLES.ramp, laneA);                      // launch
+  markRampApproach(model, i, laneA);
+  put(model, i, OBSTACLES.ramp, laneA);                      // raised launch
   put(model, i + 4, OBSTACLES.cone, laneA);                  // grounded-warning:
   put(model, i + 8, OBSTACLES.cone, laneA);                  // rocks ahead in A
   const land = i + 14;
@@ -105,10 +165,10 @@ function comboLine(model, at, rng) {
 function gate(model, at, rng) {
   const open = Math.floor(rng() * LANES.length);
   let i = at;
-  for (let c = 0; c < 2; c++, i += 4) {
+  for (let c = 0; c < 2; c++, i += CONE_INTERVAL) {
     LANES.forEach((lane, li) => { if (li !== open) put(model, i, OBSTACLES.cone, lane); });
   }
-  i += 2;
+  i += CONE_TO_PAYLOAD;
   LANES.forEach((lane, li) => {
     if (li !== open) { put(model, i, OBSTACLES.rock, lane); put(model, i + 4, OBSTACLES.rock, lane); }
   });
@@ -119,23 +179,56 @@ function gate(model, at, rng) {
 function edgeSqueeze(model, at, rng) {
   const side = rng() < 0.5 ? -1 : 1;
   let i = at;
-  for (let c = 0; c < 2; c++, i += 4) put(model, i, OBSTACLES.cone, side * 0.8);
-  i += 2;
+  for (let c = 0; c < 2; c++, i += CONE_INTERVAL) {
+    put(model, i, OBSTACLES.cone, side * 0.8);
+  }
+  i += CONE_TO_PAYLOAD;
   for (let r = 0; r < 5; r++, i += 4) put(model, i, OBSTACLES.rock, side * 0.82);
   return i - at;
 }
 
 // --- Entry point ---------------------------------------------------------
 
-export function stampPattern(model, at, rng = Math.random) {
-  const roll = rng();
-  if (roll < 0.55) {
-    // Lane event: warning, then a mystery payload in the same lane.
-    const lane = LANES[Math.floor(rng() * LANES.length)];
-    const used = warn(model, at, lane, rng);
-    return used + pickPayload(rng)(model, at + used, lane);
+export function stampPattern(
+  model,
+  at,
+  rng = Math.random,
+  weights = DEFAULT_PATTERN_WEIGHTS,
+  forcedKind = null
+) {
+  const entries = [
+    ['lane', laneEvent],
+    ['combo', comboLine],
+    ['gate', gate],
+    ['edge', edgeSqueeze],
+  ];
+  const authored = {
+    lane: laneEvent,
+    rocks: rocksLine,
+    ramp: rampLine,
+    rampRocks: rampRocksLine,
+    combo: comboLine,
+    gate,
+    edge: edgeSqueeze,
+  };
+  if (forcedKind && authored[forcedKind]) {
+    if (model.segments[at]) model.segments[at].patternKind = forcedKind;
+    return authored[forcedKind](model, at, rng);
   }
-  if (roll < 0.73) return comboLine(model, at, rng);
-  if (roll < 0.87) return gate(model, at, rng);
-  return edgeSqueeze(model, at, rng);
+  if (forcedKind) throw new Error(`Unknown pattern kind: ${forcedKind}`);
+
+  const total = entries.reduce(
+    (sum, [key]) => sum + Math.max(0, weights[key] ?? DEFAULT_PATTERN_WEIGHTS[key]),
+    0
+  );
+  let roll = rng() * (total || 1);
+  for (const [key, pattern] of entries) {
+    roll -= Math.max(0, weights[key] ?? DEFAULT_PATTERN_WEIGHTS[key]);
+    if (roll <= 0) {
+      if (model.segments[at]) model.segments[at].patternKind = key;
+      return pattern(model, at, rng);
+    }
+  }
+  if (model.segments[at]) model.segments[at].patternKind = 'lane';
+  return laneEvent(model, at, rng);
 }

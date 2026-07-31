@@ -3,71 +3,42 @@
   "name": "SYNDICATE RUN",
   "seed": 3303,
   "laps": 3,
-  "intro": "Last race. The Syndicate is watching. Don't disappoint them.",
-  "pieces": [
-    [
-      "straight",
-      12
-    ],
-    [
-      "curve",
-      25,
-      -6
-    ],
-    [
-      "hill",
-      20,
-      7
-    ],
-    [
-      "curve",
-      40,
-      7,
-      -6
-    ],
-    [
-      "dirt",
-      25,
-      -3,
-      3
-    ],
-    [
-      "scurves"
-    ],
-    [
-      "curve",
-      20,
-      -7
-    ],
-    [
-      "hill",
-      12,
-      4
-    ],
-    [
-      "hill",
-      18,
-      -7
-    ],
-    [
-      "curve",
-      50,
-      6,
-      -2
-    ],
-    [
-      "dirt",
-      20,
-      4
-    ],
-    [
-      "scurves"
-    ],
-    [
-      "straight",
-      10
+  "intro": "Commit early. Change lanes in the air. There is no wasted road.",
+  "design": {
+    "focus": "Chain high-speed lines through sharp bends, airborne lane changes, and short recoveries."
+  },
+  "patterns": {
+    "startClear": 65,
+    "finishClear": 50,
+    "placements": [
+      { "at": 65, "kind": "combo" },
+      { "at": 135, "kind": "gate" },
+      { "at": 255, "kind": "rampRocks" },
+      { "at": 410, "kind": "edge" },
+      { "at": 540, "kind": "combo" },
+      { "at": 650, "kind": "gate" },
+      { "at": 780, "kind": "combo" }
     ]
+  },
+  "pieces": [
+    ["straight", 26],
+    ["curve", 18, -5],
+    ["straight", 10],
+    ["chicane", 14, 5],
+    ["straight", 12],
+    ["hill", 18, 6],
+    ["curve", 24, 7, -6],
+    ["straight", 12],
+    ["dirt", 18, -3, 3],
+    ["curve", 16, -6],
+    ["straight", 10],
+    ["chicane", 12, 6],
+    ["hill", 15, -7],
+    ["curve", 26, 7, 4],
+    ["straight", 12],
+    ["curve", 18, -6, -3],
+    ["straight", 30]
   ],
   "obstacles": 0.075,
-  "par": 195
+  "par": 155
 }

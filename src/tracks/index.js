@@ -6,8 +6,11 @@
 // "tile" on the editor grid):
 //   ["straight", length]        length in segments (~3x after easing)
 //   ["curve", length, curve]    curve: -8..8, sign = direction
-//   ["scurves"]                 preset S-curve combo
+//   ["chicane", length, curve]  compact mirrored precision sequence
+//   ["scurves"]                 legacy long-form S-curve combo
 //   laps: races to finish; intro: one-line flavor shown at race start
+//   patterns.placements: exact campaign event kind/segment pairs
+//   patterns weights/gap: procedural fallback used by generated layouts
 
 import trainingLoop from './training-loop.json';
 import neonGulch from './neon-gulch.json';

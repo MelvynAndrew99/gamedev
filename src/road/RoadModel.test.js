@@ -57,6 +57,47 @@ test('cones never appear to announce ground boosts', () => {
   }
 });
 
+test('cones announce rocks, never ramps', () => {
+  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+    const model = new RoadModel(TUNING);
+    model.buildFromData(track);
+
+    for (let i = 0; i < model.segments.length; i++) {
+      for (const cone of model.segments[i].sprites.filter((s) => s.key === 'cone')) {
+        let payload = null;
+        for (let j = i + 1; j < Math.min(model.segments.length, i + 70) && !payload; j++) {
+          payload = model.segments[j].sprites.find((candidate) =>
+            (candidate.key === 'rock' || candidate.key === 'ramp') &&
+            Math.abs(candidate.offset - cone.offset) < 0.25
+          )?.key ?? null;
+        }
+        assert.equal(payload, 'rock', `${track.id}: cone at segment ${i}`);
+      }
+    }
+  }
+});
+
+test('every ramp remains a raised sprite with a same-lane painted approach', () => {
+  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+    const model = new RoadModel(TUNING);
+    model.buildFromData(track);
+
+    for (let i = 0; i < model.segments.length; i++) {
+      for (const ramp of model.segments[i].sprites.filter((s) => s.key === 'ramp')) {
+        const approach = model.segments
+          .slice(Math.max(0, i - 28), i)
+          .filter((segment) =>
+            segment.launchApproach &&
+            Math.abs(segment.launchApproach.offset - ramp.offset) < 0.25
+          );
+
+        assert.ok(approach.length > 0, `${track.id}: ramp at segment ${i}`);
+        assert.equal(ramp.def.kind, 'launch', `${track.id}: ramp at segment ${i}`);
+      }
+    }
+  }
+});
+
 test('every campaign track gets a start/finish gate and painted line', () => {
   for (const track of [trainingLoop, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
@@ -74,3 +115,63 @@ test('every campaign track gets a start/finish gate and painted line', () => {
     assert.ok(painted >= 1 && painted <= 3, track.id);
   }
 });
+
+test('campaign tracks stamp their authored precision-driving sequence', () => {
+  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+    const model = new RoadModel(TUNING);
+    model.buildFromData(track);
+
+    const actual = model.segments
+      .filter((segment) => segment.patternKind)
+      .map((segment) => ({ at: segment.index, kind: segment.patternKind }));
+    const expected = track.patterns.placements;
+
+    assert.ok(actual.length >= 4, `${track.id}: too few decisions per lap`);
+    assert.deepEqual(actual, expected, track.id);
+  }
+});
+
+test('campaign geometry escalates precision while preserving recovery beats', () => {
+  const tracks = [trainingLoop, neonGulch, syndicateRun];
+  const expectedMaxCurve = [3, 5, 7];
+  const models = tracks.map((track) => {
+    const model = new RoadModel(TUNING);
+    model.buildFromData(track);
+    return model;
+  });
+
+  assert.deepEqual(
+    models.map((model) => Math.max(...model.segments.map((segment) => Math.abs(segment.curve)))),
+    expectedMaxCurve
+  );
+  assert.ok(
+    minimumPlacementGap(trainingLoop) >
+    minimumPlacementGap(neonGulch) &&
+    minimumPlacementGap(neonGulch) >
+    minimumPlacementGap(syndicateRun),
+    'decision spacing should tighten through the campaign'
+  );
+
+  for (const track of tracks) {
+    assert.equal(track.pieces[0][0], 'straight', `${track.id}: opening runway`);
+    assert.ok(track.pieces[0][1] >= 25, `${track.id}: opening runway length`);
+    assert.equal(track.pieces.at(-1)[0], 'straight', `${track.id}: finish recovery`);
+    assert.ok(track.pieces.at(-1)[1] >= 25, `${track.id}: finish recovery length`);
+
+    let consecutiveTechnical = 0;
+    for (const [type] of track.pieces) {
+      consecutiveTechnical = type === 'straight' || type === 'hill'
+        ? 0
+        : consecutiveTechnical + 1;
+      assert.ok(
+        consecutiveTechnical <= 2,
+        `${track.id}: more than two technical pieces without a recovery beat`
+      );
+    }
+  }
+});
+
+function minimumPlacementGap(track) {
+  const ats = track.patterns.placements.map((placement) => placement.at);
+  return Math.min(...ats.slice(1).map((at, i) => at - ats[i]));
+}
