@@ -52,8 +52,8 @@ training. They establish place, show the lap boundary, and make speed readable;
   secondary record and must never compensate for missing the lesson objective.
 - Completed targets stay consumed across laps; missed targets remain available.
 - Per-target points ensure partial success is visible: Cone Control pays 100
-  score per cone, up to 5700.
-- Cone Control awards Bronze at 38, Silver at 51, and Gold at all 57 cones.
+  score per cone, up to 6000.
+- Cone Control awards Bronze at 40, Silver at 54, and Gold at all 60 cones.
 - Completing the two laps marks the lesson complete and can unlock the next
   lesson regardless of trophy. The best trophy contributes one, two, or three
   trophy stars toward future gear, mods, cosmetics, or optional tracks.
@@ -66,7 +66,7 @@ camera, and plays one of five short composite impacts. Every impact layers a
 low body thump, midrange plastic knock, and restrained high crack so it feels
 full instead of chirpy. The pool changes each layer's tuning, filter, timbre,
 level, and stereo position and never repeats the same balance twice in a row.
-Each tenth cone escalates toward the chase camera; cone 57 receives the
+Each tenth cone escalates toward the chase camera; cone 60 receives the
 completion hit. Objective points and the trophy result reward mastery without
 turning contact into money or a speed buff.
 
@@ -108,17 +108,23 @@ sweepers to `±2`, then the long cone-free `+8` check. A long recovery straight,
 gentle `-3` bend, and second straight carry a cone setup line before the final
 `-8` hairpin. The setup deliberately places the car in the outside-right lane:
 even optimized ordinary steering loses the road, while left steering plus L1/Z
-holds the authored line. Straights separate the diagnostic, feedback, setup,
-and final application.
+balances the car against the curve and holds one fixed right-lane cone line.
+The stock car is not asked to cross the road mid-hairpin; tighter line changes
+belong to future steering and airbrake upgrades. Straights separate the
+diagnostic, feedback, setup, and final application.
 There is no dirt, elevation test, nitro, zipper, ramp, or rock.
 
-Fifty-seven cones form six recognizable traffic-control phrases instead of
+Sixty cones form seven recognizable traffic-control phrases instead of
 identical gates: an eight-cone straight smash line, an eight-cone merge taper,
-two four-cone staggered work-zone lines, a nine-cone left-to-right transfer, a
-twelve-cone outside-lane setup, and a twelve-cone hairpin sweep.
+two four-cone staggered work-zone lines, a three-cone choice fork, a nine-cone
+left-to-right transfer, a twelve-cone outside-lane setup, and a twelve-cone
+right-lane hairpin line. The fork has one center entry followed by left and
+right cones at the same distance; collision width makes them mutually exclusive
+on one pass, guaranteeing a meaningful target for lap two.
 Small offset changes in the straight, taper, and setup reward ordinary steering
 rather than demanding an airbrake on every read. The transfer invites L1/R1;
-the final hairpin validates left steering plus L1/Z under real corner pressure.
+the final hairpin validates left steering plus L1/Z under real corner pressure
+without demanding an unsupported cross-track sweep.
 
 The staggered work-zone section interleaves four cones on each side. Its seven-
 segment spacing makes switching sides after every cone impractical, but the
@@ -131,9 +137,10 @@ build route memory and attribute improvement to their own control.
 **Active playtest response:** the earlier short diagnostic could be bypassed by
 entering on the right, and its immediate cone turn did not leave enough time to
 observe failure. The length-32 diagnostic is protected by a right-lane handling
-test. Twelve setup cones and twelve hairpin cones now create a full play sector
-between diagnosis and final application. Continue measuring second-lap density;
-the added line should create meaningful cleanup, not merely raise the count.
+test. The explicit two-lane fork guarantees a lap-two choice, while twelve setup
+cones and twelve fixed-lane hairpin cones create a full play sector between
+diagnosis and final application. Continue measuring second-lap density; the
+added line should create meaningful cleanup, not merely raise the count.
 
 ## Lesson 2: Hazard Weave
 
@@ -208,19 +215,19 @@ A training course uses stable IDs so objective progress survives lap wraps:
       "id": "cone-sweep",
       "type": "hit_all",
       "target": "cone",
-      "label": "HIT ALL 57 CONES",
+      "label": "HIT ALL 60 CONES",
       "hudLabel": "HIT CONES",
       "pointsPerUnit": 100
     }
   ],
   "scoring": {
     "type": "trophy",
-    "version": 2,
+    "version": 3,
     "objective": "cone-sweep",
     "thresholds": [
-      { "rank": "gold", "minimum": 57, "stars": 3 },
-      { "rank": "silver", "minimum": 51, "stars": 2 },
-      { "rank": "bronze", "minimum": 38, "stars": 1 }
+      { "rank": "gold", "minimum": 60, "stars": 3 },
+      { "rank": "silver", "minimum": 54, "stars": 2 },
+      { "rank": "bronze", "minimum": 40, "stars": 1 }
     ]
   },
   "objects": [

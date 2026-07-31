@@ -202,7 +202,7 @@ test('training is the longer cone-only version of the story proving ground', () 
   assert.deepEqual(trainingLoop.pieces, trainingValidation.pieces);
   assert.equal(trainingLoop.laps, 2);
   assert.equal(trainingLoop.finish, 'laps');
-  assert.equal(trainingLoop.objects.length, 57);
+  assert.equal(trainingLoop.objects.length, 60);
 
   const model = new RoadModel(TUNING);
   model.buildFromData(trainingLoop);
@@ -256,18 +256,29 @@ test('Cone Control separates its diagnostic from the cone-lined final hairpin', 
   assert.ok(setup.every((object) => object.at > 962 && object.at < 1194));
   assert.ok(hairpin.every((object) => object.at >= 1194 && object.at < 1278));
   assert.ok(setup.at(-1).offset > 0.5, 'setup line should stage the outside lane');
-  assert.ok(hairpin.at(-1).offset < 0, 'hairpin line should sweep through the bend');
+  assert.ok(
+    hairpin.every((object) => object.offset === 0.57),
+    'hairpin cones should hold one collectible right-lane line',
+  );
 });
 
 test('training uses varied cone lines and preserves missed targets for lap two', () => {
   const model = new RoadModel(TUNING);
   model.buildFromData(trainingLoop);
-  assert.equal(new Set(trainingLoop.objects.map((object) => object.at)).size, 57);
+  assert.equal(new Set(trainingLoop.objects.map((object) => object.at)).size, 59);
   assert.deepEqual(
-    ['straight-', 'taper-', 'corridor-', 'transfer-', 'setup-', 'hairpin-'].map(
+    ['straight-', 'taper-', 'corridor-', 'fork-', 'transfer-', 'setup-', 'hairpin-'].map(
       (prefix) => trainingLoop.objects.filter((object) => object.id.startsWith(prefix)).length,
     ),
-    [8, 8, 8, 9, 12, 12],
+    [8, 8, 8, 3, 9, 12, 12],
+  );
+
+  const fork = trainingLoop.objects.filter((object) => object.id.startsWith('fork-'));
+  assert.equal(fork[0].offset, 0, 'fork should show one readable entry cone');
+  assert.deepEqual(
+    fork.slice(1).map((object) => [object.at, object.offset]),
+    [[548, -0.55], [548, 0.55]],
+    'the split should leave one unreachable same-segment cone for lap two',
   );
 
   const corridor = trainingLoop.objects.filter((object) => object.id.startsWith('corridor-'));
@@ -288,7 +299,7 @@ test('training uses varied cone lines and preserves missed targets for lap two',
   cones.filter((cone) => !['taper-03', 'hairpin-04'].includes(cone.trackObjectId))
     .forEach((cone) => { cone.hit = true; });
   model.resetLapSprites();
-  assert.equal(cones.filter((cone) => cone.hit).length, 55);
+  assert.equal(cones.filter((cone) => cone.hit).length, 58);
   assert.deepEqual(
     cones.filter((cone) => !cone.hit).map((cone) => cone.trackObjectId),
     ['taper-03', 'hairpin-04'],

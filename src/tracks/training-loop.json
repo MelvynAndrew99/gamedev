@@ -4,10 +4,10 @@
   "seed": 1101,
   "laps": 2,
   "finish": "laps",
-  "intro": "Clear 57 cones in 2 laps. Stay on the road and follow the cone lines.",
+  "intro": "Clear 60 cones in 2 laps. Stay on the road and follow the cone lines.",
   "design": {
     "focus": "Steer smoothly through inviting traffic-control lines, demonstrate the long clean airbrake bend, then follow the cone setup into an outside-lane airbrake hairpin.",
-    "routeMeaning": "Most cones can be collected on either lap. A staggered two-line work zone leaves a complementary route for lap two without demanding two perfect laps."
+    "routeMeaning": "Most cones can be collected on either lap. A staggered work zone and an explicit same-segment fork leave complementary targets for lap two without demanding two perfect laps."
   },
   "trainingCues": [
     {
@@ -28,19 +28,19 @@
       "id": "cone-sweep",
       "type": "hit_all",
       "target": "cone",
-      "label": "HIT ALL 57 CONES",
+      "label": "HIT ALL 60 CONES",
       "hudLabel": "HIT CONES",
       "pointsPerUnit": 100
     }
   ],
   "scoring": {
     "type": "trophy",
-    "version": 2,
+    "version": 3,
     "objective": "cone-sweep",
     "thresholds": [
-      { "rank": "gold", "minimum": 57, "stars": 3 },
-      { "rank": "silver", "minimum": 51, "stars": 2 },
-      { "rank": "bronze", "minimum": 38, "stars": 1 }
+      { "rank": "gold", "minimum": 60, "stars": 3 },
+      { "rank": "silver", "minimum": 54, "stars": 2 },
+      { "rank": "bronze", "minimum": 40, "stars": 1 }
     ]
   },
   "objects": [
@@ -71,6 +71,10 @@
     { "id": "corridor-left-04", "at": 462, "kind": "cone", "offset": -0.5, "objective": "cone-sweep" },
     { "id": "corridor-right-04", "at": 469, "kind": "cone", "offset": 0.5, "objective": "cone-sweep" },
 
+    { "id": "fork-entry", "at": 520, "kind": "cone", "offset": 0, "objective": "cone-sweep" },
+    { "id": "fork-left", "at": 548, "kind": "cone", "offset": -0.55, "objective": "cone-sweep" },
+    { "id": "fork-right", "at": 548, "kind": "cone", "offset": 0.55, "objective": "cone-sweep" },
+
     { "id": "transfer-left-01", "at": 610, "kind": "cone", "offset": -0.58, "objective": "cone-sweep" },
     { "id": "transfer-left-02", "at": 622, "kind": "cone", "offset": -0.52, "objective": "cone-sweep" },
     { "id": "transfer-left-03", "at": 634, "kind": "cone", "offset": -0.46, "objective": "cone-sweep" },
@@ -94,18 +98,18 @@
     { "id": "setup-11", "at": 1170, "kind": "cone", "offset": 0.55, "objective": "cone-sweep" },
     { "id": "setup-12", "at": 1180, "kind": "cone", "offset": 0.58, "objective": "cone-sweep" },
 
-    { "id": "hairpin-01", "at": 1196, "kind": "cone", "offset": 0.58, "objective": "cone-sweep" },
-    { "id": "hairpin-02", "at": 1203, "kind": "cone", "offset": 0.52, "objective": "cone-sweep" },
-    { "id": "hairpin-03", "at": 1210, "kind": "cone", "offset": 0.42, "objective": "cone-sweep" },
-    { "id": "hairpin-04", "at": 1217, "kind": "cone", "offset": 0.3, "objective": "cone-sweep" },
-    { "id": "hairpin-05", "at": 1224, "kind": "cone", "offset": 0.16, "objective": "cone-sweep" },
-    { "id": "hairpin-06", "at": 1231, "kind": "cone", "offset": 0.02, "objective": "cone-sweep" },
-    { "id": "hairpin-07", "at": 1238, "kind": "cone", "offset": -0.12, "objective": "cone-sweep" },
-    { "id": "hairpin-08", "at": 1245, "kind": "cone", "offset": -0.26, "objective": "cone-sweep" },
-    { "id": "hairpin-09", "at": 1252, "kind": "cone", "offset": -0.4, "objective": "cone-sweep" },
-    { "id": "hairpin-10", "at": 1259, "kind": "cone", "offset": -0.52, "objective": "cone-sweep" },
-    { "id": "hairpin-11", "at": 1266, "kind": "cone", "offset": -0.42, "objective": "cone-sweep" },
-    { "id": "hairpin-12", "at": 1273, "kind": "cone", "offset": -0.3, "objective": "cone-sweep" }
+    { "id": "hairpin-01", "at": 1196, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-02", "at": 1203, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-03", "at": 1210, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-04", "at": 1217, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-05", "at": 1224, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-06", "at": 1231, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-07", "at": 1238, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-08", "at": 1245, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-09", "at": 1252, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-10", "at": 1259, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-11", "at": 1266, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-12", "at": 1273, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" }
   ],
   "pieces": [
     ["straight", 40],

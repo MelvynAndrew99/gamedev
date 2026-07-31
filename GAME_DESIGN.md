@@ -98,10 +98,10 @@ the detailed curriculum and level contract live in
 [training_levels.md](./training_levels.md). Cone Control is the first lesson:
 cone-only, asphalt-only, and a fixed two-lap scored attempt. Its cone layout uses
 straight runs, gentle tapers, a staggered two-route work zone, one airbrake
-transfer, a clean `+8` diagnostic hairpin, a performance-gated airbrake assist,
-a cone-filled recovery/setup sector, and an outside-lane `-8` cone hairpin.
-Competent players are never paused. Missed cones persist for lap two and lower
-the trophy if they remain at finish.
+transfer, an explicit two-lane lap-choice fork, a clean `+8` diagnostic hairpin,
+a performance-gated airbrake assist, a cone-filled recovery/setup sector, and a
+fixed right-lane `-8` cone hairpin. Competent players are never paused. Missed
+cones persist for lap two and lower the trophy if they remain at finish.
 
 Hazard Weave is Training Level 2. Cone breadcrumbs thread six open lanes between
 rock pairs. Rock contact adds one of four persistent camera-glass crack stages

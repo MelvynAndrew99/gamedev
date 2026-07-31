@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { OBSTACLES } from '../config/obstacles.js';
 import { TUNING } from '../config/tuning.js';
 import { RoadModel } from '../road/RoadModel.js';
 import { Player } from './Player.js';
@@ -65,6 +66,16 @@ const steerWithShoulder = (direction, player) => {
   };
 };
 
+const holdRightLaneWithLeftShoulder = (_direction, player) => {
+  // Aim slightly inside the cone center so the shoulder input counters the
+  // hairpin's outward push instead of crossing the road to chase each cone.
+  const correcting = player.x > 0.44;
+  return {
+    steer: correcting ? -1 : 0,
+    airbrakeL: correcting,
+  };
+};
+
 test('Cone Control diagnostic defeats the right-lane stick-only bypass', () => {
   const piece = (road) => road.addCurve(32, 8);
   for (const startX of [0.5, 0.65, 0.85]) {
@@ -88,14 +99,21 @@ test('Cone Control final hairpin requires steering plus the matching shoulder', 
   for (const startX of [0.44, 0.58]) {
     for (const speed of [0.8, 1]) {
       const stickOnly = drive(piece, optimizedStick, { startX, speed });
-      const withShoulder = drive(piece, steerWithShoulder, { startX, speed });
+      const withShoulder = drive(
+        piece,
+        holdRightLaneWithLeftShoulder,
+        { startX, speed },
+      );
+      const coneCenter = 0.57;
+      const collisionHalfWidth = TUNING.playerW + OBSTACLES.cone.w;
       assert.ok(
         stickOnly.maximumX > 1,
         `stick-only should fail from x=${startX} at ${speed * 100}% speed`,
       );
       assert.ok(
-        withShoulder.minimumX > -1 && withShoulder.maximumX < 1,
-        `left steering plus L1/Z should pass from x=${startX} at ${speed * 100}% speed`,
+        withShoulder.minimumX > coneCenter - collisionHalfWidth &&
+          withShoulder.maximumX < coneCenter + collisionHalfWidth,
+        `left steering plus L1/Z should hold every right-lane cone from x=${startX} at ${speed * 100}% speed`,
       );
     }
   }
