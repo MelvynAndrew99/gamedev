@@ -7,6 +7,11 @@
   "design": {
     "focus": "Manage momentum through elevation, dirt, and medium-speed direction changes."
   },
+  "objectives": [
+    { "id": "finish", "type": "complete_laps", "value": 3, "label": "FINISH 3 LAPS", "points": 1000 },
+    { "id": "ramps", "type": "count_event", "event": "ramp_hit", "value": 3, "label": "HIT 3 RAMPS", "points": 750 },
+    { "id": "zippers", "type": "count_event", "event": "zipper_hit", "value": 5, "label": "CROSS 5 SPEED LINES", "points": 750 }
+  ],
   "patterns": {
     "startClear": 75,
     "finishClear": 55,

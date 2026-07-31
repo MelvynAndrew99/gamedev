@@ -1,0 +1,114 @@
+{
+  "id": "training-hazard-weave",
+  "name": "HAZARD WEAVE",
+  "seed": 1102,
+  "laps": 2,
+  "finish": "laps",
+  "music": "training-loop",
+  "environment": "training-loop",
+  "intro": "Smash the cone line between the rocks. Rock hits crack the windscreen but never end training.",
+  "design": {
+    "focus": "Read a safe lane early, collect its cone breadcrumbs, and avoid the rock payload.",
+    "damageMeaning": "Four crack stages teach damage without slowing, wrecking, or restarting the player. Damage affects trophies only."
+  },
+  "trainingDamage": {
+    "maxHits": 4,
+    "display": "camera-cracks",
+    "penalty": "trophy-only"
+  },
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": false
+  },
+  "objectives": [
+    {
+      "id": "safe-line",
+      "type": "hit_all",
+      "target": "cone",
+      "label": "SMASH ALL 24 CONES",
+      "hudLabel": "SMASH CONES",
+      "pointsPerUnit": 100
+    },
+    {
+      "id": "finish",
+      "type": "complete_laps",
+      "value": 2,
+      "label": "FINISH 2 LAPS",
+      "hudLabel": "FINISH",
+      "points": 1000
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 1,
+    "objective": "safe-line",
+    "thresholds": [
+      { "rank": "gold", "minimum": 24, "maximumDamageHits": 0, "stars": 3 },
+      { "rank": "silver", "minimum": 20, "maximumDamageHits": 1, "stars": 2 },
+      { "rank": "bronze", "minimum": 16, "maximumDamageHits": 3, "stars": 1 }
+    ]
+  },
+  "objects": [
+    { "id": "line-01-a", "at": 135, "kind": "cone", "offset": 0.18, "objective": "safe-line" },
+    { "id": "line-01-b", "at": 147, "kind": "cone", "offset": 0.08, "objective": "safe-line" },
+    { "id": "line-01-c", "at": 159, "kind": "cone", "offset": 0, "objective": "safe-line" },
+    { "id": "rocks-01-left", "at": 180, "kind": "rock", "offset": -0.68 },
+    { "id": "line-01-gate", "at": 180, "kind": "cone", "offset": 0, "objective": "safe-line" },
+    { "id": "rocks-01-right", "at": 180, "kind": "rock", "offset": 0.68 },
+
+    { "id": "line-02-a", "at": 295, "kind": "cone", "offset": 0.2, "objective": "safe-line" },
+    { "id": "line-02-b", "at": 307, "kind": "cone", "offset": 0.35, "objective": "safe-line" },
+    { "id": "line-02-c", "at": 319, "kind": "cone", "offset": 0.5, "objective": "safe-line" },
+    { "id": "rocks-02-left", "at": 340, "kind": "rock", "offset": -0.68 },
+    { "id": "rocks-02-center", "at": 340, "kind": "rock", "offset": 0 },
+    { "id": "line-02-gate", "at": 340, "kind": "cone", "offset": 0.58, "objective": "safe-line" },
+
+    { "id": "line-03-a", "at": 455, "kind": "cone", "offset": -0.2, "objective": "safe-line" },
+    { "id": "line-03-b", "at": 467, "kind": "cone", "offset": -0.35, "objective": "safe-line" },
+    { "id": "line-03-c", "at": 479, "kind": "cone", "offset": -0.5, "objective": "safe-line" },
+    { "id": "line-03-gate", "at": 500, "kind": "cone", "offset": -0.58, "objective": "safe-line" },
+    { "id": "rocks-03-center", "at": 500, "kind": "rock", "offset": 0 },
+    { "id": "rocks-03-right", "at": 500, "kind": "rock", "offset": 0.68 },
+
+    { "id": "line-04-a", "at": 615, "kind": "cone", "offset": -0.16, "objective": "safe-line" },
+    { "id": "line-04-b", "at": 627, "kind": "cone", "offset": -0.06, "objective": "safe-line" },
+    { "id": "line-04-c", "at": 639, "kind": "cone", "offset": 0, "objective": "safe-line" },
+    { "id": "rocks-04-left", "at": 660, "kind": "rock", "offset": -0.68 },
+    { "id": "line-04-gate", "at": 660, "kind": "cone", "offset": 0, "objective": "safe-line" },
+    { "id": "rocks-04-right", "at": 660, "kind": "rock", "offset": 0.68 },
+
+    { "id": "line-05-a", "at": 775, "kind": "cone", "offset": 0.2, "objective": "safe-line" },
+    { "id": "line-05-b", "at": 787, "kind": "cone", "offset": 0.35, "objective": "safe-line" },
+    { "id": "line-05-c", "at": 799, "kind": "cone", "offset": 0.5, "objective": "safe-line" },
+    { "id": "rocks-05-left", "at": 820, "kind": "rock", "offset": -0.68 },
+    { "id": "rocks-05-center", "at": 820, "kind": "rock", "offset": 0 },
+    { "id": "line-05-gate", "at": 820, "kind": "cone", "offset": 0.58, "objective": "safe-line" },
+
+    { "id": "line-06-a", "at": 1107, "kind": "cone", "offset": -0.2, "objective": "safe-line" },
+    { "id": "line-06-b", "at": 1119, "kind": "cone", "offset": -0.35, "objective": "safe-line" },
+    { "id": "line-06-c", "at": 1131, "kind": "cone", "offset": -0.5, "objective": "safe-line" },
+    { "id": "line-06-gate", "at": 1160, "kind": "cone", "offset": -0.58, "objective": "safe-line" },
+    { "id": "rocks-06-center", "at": 1160, "kind": "rock", "offset": 0 },
+    { "id": "rocks-06-right", "at": 1160, "kind": "rock", "offset": 0.68 }
+  ],
+  "pieces": [
+    ["straight", 40],
+    ["curve", 32, -1],
+    ["straight", 22],
+    ["curve", 36, 1],
+    ["straight", 28],
+    ["curve", 36, -2],
+    ["straight", 24],
+    ["curve", 40, 2],
+    ["straight", 28],
+    ["curve", 32, 8],
+    ["straight", 32],
+    ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
+    ["straight", 40]
+  ],
+  "obstacles": 0,
+  "par": 2
+}

@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 
 import { TUNING } from '../config/tuning.js';
 import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
+import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
+import trainingTopSpeed from '../tracks/training-top-speed.json' with { type: 'json' };
+import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
+import trainingValidation from '../tracks/training-validation.json' with { type: 'json' };
 import neonGulch from '../tracks/neon-gulch.json' with { type: 'json' };
 import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
 import { RoadModel } from './RoadModel.js';
@@ -28,7 +32,7 @@ test('campaign decoration is deterministic for a track seed', () => {
 
 test('lap reset re-arms interactive sprites without changing layout', () => {
   const model = new RoadModel(TUNING);
-  model.buildFromData(trainingLoop);
+  model.buildFromData(trainingValidation);
   const sprite = model.segments.flatMap((segment) => segment.sprites)
     .find((candidate) => candidate.def);
 
@@ -39,7 +43,7 @@ test('lap reset re-arms interactive sprites without changing layout', () => {
 });
 
 test('cones never appear to announce ground boosts', () => {
-  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+  for (const track of [trainingLoop, trainingValidation, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
 
@@ -58,7 +62,7 @@ test('cones never appear to announce ground boosts', () => {
 });
 
 test('cones announce rocks, never ramps', () => {
-  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+  for (const track of [trainingValidation, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
 
@@ -78,7 +82,7 @@ test('cones announce rocks, never ramps', () => {
 });
 
 test('every ramp remains a raised sprite with a same-lane painted approach', () => {
-  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+  for (const track of [trainingValidation, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
 
@@ -99,7 +103,7 @@ test('every ramp remains a raised sprite with a same-lane painted approach', () 
 });
 
 test('zipper paint never overlaps a ramp approach in the same lane', () => {
-  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+  for (const track of [trainingValidation, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
 
@@ -119,7 +123,7 @@ test('zipper paint never overlaps a ramp approach in the same lane', () => {
 });
 
 test('every campaign track gets a start/finish gate and painted line', () => {
-  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+  for (const track of [trainingLoop, trainingValidation, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
 
@@ -137,7 +141,7 @@ test('every campaign track gets a start/finish gate and painted line', () => {
 });
 
 test('campaign tracks stamp their authored precision-driving sequence', () => {
-  for (const track of [trainingLoop, neonGulch, syndicateRun]) {
+  for (const track of [trainingValidation, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
 
@@ -151,9 +155,12 @@ test('campaign tracks stamp their authored precision-driving sequence', () => {
   }
 });
 
-test('campaign geometry escalates precision while preserving recovery beats', () => {
-  const tracks = [trainingLoop, neonGulch, syndicateRun];
-  const expectedMaxCurve = [3, 5, 7];
+test('campaign geometry preserves recovery beats around authored skill checks', () => {
+  const tracks = [trainingValidation, neonGulch, syndicateRun];
+  // Proving Ground repeats Training's isolated shoulder-button gate. Its
+  // single +8 hairpin is sharper than later races' individual bends; those
+  // races escalate through tighter decision spacing and compound pressure.
+  const expectedMaxCurve = [8, 5, 7];
   const models = tracks.map((track) => {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
@@ -165,7 +172,7 @@ test('campaign geometry escalates precision while preserving recovery beats', ()
     expectedMaxCurve
   );
   assert.ok(
-    minimumPlacementGap(trainingLoop) >
+    minimumPlacementGap(trainingValidation) >
     minimumPlacementGap(neonGulch) &&
     minimumPlacementGap(neonGulch) >
     minimumPlacementGap(syndicateRun),
@@ -189,6 +196,146 @@ test('campaign geometry escalates precision while preserving recovery beats', ()
       );
     }
   }
+});
+
+test('training is the longer cone-only version of the story proving ground', () => {
+  assert.deepEqual(trainingLoop.pieces, trainingValidation.pieces);
+  assert.equal(trainingLoop.laps, 2);
+  assert.equal(trainingLoop.finish, 'laps');
+  assert.equal(trainingLoop.objects.length, 60);
+
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingLoop);
+  assert.ok(model.segments.length >= 1100, 'training lap should have room to settle between reads');
+
+  const interactive = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.def);
+  assert.equal(interactive.length, trainingLoop.objects.length);
+  assert.ok(interactive.every((sprite) => sprite.key === 'cone'));
+  assert.ok(interactive.every((sprite) => sprite.objectiveId === 'cone-sweep'));
+  assert.ok(model.segments.every((segment) => !segment.zipper && !segment.launchApproach));
+});
+
+test('Cone Control separates its diagnostic from the cone-lined final hairpin', () => {
+  assert.deepEqual(trainingLoop.pieces.slice(-6), [
+    ['curve', 32, 8],
+    ['straight', 32],
+    ['curve', 30, -3],
+    ['straight', 18],
+    ['curve', 28, -8],
+    ['straight', 40],
+  ]);
+  assert.deepEqual(trainingLoop.trainingCues, [
+    {
+      id: 'airbrake-hairpin',
+      kind: 'airbrake-rehearsal',
+      lap: 1,
+      diagnostic: { from: 858, to: 962 },
+      at: 962,
+    },
+  ]);
+
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingLoop);
+  const diagnostic = model.segments.slice(858, 954);
+  const challenge = model.segments.slice(1194, 1278);
+  assert.equal(Math.max(...diagnostic.map((segment) => segment.curve)), 8);
+  assert.equal(Math.min(...challenge.map((segment) => segment.curve)), -8);
+  assert.equal(
+    trainingLoop.objects.filter(
+      (object) => object.at >= 858 && object.at <= 981,
+    ).length,
+    0,
+    'diagnostic and recovery need clean road',
+  );
+  assert.ok(trainingLoop.trainingCues[0].at < 982, 'assist needs recovery road');
+  const setup = trainingLoop.objects.filter((object) => object.id.startsWith('setup-'));
+  const hairpin = trainingLoop.objects.filter((object) => object.id.startsWith('hairpin-'));
+  assert.equal(setup.length, 12);
+  assert.equal(hairpin.length, 12);
+  assert.ok(setup.every((object) => object.at > 962 && object.at < 1194));
+  assert.ok(hairpin.every((object) => object.at >= 1194 && object.at < 1278));
+  assert.ok(setup.at(-1).offset > 0.5, 'setup line should stage the outside lane');
+  assert.ok(
+    hairpin.every((object) => object.offset === 0.57),
+    'hairpin cones should hold one collectible right-lane line',
+  );
+});
+
+test('training uses varied cone lines and preserves missed targets for lap two', () => {
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingLoop);
+  assert.equal(new Set(trainingLoop.objects.map((object) => object.at)).size, 59);
+  assert.deepEqual(
+    ['straight-', 'taper-', 'corridor-', 'fork-', 'transfer-', 'setup-', 'hairpin-'].map(
+      (prefix) => trainingLoop.objects.filter((object) => object.id.startsWith(prefix)).length,
+    ),
+    [8, 8, 8, 3, 9, 12, 12],
+  );
+
+  const fork = trainingLoop.objects.filter((object) => object.id.startsWith('fork-'));
+  assert.equal(fork[0].offset, 0, 'fork should show one readable entry cone');
+  assert.deepEqual(
+    fork.slice(1).map((object) => [object.at, object.offset]),
+    [[548, -0.55], [548, 0.55]],
+    'the split should leave one unreachable same-segment cone for lap two',
+  );
+
+  const corridor = trainingLoop.objects.filter((object) => object.id.startsWith('corridor-'));
+  assert.ok(corridor.slice(1).every((object, index) => object.at - corridor[index].at === 7));
+  assert.ok(corridor.slice(1).every(
+    (object, index) => Math.sign(object.offset) !== Math.sign(corridor[index].offset),
+  ));
+
+  for (const prefix of ['straight-', 'taper-', 'setup-']) {
+    const line = trainingLoop.objects.filter((object) => object.id.startsWith(prefix));
+    assert.ok(line.slice(1).every(
+      (object, index) => Math.abs(object.offset - line[index].offset) <= 0.151,
+    ), `${prefix} should be a gentle steering line`);
+  }
+
+  const cones = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.objectiveId === 'cone-sweep');
+  cones.filter((cone) => !['taper-03', 'hairpin-04'].includes(cone.trackObjectId))
+    .forEach((cone) => { cone.hit = true; });
+  model.resetLapSprites();
+  assert.equal(cones.filter((cone) => cone.hit).length, 58);
+  assert.deepEqual(
+    cones.filter((cone) => !cone.hit).map((cone) => cone.trackObjectId),
+    ['taper-03', 'hairpin-04'],
+  );
+});
+
+test('Hazard Weave reuses the loop and places target cones through six rock gates', () => {
+  assert.deepEqual(trainingHazardWeave.pieces, trainingLoop.pieces);
+  assert.equal(trainingHazardWeave.trainingDamage.maxHits, 4);
+
+  const cones = trainingHazardWeave.objects.filter((object) => object.kind === 'cone');
+  const rocks = trainingHazardWeave.objects.filter((object) => object.kind === 'rock');
+  assert.equal(cones.length, 24);
+  assert.equal(rocks.length, 12);
+  assert.ok(cones.every((cone) => cone.objective === 'safe-line'));
+  assert.ok(rocks.every((rock) => rock.objective == null));
+
+  for (const segment of [180, 340, 500, 660, 820, 1160]) {
+    const gate = trainingHazardWeave.objects.filter((object) => object.at === segment);
+    assert.equal(gate.filter((object) => object.kind === 'cone').length, 1);
+    assert.equal(gate.filter((object) => object.kind === 'rock').length, 2);
+  }
+});
+
+test('staged speed and airtime lessons preserve the shared loop geometry', () => {
+  for (const track of [trainingTopSpeed, trainingAirtime]) {
+    assert.equal(track.status, 'placeholder', track.id);
+    assert.deepEqual(track.pieces, trainingLoop.pieces, track.id);
+  }
+
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingAirtime);
+  const ramps = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.key === 'ramp');
+  assert.equal(ramps.length, 4);
+  assert.ok(model.segments.some((segment) => segment.launchApproach));
 });
 
 function minimumPlacementGap(track) {

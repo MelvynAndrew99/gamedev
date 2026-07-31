@@ -7,7 +7,7 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { GarageScene } from './scenes/GarageScene.js';
-import { TRACKS } from './tracks/index.js';
+import { TRACKS, TRAINING_TRACKS } from './tracks/index.js';
 import { RACER } from './systems/RacerState.js';
 
 const config = {
@@ -37,10 +37,17 @@ const game = new Phaser.Game(config);
 // jump — that's the whole point of a "tweak without recoding" panel.
 const trackSelect = document.getElementById('trackSelect');
 if (trackSelect) {
+  TRAINING_TRACKS.forEach((track, i) => {
+    const opt = document.createElement('option');
+    opt.value = `training:${i}`;
+    opt.textContent = `TRAINING — ${track.name}` +
+      (track.status === 'placeholder' ? ' [STAGED]' : '');
+    trackSelect.appendChild(opt);
+  });
   TRACKS.forEach((track, i) => {
     const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = track.name;
+    opt.value = `story:${i}`;
+    opt.textContent = `STORY — ${track.name}`;
     trackSelect.appendChild(opt);
   });
   const endlessOpt = document.createElement('option');
@@ -51,9 +58,10 @@ if (trackSelect) {
   trackSelect.addEventListener('change', () => {
     RACER.resetRun(); // fresh car for the jump, same as picking it from the title menu
     game.scene.getScenes(true).forEach((scene) => game.scene.stop(scene.scene.key));
-    const data = trackSelect.value === 'endless'
+    const [mode, index] = trackSelect.value.split(':');
+    const data = mode === 'endless'
       ? { mode: 'endless' }
-      : { mode: 'story', trackIndex: Number(trackSelect.value) };
+      : { mode, trackIndex: Number(index) };
     game.scene.start('GameScene', data);
   });
 }

@@ -1,0 +1,79 @@
+{
+  "id": "training-airtime",
+  "name": "AIR SCHOOL",
+  "status": "placeholder",
+  "seed": 1104,
+  "laps": 2,
+  "finish": "laps",
+  "music": "training-loop",
+  "environment": "training-loop",
+  "intro": "Commit to the gold runways, launch from the ramps, and stay airborne.",
+  "design": {
+    "focus": "Teach ramp readability, takeoff commitment, airborne steering, and safe landings.",
+    "placeholderNotes": "Tune airtime measurement, landing feedback, and trophy thresholds before enabling this track. Ramp placements are staged on the shared loop for the first playtest."
+  },
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": false
+  },
+  "objectives": [
+    {
+      "id": "airtime",
+      "type": "count_event",
+      "event": "ramp_hit",
+      "value": 4,
+      "label": "HIT 4 RAMPS",
+      "hudLabel": "RAMPS",
+      "pointsPerUnit": 250
+    },
+    {
+      "id": "finish",
+      "type": "complete_laps",
+      "value": 2,
+      "label": "FINISH 2 LAPS",
+      "hudLabel": "FINISH",
+      "points": 1000
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 1,
+    "objective": "airtime",
+    "thresholds": [
+      { "rank": "gold", "minimum": 4, "stars": 3 },
+      { "rank": "silver", "minimum": 3, "stars": 2 },
+      { "rank": "bronze", "minimum": 2, "stars": 1 }
+    ]
+  },
+  "patterns": {
+    "startClear": 90,
+    "finishClear": 90,
+    "placements": [
+      { "at": 170, "kind": "ramp" },
+      { "at": 410, "kind": "ramp" },
+      { "at": 650, "kind": "ramp" },
+      { "at": 1112, "kind": "ramp" }
+    ]
+  },
+  "objects": [],
+  "pieces": [
+    ["straight", 40],
+    ["curve", 32, -1],
+    ["straight", 22],
+    ["curve", 36, 1],
+    ["straight", 28],
+    ["curve", 36, -2],
+    ["straight", 24],
+    ["curve", 40, 2],
+    ["straight", 28],
+    ["curve", 32, 8],
+    ["straight", 32],
+    ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
+    ["straight", 40]
+  ],
+  "obstacles": 0.03,
+  "par": 2
+}

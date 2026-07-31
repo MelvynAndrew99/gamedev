@@ -3,12 +3,15 @@
 // string back (or null); presentation decisions stay in the scene.
 
 export class RaceState {
-  constructor(model, laps) {
+  constructor(model, laps, options = {}) {
     this.model = model;
     this.laps = laps;
+    this.finishOnLapLimit = options.finishOnLapLimit ?? true;
     this.lap = 1;
     this.time = 0;
     this.finished = false;
+    this.finishArmed = false;
+    this.completedLaps = 0;
     this.prevPos = 0;
     // The grid sits BEHIND the start/finish line (see TUNING.gridSetback), so
     // the very first crossing of the line is the START of lap 1, not a lap
@@ -30,8 +33,9 @@ export class RaceState {
         this.crossedStart = true; // rolling start: this crossing begins the race
         return 'start';
       }
+      this.completedLaps++;
       this.lap++;
-      if (this.lap > this.laps) {
+      if (this.finishArmed || (this.finishOnLapLimit && this.lap > this.laps)) {
         this.finished = true;
         return 'finished';
       }
@@ -39,6 +43,14 @@ export class RaceState {
     }
     this.prevPos = player.position;
     return null;
+  }
+
+  finish() {
+    this.finished = true;
+  }
+
+  armFinish() {
+    this.finishArmed = true;
   }
 }
 

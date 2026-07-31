@@ -1,37 +1,133 @@
 {
   "id": "training-loop",
-  "name": "TRAINING LOOP",
+  "name": "CONE CONTROL",
   "seed": 1101,
   "laps": 2,
-  "intro": "Read the lane. Choose your line. Make it clean.",
+  "finish": "laps",
+  "intro": "Clear 60 cones in 2 laps. Stay on the road and follow the cone lines.",
   "design": {
-    "focus": "Acquire a lane early, hold a clean arc, and recover before the next input."
+    "focus": "Steer smoothly through inviting traffic-control lines, demonstrate the long clean airbrake bend, then follow the cone setup into an outside-lane airbrake hairpin.",
+    "routeMeaning": "Most cones can be collected on either lap. A staggered work zone and an explicit same-segment fork leave complementary targets for lap two without demanding two perfect laps."
   },
-  "patterns": {
-    "startClear": 90,
-    "finishClear": 60,
-    "placements": [
-      { "at": 95, "kind": "rocks" },
-      { "at": 320, "kind": "ramp" },
-      { "at": 505, "kind": "gate" },
-      { "at": 713, "kind": "rampRocks" }
+  "trainingCues": [
+    {
+      "id": "airbrake-hairpin",
+      "kind": "airbrake-rehearsal",
+      "lap": 1,
+      "diagnostic": { "from": 858, "to": 962 },
+      "at": 962
+    }
+  ],
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": false
+  },
+  "objectives": [
+    {
+      "id": "cone-sweep",
+      "type": "hit_all",
+      "target": "cone",
+      "label": "HIT ALL 60 CONES",
+      "hudLabel": "HIT CONES",
+      "pointsPerUnit": 100
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 3,
+    "objective": "cone-sweep",
+    "thresholds": [
+      { "rank": "gold", "minimum": 60, "stars": 3 },
+      { "rank": "silver", "minimum": 54, "stars": 2 },
+      { "rank": "bronze", "minimum": 40, "stars": 1 }
     ]
   },
-  "pieces": [
-    ["straight", 30],
-    ["curve", 22, -2],
-    ["straight", 14],
-    ["curve", 22, 2],
-    ["straight", 18],
-    ["hill", 20, 3],
-    ["straight", 18],
-    ["curve", 24, -3, -2],
-    ["straight", 14],
-    ["chicane", 14, 3],
-    ["straight", 20],
-    ["dirt", 14],
-    ["straight", 30]
+  "objects": [
+    { "id": "straight-01", "at": 80, "kind": "cone", "offset": -0.1, "objective": "cone-sweep" },
+    { "id": "straight-02", "at": 92, "kind": "cone", "offset": -0.05, "objective": "cone-sweep" },
+    { "id": "straight-03", "at": 104, "kind": "cone", "offset": 0, "objective": "cone-sweep" },
+    { "id": "straight-04", "at": 116, "kind": "cone", "offset": 0.05, "objective": "cone-sweep" },
+    { "id": "straight-05", "at": 128, "kind": "cone", "offset": 0.1, "objective": "cone-sweep" },
+    { "id": "straight-06", "at": 140, "kind": "cone", "offset": 0.15, "objective": "cone-sweep" },
+    { "id": "straight-07", "at": 152, "kind": "cone", "offset": 0.1, "objective": "cone-sweep" },
+    { "id": "straight-08", "at": 164, "kind": "cone", "offset": 0.05, "objective": "cone-sweep" },
+
+    { "id": "taper-01", "at": 240, "kind": "cone", "offset": -0.5, "objective": "cone-sweep" },
+    { "id": "taper-02", "at": 252, "kind": "cone", "offset": -0.38, "objective": "cone-sweep" },
+    { "id": "taper-03", "at": 264, "kind": "cone", "offset": -0.26, "objective": "cone-sweep" },
+    { "id": "taper-04", "at": 276, "kind": "cone", "offset": -0.14, "objective": "cone-sweep" },
+    { "id": "taper-05", "at": 288, "kind": "cone", "offset": 0, "objective": "cone-sweep" },
+    { "id": "taper-06", "at": 300, "kind": "cone", "offset": 0.1, "objective": "cone-sweep" },
+    { "id": "taper-07", "at": 312, "kind": "cone", "offset": 0.2, "objective": "cone-sweep" },
+    { "id": "taper-08", "at": 324, "kind": "cone", "offset": 0.3, "objective": "cone-sweep" },
+
+    { "id": "corridor-left-01", "at": 420, "kind": "cone", "offset": -0.48, "objective": "cone-sweep" },
+    { "id": "corridor-right-01", "at": 427, "kind": "cone", "offset": 0.48, "objective": "cone-sweep" },
+    { "id": "corridor-left-02", "at": 434, "kind": "cone", "offset": -0.5, "objective": "cone-sweep" },
+    { "id": "corridor-right-02", "at": 441, "kind": "cone", "offset": 0.5, "objective": "cone-sweep" },
+    { "id": "corridor-left-03", "at": 448, "kind": "cone", "offset": -0.48, "objective": "cone-sweep" },
+    { "id": "corridor-right-03", "at": 455, "kind": "cone", "offset": 0.48, "objective": "cone-sweep" },
+    { "id": "corridor-left-04", "at": 462, "kind": "cone", "offset": -0.5, "objective": "cone-sweep" },
+    { "id": "corridor-right-04", "at": 469, "kind": "cone", "offset": 0.5, "objective": "cone-sweep" },
+
+    { "id": "fork-entry", "at": 520, "kind": "cone", "offset": 0, "objective": "cone-sweep" },
+    { "id": "fork-left", "at": 548, "kind": "cone", "offset": -0.55, "objective": "cone-sweep" },
+    { "id": "fork-right", "at": 548, "kind": "cone", "offset": 0.55, "objective": "cone-sweep" },
+
+    { "id": "transfer-left-01", "at": 610, "kind": "cone", "offset": -0.58, "objective": "cone-sweep" },
+    { "id": "transfer-left-02", "at": 622, "kind": "cone", "offset": -0.52, "objective": "cone-sweep" },
+    { "id": "transfer-left-03", "at": 634, "kind": "cone", "offset": -0.46, "objective": "cone-sweep" },
+    { "id": "transfer-right-01", "at": 674, "kind": "cone", "offset": 0.46, "objective": "cone-sweep" },
+    { "id": "transfer-right-02", "at": 686, "kind": "cone", "offset": 0.52, "objective": "cone-sweep" },
+    { "id": "transfer-right-03", "at": 698, "kind": "cone", "offset": 0.58, "objective": "cone-sweep" },
+    { "id": "transfer-right-04", "at": 710, "kind": "cone", "offset": 0.52, "objective": "cone-sweep" },
+    { "id": "transfer-right-05", "at": 722, "kind": "cone", "offset": 0.46, "objective": "cone-sweep" },
+    { "id": "transfer-right-06", "at": 734, "kind": "cone", "offset": 0.4, "objective": "cone-sweep" },
+
+    { "id": "setup-01", "at": 982, "kind": "cone", "offset": -0.1, "objective": "cone-sweep" },
+    { "id": "setup-02", "at": 996, "kind": "cone", "offset": -0.02, "objective": "cone-sweep" },
+    { "id": "setup-03", "at": 1010, "kind": "cone", "offset": 0.06, "objective": "cone-sweep" },
+    { "id": "setup-04", "at": 1024, "kind": "cone", "offset": 0.14, "objective": "cone-sweep" },
+    { "id": "setup-05", "at": 1056, "kind": "cone", "offset": 0.2, "objective": "cone-sweep" },
+    { "id": "setup-06", "at": 1070, "kind": "cone", "offset": 0.26, "objective": "cone-sweep" },
+    { "id": "setup-07", "at": 1084, "kind": "cone", "offset": 0.32, "objective": "cone-sweep" },
+    { "id": "setup-08", "at": 1098, "kind": "cone", "offset": 0.38, "objective": "cone-sweep" },
+    { "id": "setup-09", "at": 1150, "kind": "cone", "offset": 0.44, "objective": "cone-sweep" },
+    { "id": "setup-10", "at": 1160, "kind": "cone", "offset": 0.5, "objective": "cone-sweep" },
+    { "id": "setup-11", "at": 1170, "kind": "cone", "offset": 0.55, "objective": "cone-sweep" },
+    { "id": "setup-12", "at": 1180, "kind": "cone", "offset": 0.58, "objective": "cone-sweep" },
+
+    { "id": "hairpin-01", "at": 1196, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-02", "at": 1203, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-03", "at": 1210, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-04", "at": 1217, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-05", "at": 1224, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-06", "at": 1231, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-07", "at": 1238, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-08", "at": 1245, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-09", "at": 1252, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-10", "at": 1259, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-11", "at": 1266, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-12", "at": 1273, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" }
   ],
-  "obstacles": 0.03,
-  "par": 105
+  "pieces": [
+    ["straight", 40],
+    ["curve", 32, -1],
+    ["straight", 22],
+    ["curve", 36, 1],
+    ["straight", 28],
+    ["curve", 36, -2],
+    ["straight", 24],
+    ["curve", 40, 2],
+    ["straight", 28],
+    ["curve", 32, 8],
+    ["straight", 32],
+    ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
+    ["straight", 40]
+  ],
+  "obstacles": 0,
+  "par": 2
 }
