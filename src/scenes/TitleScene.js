@@ -58,8 +58,11 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // The machine, hovering. Frame 1 = straight.
-    const car = this.add.sprite(w / 2, 300, 'car', 2).setScale(2.6);
+    // The machine, hovering. Use the same measured scale as the in-race car
+    // so a sprite-sheet revision cannot leave the title presentation behind.
+    const car = this.add
+      .sprite(w / 2, 300, 'car', 2)
+      .setScale(TUNING.carScale);
     this.tweens.add({
       targets: car,
       y: '+=8',

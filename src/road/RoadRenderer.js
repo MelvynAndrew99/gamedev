@@ -22,6 +22,18 @@ export class RoadRenderer {
     // lives on its own layer over the asphalt (depth -1) and roadside props
     // (depth 5), but under the car (depth 10) — the car drives beneath it.
     this.gates = scene.add.graphics().setDepth(6);
+    this.gateLabel = scene.add
+      .text(0, 0, 'START / FINISH', {
+        fontFamily: 'Arial Black, Impact, sans-serif',
+        fontSize: '20px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        stroke: '#0a0a14',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(7)
+      .setVisible(false);
     // Warp streaks: over the road and props, UNDER the car (depth 10). Radiate
     // from the vanishing point so they read as the world rushing past, not as
     // an overlay pasted on top.
@@ -101,9 +113,14 @@ export class RoadRenderer {
       x += dx;
       dx += seg.curve;
 
+      const behindCamera = seg.p1.camera.z <= this.frameDepth;
+      // Repeated roadside pickets intentionally keep the old same-scanline
+      // culling cadence: their horizon wink is a useful speed cue. Gameplay
+      // objects and the gantry use strict occlusion so they remain readable.
+      seg.speedMarkerClipped =
+        behindCamera || seg.p2.screen.y >= maxY;
       seg.clipped =
-        seg.p1.camera.z <= this.frameDepth || // behind the projection plane
-        seg.p2.screen.y >= maxY;              // hidden behind nearer road
+        behindCamera || seg.p2.screen.y > maxY;
       if (seg.clipped) continue;
 
       this.drawSegment(seg, 1 - fog(n / t.drawDistance, t.fogDensity));
@@ -122,6 +139,7 @@ export class RoadRenderer {
   renderGates(model, base) {
     const g = this.gates;
     g.clear();
+    this.gateLabel.setVisible(false);
     for (let n = this.t.drawDistance - 1; n >= 0; n--) {
       const seg = model.segmentAt(base, n);
       if (!seg.gate || seg.clipped) continue;
@@ -129,76 +147,196 @@ export class RoadRenderer {
     }
   }
 
-  // A checkered gantry arched over the road: two chunky pillars at the edges
-  // and a checkered banner beam between them — the universal start/finish
-  // signal. Built to the game's pixel-art language: hard dark outlines, the
-  // roadside posts' pole gray + cyan lamp accent, and a magenta/cyan neon glow.
-  // All sizes are proportional to the projected road half-width (`w`), so the
-  // structure scales naturally as the camera nears the line.
+  // Neon timing gantry: angular dark-metal pylons, cyan energy cores,
+  // checkered endcaps, and a lit nameplate. It borrows the road's magenta/cyan
+  // edge language instead of looking like a generic black-and-white banner.
+  // Every measurement keys off projected road half-width (`w`), so the whole
+  // silhouette remains perspective-correct.
   drawGate({ x, y, w }) {
     if (w < 3) return; // too far to read — skip the sub-pixel clutter
     const c = this.t.colors;
-    const OUT = 0x0a0a14;     // sprite outline color (K)
-    const PILLAR = 0x2a2a3a;  // roadside post pole color (P)
+    const OUT = 0x0a0a14;
+    const FRAME = 0x2a2a3a;
+    const PANEL = 0x141426;
     const WHITE = 0xffffff;
     const g = this.gates;
 
-    const postW = Math.max(4, w * 0.15);   // chunky, not spindly
-    const postH = w * 2.3;                  // pillar height above the road
-    const beamH = Math.max(8, w * 0.62);    // banner thickness
-    const over = w * 0.16;                  // pillars stand just past the rumble
-    const lx = x - w - over;                // left pillar centerline
-    const rx = x + w + over;                // right pillar centerline
+    const postW = Math.max(4, w * 0.16);
+    // Keep the timing beam below the HUD at the rolling-grid distance. The
+    // original 2.35 + 0.58 proportions reached into the top instrument band;
+    // this lower, slimmer arch still clears the road without owning the sky.
+    const postH = w * 1.55;
+    const beamH = Math.max(8, w * 0.38);
+    const over = w * 0.2;
+    const lx = x - w - over;
+    const rx = x + w + over;
     const postTop = y - postH;
     const beamTop = postTop - beamH;
-    const beamL = lx - postW;
-    const beamR = rx + postW;
+    const beamL = lx - postW * 1.25;
+    const beamR = rx + postW * 1.25;
     const beamW = beamR - beamL;
-    const ol = Math.max(1, Math.round(w * 0.03)); // outline thickness
-    const glow = Math.max(2, w * 0.10);
+    const ol = Math.max(1, Math.round(w * 0.025));
+    const glow = Math.max(2, w * 0.11);
+    const cut = Math.min(beamH * 0.3, beamW * 0.04);
 
-    // Hard-outlined filled box — the pixel-art border every sprite has.
-    const box = (bx, by, bw, bh, fill) => {
-      g.fillStyle(OUT, 1);
-      g.fillRect(bx - ol, by - ol, bw + ol * 2, bh + ol * 2);
-      g.fillStyle(fill, 1);
-      g.fillRect(bx, by, bw, bh);
-    };
-
-    // Neon bloom behind everything (cyan haze, like the rumble glow).
-    g.fillStyle(c.rumbleB, 0.16);
-    g.fillRect(lx - postW / 2 - glow, postTop, postW + glow * 2, postH);
-    g.fillRect(rx - postW / 2 - glow, postTop, postW + glow * 2, postH);
-    g.fillRect(beamL - glow, beamTop - glow, beamW + glow * 2, beamH + glow * 2);
-
-    // Pillars: outlined pole, a cyan neon strip down the face (echoing the
-    // roadside posts' lamp), and a wider foot so they plant on the ground.
-    const pillar = (px) => {
-      box(px - postW / 2, postTop, postW, postH, PILLAR);
-      g.fillStyle(c.rumbleB, 1);
-      g.fillRect(px - postW * 0.16, postTop + ol, Math.max(1, postW * 0.32), postH - ol);
-      box(px - postW * 0.9, y - Math.max(4, w * 0.16), postW * 1.8, Math.max(4, w * 0.16), PILLAR);
-    };
-    pillar(lx);
-    pillar(rx);
-
-    // Banner: outlined frame, checkered cloth, magenta/cyan neon trim lines.
-    g.fillStyle(OUT, 1);
-    g.fillRect(beamL - ol, beamTop - ol, beamW + ol * 2, beamH + ol * 2);
-    const cols = 16;
-    const cell = beamW / cols;
-    const rows = Math.max(2, Math.round(beamH / cell));
-    const ch = beamH / rows;
-    for (let r = 0; r < rows; r++) {
-      for (let col = 0; col < cols; col++) {
-        g.fillStyle((r + col) % 2 === 0 ? WHITE : OUT, 1);
-        g.fillRect(beamL + col * cell, beamTop + r * ch, Math.ceil(cell), Math.ceil(ch));
+    const polygon = (fill, points, alpha = 1) => {
+      g.fillStyle(fill, alpha);
+      g.beginPath();
+      g.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) {
+        g.lineTo(points[i][0], points[i][1]);
       }
-    }
-    g.lineStyle(ol, c.rumbleA, 1); // magenta above
+      g.closePath();
+      g.fillPath();
+    };
+
+    // Soft two-color bloom gives the structure the same electric silhouette
+    // as rumble strips and zippers without softening its pixel-art edges.
+    g.fillStyle(c.rumbleA, 0.12);
+    g.fillRect(beamL - glow, beamTop - glow, beamW + glow * 2, beamH + glow * 2);
+    g.fillStyle(c.rumbleB, 0.14);
+    g.fillRect(lx - glow, postTop, glow * 2, postH);
+    g.fillRect(rx - glow, postTop, glow * 2, postH);
+
+    // Tapered pylons lean slightly outboard, making a planted racing arch
+    // rather than two ordinary fence posts.
+    const pillar = (px, side) => {
+      const bottomX = px + side * postW * 0.45;
+      polygon(OUT, [
+        [px - postW * 0.72 - ol, postTop - ol],
+        [px + postW * 0.72 + ol, postTop - ol],
+        [bottomX + postW * 1.05 + ol, y],
+        [bottomX - postW * 1.05 - ol, y],
+      ]);
+      polygon(FRAME, [
+        [px - postW * 0.58, postTop],
+        [px + postW * 0.58, postTop],
+        [bottomX + postW * 0.86, y - ol],
+        [bottomX - postW * 0.86, y - ol],
+      ]);
+
+      // Inset black face and cyan power spine.
+      polygon(PANEL, [
+        [px - postW * 0.27, postTop + ol],
+        [px + postW * 0.27, postTop + ol],
+        [bottomX + postW * 0.36, y - postW * 0.35],
+        [bottomX - postW * 0.36, y - postW * 0.35],
+      ]);
+      g.lineStyle(Math.max(2, postW * 0.34), c.rumbleB, 0.18);
+      g.lineBetween(px, postTop + postW * 0.25, bottomX, y - postW * 0.42);
+      g.lineStyle(Math.max(1, postW * 0.12), c.rumbleB, 1);
+      g.lineBetween(px, postTop + postW * 0.25, bottomX, y - postW * 0.42);
+
+      // Magenta shoulder fin and a wide, cyan-lit foot.
+      polygon(c.rumbleA, [
+        [px + side * postW * 0.62, postTop + postW * 0.4],
+        [px + side * postW * 1.2, postTop + postW * 0.75],
+        [px + side * postW * 0.7, postTop + postW * 1.25],
+      ]);
+      const footH = Math.max(4, w * 0.16);
+      polygon(OUT, [
+        [bottomX - postW * 1.55, y],
+        [bottomX + postW * 1.55, y],
+        [bottomX + postW * 1.12, y - footH - ol],
+        [bottomX - postW * 1.12, y - footH - ol],
+      ]);
+      polygon(c.rumbleB, [
+        [bottomX - postW * 1.28, y - ol],
+        [bottomX + postW * 1.28, y - ol],
+        [bottomX + postW, y - footH],
+        [bottomX - postW, y - footH],
+      ], 0.9);
+    };
+    pillar(lx, -1);
+    pillar(rx, 1);
+
+    // Angular beam frame with clipped corners.
+    polygon(OUT, [
+      [beamL + cut, beamTop - ol],
+      [beamR - cut, beamTop - ol],
+      [beamR + ol, beamTop + cut],
+      [beamR + ol, beamTop + beamH - cut],
+      [beamR - cut, beamTop + beamH + ol],
+      [beamL + cut, beamTop + beamH + ol],
+      [beamL - ol, beamTop + beamH - cut],
+      [beamL - ol, beamTop + cut],
+    ]);
+    polygon(FRAME, [
+      [beamL + cut, beamTop],
+      [beamR - cut, beamTop],
+      [beamR, beamTop + cut],
+      [beamR, beamTop + beamH - cut],
+      [beamR - cut, beamTop + beamH],
+      [beamL + cut, beamTop + beamH],
+      [beamL, beamTop + beamH - cut],
+      [beamL, beamTop + cut],
+    ]);
+
+    // Compact checkerboards at the endcaps keep the racing signal clear while
+    // leaving the center calm enough for the course nameplate to read.
+    const capW = beamW * 0.2;
+    const capPad = ol * 1.5;
+    const capTop = beamTop + capPad;
+    const capH = beamH - capPad * 2;
+    const drawCheckers = (startX) => {
+      const cols = 4;
+      const rows = 2;
+      const cw = capW / cols;
+      const ch = capH / rows;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          g.fillStyle((row + col) % 2 === 0 ? WHITE : OUT, 1);
+          g.fillRect(
+            startX + col * cw,
+            capTop + row * ch,
+            Math.ceil(cw),
+            Math.ceil(ch)
+          );
+        }
+      }
+    };
+    drawCheckers(beamL + cut);
+    drawCheckers(beamR - cut - capW);
+
+    // Recessed central nameplate, framed by inward-pointing speed chevrons.
+    const panelL = beamL + beamW * 0.23;
+    const panelR = beamR - beamW * 0.23;
+    const panelTop = beamTop + beamH * 0.18;
+    const panelBottom = beamTop + beamH * 0.82;
+    polygon(PANEL, [
+      [panelL + cut * 0.5, panelTop],
+      [panelR - cut * 0.5, panelTop],
+      [panelR, (panelTop + panelBottom) / 2],
+      [panelR - cut * 0.5, panelBottom],
+      [panelL + cut * 0.5, panelBottom],
+      [panelL, (panelTop + panelBottom) / 2],
+    ]);
+    const chevronW = Math.max(2, beamW * 0.025);
+    g.fillStyle(c.rumbleA, 1);
+    g.fillTriangle(panelL, panelTop, panelL + chevronW, (panelTop + panelBottom) / 2, panelL, panelBottom);
+    g.fillStyle(c.rumbleB, 1);
+    g.fillTriangle(panelR, panelTop, panelR - chevronW, (panelTop + panelBottom) / 2, panelR, panelBottom);
+
+    // Hot edges: magenta announces the top silhouette against the sunset,
+    // cyan anchors the underside against the asphalt.
+    g.lineStyle(Math.max(1, ol), c.rumbleA, 1);
     g.lineBetween(beamL - ol, beamTop - ol, beamR + ol, beamTop - ol);
-    g.lineStyle(ol, c.rumbleB, 1); // cyan below
+    g.lineStyle(Math.max(1, ol), c.rumbleB, 1);
     g.lineBetween(beamL - ol, beamTop + beamH + ol, beamR + ol, beamTop + beamH + ol);
+
+    // The text remains a scene object so it stays sharp instead of being
+    // rebuilt into a texture every frame. Scale it into the projected panel.
+    if (w >= 12) {
+      const label = this.gateLabel;
+      const labelScale = Math.min(
+        (panelR - panelL) * 0.78 / label.width,
+        (panelBottom - panelTop) * 0.62 / label.height
+      );
+      label
+        .setPosition(x, (panelTop + panelBottom) / 2)
+        .setScale(labelScale)
+        .setVisible(true);
+    }
   }
 
   // The start/finish line painted across the asphalt: a checkerboard filling
@@ -285,7 +423,11 @@ export class RoadRenderer {
       if (seg.clipped || seg.sprites.length === 0) continue;
       const { x, y, scale } = seg.p1.screen;
       for (const s of seg.sprites) {
-        if (s.hit || poolI >= this.pool.length) continue;
+        if (
+          s.hit ||
+          (s.speedMarker && seg.speedMarkerClipped) ||
+          poolI >= this.pool.length
+        ) continue;
         const img = this.pool[poolI++];
         img.setTexture(s.key);
         // Lateral placement: same projection term as the road edges.

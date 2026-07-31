@@ -135,6 +135,83 @@ distance. Validate that:
 Randomness makes a single playthrough weak evidence. When changing generation,
 test multiple seeds or use a fixed seed that reproduces the relevant case.
 
+## Visual presentation contracts
+
+These presentation details are intentional parts of speed, readability, and
+game feel. Treat them as design constraints when changing art, projection,
+camera settings, HUD layout, or rendering—not as incidental implementation.
+
+### Player car sprite
+
+- `tools/gen-car.js` is the source of truth for `public/assets/car.png`.
+  Regenerate the sheet from the low-poly model instead of painting individual
+  frames, so every steering pose remains one coherent vehicle.
+- The sheet contains five `64x56` frames in gameplay order: hard left, slight
+  left, straight, slight right, hard right. Opposite steering silhouettes must
+  remain mirrored.
+- The car uses the game's low, directly-behind chase-camera perspective
+  (`CAM_PITCH = 0`), not the overhead Mode-7 angle used by the F-Zero reference
+  art. Every frame should remain substantially wider than it is tall, and the
+  straight frame should clearly present the rear of the vehicle.
+- The cockpit must read as glass at every yaw: a cyan teardrop dome with a
+  visible reflection and a base that follows the sloping hull. Canopy rails,
+  highlights, fins, or other accents must stay inside the vehicle silhouette;
+  long floating bars or constant-height slabs become beaks, gun barrels, or
+  disconnected overhangs in turning frames.
+- The in-race car is bottom-anchored so scaling grows it upward onto the road,
+  not below the canvas. `TUNING.carScale` is the shared size for gameplay and
+  the title screen; the Projection Lab must initialize to the same value
+  (currently `5`). A sprite with different visible bounds requires all three
+  presentations to be checked together. Collision width remains the separate
+  `TUNING.playerW` gameplay value.
+- `tools/gen-car.test.js` protects the rear-view proportions, visible glass,
+  frame dimensions, and left/right symmetry. Update the generator and its
+  expectations together when deliberately changing the vehicle.
+
+### Roadside speed pylons
+
+- The paired roadside posts placed every ten segments are non-collidable speed
+  markers shared by campaign and Endless Mode. Their repeated approach cadence
+  helps the eye read velocity.
+- Posts tagged `speedMarker` deliberately use same-scanline culling at the
+  horizon. Their subtle wink as projected scanlines merge is an intentional
+  speed effect. Gameplay objects and the start/finish gantry use strict
+  occlusion and must remain stable.
+- Do not replace both rules with one global sprite-culling rule: removing the
+  post cadence weakens speed feel, while applying it to obstacles or the
+  gantry makes important objects blink. Validate both behaviors after changing
+  projection rounding, fog, draw distance, sprite pooling, or road culling.
+
+### Start/finish line and timing gantry
+
+- Campaign circuits have one start/finish landmark at segment `0`: a neon
+  timing gantry plus checkered paint across the first three road segments.
+  The same physical line is the rolling start, every lap crossing, and the
+  finish. The first crossing begins lap one; later crossings complete laps.
+- This is an intentional campaign-only feature. Endless Mode has no laps or
+  finish and therefore does not create a gantry.
+- The rolling grid begins `TUNING.gridSetback` behind the line (currently
+  `6000` world units), making the landmark visible before the race starts.
+  Changes to the setback must preserve that initial read and race-state wrap
+  semantics.
+- Gantry geometry must use the road segment's projected coordinates so its
+  feet remain planted at the road edges through curves, hills, FOV changes,
+  and lap wrapping. It uses strict road occlusion; rounded screen coordinates
+  landing on the same scanline must not make it blink.
+- Preserve the world-layer order: road below roadside props, gantry graphics
+  at depth `6`, gantry label at `7`, speed streaks at `8`, and player car at
+  `10`. The HUD runs in its own scene above the world.
+- The current HUD-safe proportions are `1.55` times the projected road
+  half-width for pylon height and `0.38` times it for beam height. At the
+  `800x600` rolling grid, the beam begins around screen `y=126`, leaving about
+  `60px` below the HUD's lower edge. If camera height, FOV, grid setback, HUD
+  height, or gantry proportions change, recheck this clearance at race start
+  and while approaching the line. The landmark should frame the road without
+  owning the instrument band.
+- Keep the angular dark-metal frame, cyan power cores, magenta/cyan edge
+  lighting, checkered endcaps, and readable `START / FINISH` nameplate aligned
+  with the game's neon road palette.
+
 ## Cross-mode change checklist
 
 Use this checklist whenever changing the world, assets, or gameplay rules:
@@ -173,6 +250,14 @@ Use this checklist whenever changing the world, assets, or gameplay rules:
 - Confirm the asset is loaded before every scene that uses it.
 - Verify projection scale, anchor, collision width, visibility in fog, and
   palette contrast on road and dirt.
+- For car changes, regenerate all five frames and recheck chase perspective,
+  glass readability, steering symmetry, bottom anchoring, gameplay scale,
+  Projection Lab default, title-screen scale, and collision independence.
+- For roadside-post changes, preserve their intentional horizon cadence in
+  both campaign and Endless Mode without making gameplay objects blink.
+- For start/finish changes, verify stable culling, road-edge anchoring, layer
+  order, rolling-start/lap/finish semantics, and HUD clearance at the grid and
+  during approach.
 - Ensure the silhouette communicates whether the object is harmless, helpful,
   optional, or dangerous before collision distance.
 - Check repeated procedural use in Endless Mode for visual noise and

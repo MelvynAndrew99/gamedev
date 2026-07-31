@@ -58,6 +58,15 @@ export class GameScene extends Phaser.Scene {
     }
     this.renderer = new RoadRenderer(this, TUNING);
     this.player = new Player(TUNING);
+
+    // Rolling grid start: sit the car behind the start/finish line so the
+    // gantry is ahead and visible at the lights, then drive THROUGH it to
+    // begin. The line stays at position 0 (the lap-count wrap boundary), so
+    // crossing it and completing a lap are the same event on the same gate.
+    if (this.race) {
+      this.player.position = this.model.trackLength - TUNING.gridSetback;
+      this.race.prevPos = this.player.position; // don't misread the spawn as a wrap
+    }
     this.pop = new Popularity(TUNING);
     this.nitro = 0; // pocketed boosts (see TUNING.nitroMax)
     this.speedLineBurst = 0; // ramp/boost streak-bloom, decays over speedLineBurstTime
@@ -190,7 +199,9 @@ export class GameScene extends Phaser.Scene {
       this.model.ensureAhead(this.player.position); // pave ahead of the car
     } else {
       const event = this.race.update(dt, this.player);
-      if (event === 'lap') {
+      if (event === 'start') {
+        this.showBanner('GO!', 800);
+      } else if (event === 'lap') {
         this.model.resetLapSprites();
         this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
       } else if (event === 'finished') {

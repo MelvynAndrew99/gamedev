@@ -118,8 +118,14 @@ export class RoadModel {
     for (let i = from; i < this.segments.length; i++) {
       const seg = this.segments[i];
       if (this.segments[i].index % 10 === 0) { // absolute index: cadence survives trimming
-        seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: -1.25 });
-        seg.sprites.push({ key: ROADSIDE.post.key, view: ROADSIDE.post.view, offset: 1.25 });
+        seg.sprites.push({
+          key: ROADSIDE.post.key, view: ROADSIDE.post.view,
+          speedMarker: ROADSIDE.post.speedMarker, offset: -1.25,
+        });
+        seg.sprites.push({
+          key: ROADSIDE.post.key, view: ROADSIDE.post.view,
+          speedMarker: ROADSIDE.post.speedMarker, offset: 1.25,
+        });
       }
     }
     this.placeBoostPads(from);

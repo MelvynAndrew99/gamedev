@@ -19,12 +19,9 @@ export const TUNING = {
   maxSpeed: 12000,     // (derived-input) world units/sec. 12000 = 1 segment per frame at 60fps
   centrifugal: 0.3,    // how hard curves fling you outward. THE core risk knob of the game.
   playerW: 0.14,       // car collision half-width in road-half units
-  carScale: 4.5,         // on-screen size of the car sprite. My first projection-derived
-                        // estimate (6.0, ~48% of canvas width) was too large in practice —
-                        // 4.5 is the measured-by-eye value from the debug panel, re-checked
-                        // after the F-Zero racer reskin. Eyes beat math for "looks
-                        // believable," which is exactly why this knob lives on the panel
-                        // instead of being hardcoded.
+  carScale: 5,          // on-screen size of the car sprite. The rear-view canopy
+                        // sheet has a tighter visible silhouette than the earlier
+                        // sprite; 5 is the measured-by-eye Projection Lab value.
   iframes: 0.9,        // seconds of post-hit invulnerability (no combo-wrecks by cluster)
 
   // ---- Handling feel (all live on the debug panel) --------------------
@@ -69,6 +66,13 @@ export const TUNING = {
   repairPackHealth: 10,// garage purchase size: small enough to leave a real choice
   repairPackCost: 50,  // $5 per hull point; base pay repairs 60% of a car
   emergencyHealth: 25, // free tow floor prevents a broke/wrecked campaign lock
+
+  // ---- Race start -----------------------------------------------------
+  gridSetback: 6000,   // world units the car sits BEHIND the start/finish line
+                       // on the grid (~30 segments). Traditional rolling start:
+                       // the gantry is ahead and visible, and you drive THROUGH
+                       // it to begin — that first crossing starts lap 1, it isn't
+                       // a completed lap (see RaceState.crossedStart).
 
   // ---- Jumps ----------------------------------------------------------
   jumpMinAir: 0.35,    // seconds airborne at crawl speed

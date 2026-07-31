@@ -10,19 +10,27 @@ export class RaceState {
     this.time = 0;
     this.finished = false;
     this.prevPos = 0;
+    // The grid sits BEHIND the start/finish line (see TUNING.gridSetback), so
+    // the very first crossing of the line is the START of lap 1, not a lap
+    // completed. Every crossing after it counts.
+    this.crossedStart = false;
   }
 
-  // Returns 'lap' | 'finished' | null.
+  // Returns 'start' | 'lap' | 'finished' | null.
   update(dt, player) {
     if (this.finished) return null;
     this.time += dt;
 
-    // Wrap detection: Player.update wraps position past trackLength, so a
-    // lap shows up as position suddenly dropping by roughly a whole track.
+    // Wrap detection: Player.update wraps position past trackLength, so a line
+    // crossing shows up as position suddenly dropping by roughly a whole track.
     // "More than half the track backwards in one frame" can't be driving.
     if (player.position < this.prevPos - this.model.trackLength / 2) {
-      this.lap++;
       this.prevPos = player.position;
+      if (!this.crossedStart) {
+        this.crossedStart = true; // rolling start: this crossing begins the race
+        return 'start';
+      }
+      this.lap++;
       if (this.lap > this.laps) {
         this.finished = true;
         return 'finished';

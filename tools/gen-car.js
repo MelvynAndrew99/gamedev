@@ -1,5 +1,5 @@
-// tools/gen-car.js — F-Zero-style hover racer, v6: reskinned from the
-// apocalypse jeep, same 3D-yaw pipeline.
+// tools/gen-car.js — F-Zero-style hover racer, v7: a proper glass canopy
+// integrated into the sloping hull, rendered through the same 3D-yaw pipeline.
 //
 // The brief for this pass was a reference sheet of F-Zero SNES Mode-7 ship
 // sprites (Blue Falcon etc.) — but that sheet is drawn TOP-DOWN (bird's-eye,
@@ -24,8 +24,9 @@ const MATERIALS = {
   hullDark:  { color: [0x12, 0x2a, 0x66], bands: 2 },         // lower skirt/undercarriage
   wing:      { color: [0x27, 0x3d, 0x7a], bands: 2 },         // side wing pods
   fin:       { color: [0x4a, 0x50, 0x66], bands: 2 },         // rear spoiler
-  cab:       { color: [0x2a, 0x7a, 0x9c], bands: 2 },         // cockpit canopy glass
-  pillar:    { color: [0x8a, 0x8f, 0x9c], bands: 2 },         // canopy frame
+  cab:       { color: [0x19, 0x79, 0xa3], bands: 3 },         // deep cyan canopy glass
+  cabLight:  { color: [0x74, 0xdc, 0xf4], bands: 2 },         // glass reflection facet
+  pillar:    { color: [0x68, 0x72, 0x86], bands: 2 },         // thin canopy sill/frame
   stripe:    { color: [0xff, 0xa8, 0x1a], emissive: true },   // racing stripe decal
   noseLight: { color: [0xff, 0xef, 0xb0], emissive: true },   // nose tip lamp — hidden at rest, revealed on turn
   engineHousing: { color: [0x55, 0x58, 0x66], bands: 2 },     // rear thruster housing
@@ -65,6 +66,68 @@ function disc(cx, cy, cz, radius, segments = 10) {
   return tris;
 }
 
+// A faceted teardrop dome lofted through cross-section rings. Each ring follows
+// the hull with its own base height instead of sitting on one flat plane. That
+// distinction matters most at yaw: a flat-bottomed canopy projected beyond the
+// sloping nose as a cyan "beak", while this one stays planted in the body.
+//
+// Ring format: { z, w, base, top }. `slices` walks a half-ellipse from the
+// left sill, over the crown, to the right sill.
+function canopyDome(rings, slices = 8) {
+  const ringPoints = rings.map(({ z, w, base, top }) => {
+    const points = [];
+    for (let i = 0; i <= slices; i++) {
+      const a = Math.PI - (Math.PI * i) / slices;
+      points.push([
+        Math.cos(a) * w,
+        base + Math.sin(a) * (top - base),
+        z,
+      ]);
+    }
+    return points;
+  });
+
+  const tris = [];
+  for (let r = 0; r < ringPoints.length - 1; r++) {
+    for (let i = 0; i < slices; i++) {
+      const a = ringPoints[r][i];
+      const b = ringPoints[r][i + 1];
+      const c = ringPoints[r + 1][i + 1];
+      const d = ringPoints[r + 1][i];
+      tris.push([a, b, c], [a, c, d]);
+    }
+  }
+
+  // Close the rear and nose so hard-turn views never reveal a hollow shell.
+  for (const ring of [ringPoints[0], ringPoints[ringPoints.length - 1]]) {
+    const center = [
+      0,
+      (ring[0][1] + ring[Math.floor(slices / 2)][1]) / 2,
+      ring[0][2],
+    ];
+    for (let i = 0; i < slices; i++) tris.push([center, ring[i], ring[i + 1]]);
+  }
+  return tris;
+}
+
+// Narrow metal rails following both canopy sills. They visually lock the
+// glass into the hull without adding a long roof bar that can swing out into
+// another beak at hard yaw.
+function canopyRails(rings, thickness = 0.22) {
+  const tris = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < rings.length - 1; i++) {
+      const a = rings[i], b = rings[i + 1];
+      const outerA = [side * a.w, a.base + 0.08, a.z];
+      const innerA = [side * Math.max(0, a.w - thickness), a.base + 0.24, a.z];
+      const outerB = [side * b.w, b.base + 0.08, b.z];
+      const innerB = [side * Math.max(0, b.w - thickness), b.base + 0.24, b.z];
+      tris.push([outerA, innerA, innerB], [outerA, innerB, outerB]);
+    }
+  }
+  return tris;
+}
+
 // ---------------- the racer ----------------
 // Coordinates: x right, y up, z forward (nose at +z, tail/engines at -z).
 // Camera sits behind the car looking toward +z, so the twin engine nacelles
@@ -78,9 +141,16 @@ function buildRacer() {
   add(box(-14, 12, 8, 2.5, 0, 5.2, 0, 2.8), 'hull');
   add(box(-14.1, 11, 7.6, 2.2, -0.6, 0.2, -0.5, 0.1), 'hullDark');
 
-  // Side wing pods flanking the hull at mid-height, tapering off before the
-  // nose — kept off the ground line so they don't read as extra wheels.
-  for (const s of [-1, 1]) add(box(-11, 5, 1.6, 1.2, 1.0, 3.2, 1.0, 2.8, s * 9.4), 'wing');
+  // Side fins tucked into the tail silhouette, then tapering toward the nose.
+  // Keeping their centerlines parallel avoids non-planar swept faces fighting
+  // the tiny orthographic z-buffer.
+  for (const s of [-1, 1]) {
+    add(box(
+      -12, 2, 1.6, 0.75,
+      0.8, 3.1, 0.8, 2.5,
+      s * 7.0
+    ), 'wing');
+  }
 
   // Small tail fins, kept well inside the hull's own rear half-width (8)
   // so they stay within the hull's silhouette at yaw instead of swinging
@@ -88,14 +158,23 @@ function buildRacer() {
   // rod on turn frames (read as a gun barrel, not a spoiler).
   for (const s of [-1, 1]) add(box(-14.1, -11.5, 0.3, 0.3, 5.2, 6.0, 5.1, 5.7, s * 5.5), 'fin');
 
-  // Cockpit canopy: glass bubble with a thin frame, set back of center.
-  // The frame is deliberately kept inside the glass's own footprint —
-  // an earlier version spanned the canopy's full length as a separate
-  // slab and, at yaw, projected past the hull as a stray floating bar
-  // (read as a gun barrel rather than a cockpit).
-  add(box(-4, 6, 2.8, 2.0, 5.2, 7.6, 5.2, 6.8), 'cab');
-  for (const s of [-1, 1]) add(box(-4.05, 6, 0.3, 0.3, 5.2, 7.7, 5.2, 6.9, s * 2.9), 'pillar');
-  add(box(4.8, 5.6, 1.9, 1.7, 6.5, 6.9, 6.3, 6.6), 'pillar');
+  // Teardrop glass cockpit. Its sill heights follow the main hull's slope
+  // toward the nose, and its crown rises into a bubble instead of a flat roof.
+  // The widest/highest ring sits just behind center, producing the rounded
+  // F-Zero cockpit read in both slight and hard steering frames.
+  const canopyRings = [
+    { z: -5.0, w: 1.35, base: 4.37, top: 5.25 },
+    { z: -2.6, w: 2.55, base: 4.15, top: 7.15 },
+    { z:  0.3, w: 2.95, base: 3.88, top: 7.85 },
+    { z:  3.4, w: 2.30, base: 3.59, top: 7.05 },
+    { z:  5.9, w: 0.85, base: 3.36, top: 4.95 },
+  ];
+  add(canopyDome(canopyRings), 'cab');
+  add(canopyRails(canopyRings), 'pillar');
+
+  // One small rear-quarter reflection catches the eye as unmistakable glass.
+  // It is deliberately compact and lives inside the dome silhouette.
+  add(box(-4.85, -3.15, 0.62, 1.18, 4.85, 5.10, 5.72, 6.05), 'cabLight');
 
   // Racing stripe: a raised ridge sitting flush on the hull's spine so it
   // reads as a stripe along the whole visible length, not a rear decal.
@@ -121,7 +200,10 @@ function buildRacer() {
 const FRAME_W = 64, FRAME_H = 56;
 const FRAMES = 5; // hard-left, left, straight, right, hard-right
 const ORTHO_SCALE = 1.75;
-const CAM_PITCH = 0; // eye-level — any downward tilt reads as "driving downhill"
+// Match the game's Outrun-style chase camera: directly behind the car rather
+// than above it. The teardrop canopy geometry supplies the glass read without
+// borrowing a top-down Mode-7 viewing angle.
+const CAM_PITCH = 0;
 let LIGHT = [-0.45, 0.8, -0.35];       // from upper-left, slightly behind camera
 const AMBIENT = 0.5, DIFFUSE = 0.6;
 
