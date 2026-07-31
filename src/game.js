@@ -7,12 +7,8 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { GarageScene } from './scenes/GarageScene.js';
-import { installGamepadShutdownFix } from './systems/Gamepad.js';
 import { TRACKS } from './tracks/index.js';
 import { RACER } from './systems/RacerState.js';
-
-// Must be installed before the first Scene input plugin starts.
-installGamepadShutdownFix(Phaser.Input.Gamepad.GamepadPlugin);
 
 const config = {
   type: Phaser.AUTO,
@@ -20,6 +16,11 @@ const config = {
   height: 600,
   parent: 'game',
   pixelArt: true, // nearest-neighbor scaling — pixel art stays sharp
+  render: {
+    // Phaser 4 defaults this to false. Keep Phaser 3's pixel positioning
+    // behavior so sprites do not shimmer at fractional screen coordinates.
+    roundPixels: true,
+  },
   input: { gamepad: true },
   scene: [TitleScene, GameScene, GarageScene, HudScene], // first boots; Hud is launched by GameScene
   backgroundColor: '#0b0630',

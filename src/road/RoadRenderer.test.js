@@ -30,6 +30,84 @@ function fakeScene() {
   };
 }
 
+function recordingGraphics() {
+  const rects = [];
+  const paths = [];
+  let path = [];
+
+  return {
+    rects,
+    paths,
+    fillStyle() { return this; },
+    fillRect(...rect) {
+      rects.push(rect);
+      return this;
+    },
+    beginPath() {
+      path = [];
+      return this;
+    },
+    moveTo(x, y) {
+      path.push([x, y]);
+      return this;
+    },
+    lineTo(x, y) {
+      path.push([x, y]);
+      return this;
+    },
+    closePath() { return this; },
+    fillPath() {
+      paths.push(path);
+      return this;
+    },
+  };
+}
+
+test('opaque road slabs overlap their shared edge by one pixel', () => {
+  const renderer = new RoadRenderer(fakeScene(), TUNING);
+  const graphics = recordingGraphics();
+  renderer.g = graphics;
+
+  renderer.drawSegment({
+    band: 0,
+    surface: 'road',
+    index: 0,
+    launchApproach: { offset: 0.35, w: 0.2, distanceToRamp: 4 },
+    zipper: { offset: -0.45, w: 0.22 },
+    startLine: true,
+    p1: { screen: { x: 480, y: 300, w: 280 } },
+    p2: { screen: { x: 500, y: 200, w: 120 } },
+  }, 0);
+
+  assert.deepEqual(
+    graphics.rects[0],
+    [0, 200, 960, 101],
+    'the full-width ground should cover the shared raster row',
+  );
+  assert.deepEqual(
+    graphics.paths[2],
+    [
+      [200, 301],
+      [760, 301],
+      [620, 200],
+      [380, 200],
+    ],
+    'the asphalt quad should extend one pixel into the nearer slab',
+  );
+  for (const pathIndex of [3, 4, 5, 6, 7, 8, 9, 10]) {
+    assert.equal(
+      graphics.paths[pathIndex][0][1],
+      301,
+      `road overlay path ${pathIndex} should cover the shared raster row`,
+    );
+    assert.equal(
+      graphics.paths[pathIndex][1][1],
+      301,
+      `road overlay path ${pathIndex} should cover the shared raster row`,
+    );
+  }
+});
+
 test('gate stays stable while roadside speed markers keep their horizon wink', () => {
   const model = new RoadModel(TUNING);
   model.addStraight(100);
