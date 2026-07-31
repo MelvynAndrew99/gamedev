@@ -34,15 +34,45 @@ class MusicEngine {
     this.master = this.ctx.createGain();
     this.master.gain.value = this.volume;
 
-    // Safety chain, master -> destination. Individual voices are tuned to
-    // sound right in isolation, but a strong downbeat can stack kick + bass
-    // + pad + lead at once; without a ceiling that sum clips at the DAC —
-    // the harsh "blown speaker" distortion, not a volume/EQ complaint.
-    //   subCut:  laptop speakers can't reproduce ~50Hz and below; driving
-    //            them there doesn't add bass, it adds rattle. Removing it
-    //            costs nothing audible on real speakers/headphones either.
-    //   limiter: a fast brickwall on whatever peak survives subCut, so no
-    //            combination of simultaneous voices can exceed 0dBFS.
+    // Sidechain-style pump bus. Sustained/harmonic voices (bass, keys, pad)
+    // connect here instead of straight to master; kick/snare/hat and the
+    // lead voices bypass it and go straight to master so the pump doesn't
+    // duck the very drum causing it. When no track calls duck() this sits
+    // at gain 1 and is transparent — every existing theme sounds identical
+    // whether or not it opts into bar.sidechain.
+    this.duckable = this.ctx.createGain();
+    this.duckable.gain.value = 1;
+    this.duckable.connect(this.master);
+
+    // Algorithmic reverb send (no IR file — a synthesized decaying-noise
+    // impulse, same "generate it, don't ship an asset" approach as
+    // makeNoiseBuffer/tools/gen-*.js). Pad and the saw lead feed a portion
+    // in for the "lush reverb" / cinematic-tail texture; everything else
+    // stays dry so drums keep their transient punch.
+    this.reverbBus = this.ctx.createGain();
+    this.reverb = this.ctx.createConvolver();
+    this.reverb.buffer = this.makeReverbImpulse();
+    const reverbReturn = this.ctx.createGain();
+    reverbReturn.gain.value = 0.5; // overall wet trim, on top of each voice's own send level
+    this.reverbBus.connect(this.reverb).connect(reverbReturn).connect(this.master);
+
+    // Safety + color chain, master -> destination. Individual voices are
+    // tuned to sound right in isolation, but a strong downbeat can stack
+    // kick + bass + pad + lead at once; without a ceiling that sum clips at
+    // the DAC — the harsh "blown speaker" distortion, not a volume/EQ
+    // complaint.
+    //   saturate: gentle tanh drive well below the limiter's threshold —
+    //             tape-style warmth/glue on the whole mix, not audible
+    //             grit on its own (that's driveBass's job at the source).
+    //   subCut:   laptop speakers can't reproduce ~50Hz and below; driving
+    //             them there doesn't add bass, it adds rattle. Removing it
+    //             costs nothing audible on real speakers/headphones either.
+    //   limiter:  a fast brickwall on whatever peak survives saturation, so
+    //             no combination of simultaneous voices can exceed 0dBFS.
+    const saturate = this.ctx.createWaveShaper();
+    saturate.curve = this.satCurve();
+    saturate.oversample = '2x';
+
     const subCut = this.ctx.createBiquadFilter();
     subCut.type = 'highpass';
     subCut.frequency.value = 48;
@@ -54,7 +84,7 @@ class MusicEngine {
     limiter.attack.value = 0.002;
     limiter.release.value = 0.1;
 
-    this.master.connect(subCut).connect(limiter).connect(this.ctx.destination);
+    this.master.connect(saturate).connect(subCut).connect(limiter).connect(this.ctx.destination);
     this.noiseBuffer = this.makeNoiseBuffer();
   }
 
@@ -64,6 +94,48 @@ class MusicEngine {
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     return buffer;
+  }
+
+  // Exponentially-decaying stereo noise burst used as a convolution impulse
+  // response — a cheap synthesized "room" instead of a shipped IR sample.
+  makeReverbImpulse(seconds = 2.2, decay = 3.2) {
+    const rate = this.ctx.sampleRate;
+    const length = Math.floor(rate * seconds);
+    const impulse = this.ctx.createBuffer(2, length, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = impulse.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+      }
+    }
+    return impulse;
+  }
+
+  // Mild tape-style saturation curve — much gentler than driveCurve's bass
+  // grit, meant to be inaudible as "distortion" and just glue/warm the sum.
+  satCurve() {
+    if (this._satCurve) return this._satCurve;
+    const n = 256;
+    const curve = new Float32Array(n);
+    const amount = 1.6;
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * amount) / Math.tanh(amount);
+    }
+    this._satCurve = curve;
+    return curve;
+  }
+
+  // Sidechain-style pump: a quick dip and analog-ish recovery on the
+  // duckable bus, timed to a kick hit. setTargetAtTime (not a hard ramp +
+  // cancel) so overlapping kicks layer smoothly instead of clicking.
+  duck(time) {
+    const g = this.duckable.gain;
+    const depth = 0.4;
+    const attack = 0.015;
+    const release = 0.16;
+    g.setTargetAtTime(depth, time, attack);
+    g.setTargetAtTime(1, time + attack, release);
   }
 
   setVolume(v) {
@@ -117,7 +189,7 @@ class MusicEngine {
 
     const bassOffset = bar.bass[step];
     if (bassOffset != null) {
-      this.playBass(bar.bassRootFreq * semitoneRatio(bassOffset), time, dur * 1.8, bar.driveBass);
+      this.playBass(bar.bassRootFreq * semitoneRatio(bassOffset), time, dur * 1.8, bar.driveBass, bar.bassFM);
     }
 
     const leadIdx = bar.lead[step];
@@ -125,6 +197,7 @@ class MusicEngine {
       const tone = bar.chordTones[leadIdx % bar.chordTones.length];
       const freq = bar.leadRootFreq * semitoneRatio(tone);
       if (bar.leadSynth === 'keys') this.playKeys(freq, time, dur * 3);
+      else if (bar.leadSynth === 'saw') this.playSawLead(freq, time, dur * 1.4);
       else this.playLead(freq, time, dur * 1.4);
     }
 
@@ -132,7 +205,10 @@ class MusicEngine {
       this.playPad(bar.chordTones.map((t) => bar.padRootFreq * semitoneRatio(t)), time, dur * bar.padStepsHeld);
     }
 
-    if (bar.kick.includes(step)) this.playKick(time);
+    if (bar.kick.includes(step)) {
+      this.playKick(time);
+      if (bar.sidechain) this.duck(time); // opt-in per bar — off by default, every other theme is unaffected
+    }
     if (bar.snare.includes(step)) this.playSnare(time);
     if (bar.hat.includes(step)) this.playHat(time, bar.openHat?.includes(step));
   }
@@ -142,11 +218,26 @@ class MusicEngine {
   // schedule stop, let the garbage collector take it. No pooling — at this
   // note rate the churn is trivial next to Phaser's own per-frame allocs.
 
-  playBass(freq, time, dur, drive) {
+  playBass(freq, time, dur, drive, fm) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.value = freq;
+
+    // FM grit: a sine modulator into the carrier's own frequency, ratio
+    // just off a whole number so it doesn't lock into a static harmonic —
+    // the buzzy "analog engine" edge on top of (not instead of) the
+    // waveshaper clip below. Depth scales with pitch so it doesn't overwhelm
+    // low notes or vanish on high ones.
+    let modOsc = null;
+    if (fm) {
+      modOsc = ctx.createOscillator();
+      modOsc.type = 'sine';
+      modOsc.frequency.value = freq * 3.01;
+      const modGain = ctx.createGain();
+      modGain.gain.value = freq * 0.8;
+      modOsc.connect(modGain).connect(osc.frequency);
+    }
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -169,9 +260,13 @@ class MusicEngine {
       node = shaper;
     }
 
-    node.connect(filter).connect(gain).connect(this.master);
+    node.connect(filter).connect(gain).connect(this.duckable);
     osc.start(time);
     osc.stop(time + dur + 0.02);
+    if (modOsc) {
+      modOsc.start(time);
+      modOsc.stop(time + dur + 0.02);
+    }
   }
 
   driveCurve() {
@@ -202,12 +297,65 @@ class MusicEngine {
 
     // Two slightly detuned squares = the cheap, unmistakable "chip choir"
     // Rare leaned on for melodic leads — one oscillator alone reads thin.
+    // Panned apart (before the shared filter, so stereo survives it) for
+    // width instead of collapsing the detune to a single mono point.
     [-4, 4].forEach((cents) => {
       const osc = ctx.createOscillator();
       osc.type = 'square';
       osc.frequency.value = freq;
       osc.detune.value = cents;
-      osc.connect(filter);
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = cents < 0 ? -0.3 : 0.3;
+      osc.connect(pan).connect(filter);
+      osc.start(time);
+      osc.stop(time + dur + 0.02);
+    });
+  }
+
+  // Synthwave saw lead: three detuned sawtooths (wide) panned across the
+  // stereo field, a shared vibrato LFO for analog pitch drift, and a
+  // resonant lowpass with a fast-open envelope for the "gated" pluck this
+  // genre's arps live on. Opt-in via bar.leadSynth === 'saw' — the other
+  // themes keep using playLead's chip-choir.
+  playSawLead(freq, time, dur) {
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.2, time + 0.006); // fast, "gated" attack
+    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = freq * 5;
+    filter.Q.value = 1.4;
+    filter.connect(gain);
+    gain.connect(this.master);
+
+    const wet = ctx.createGain();
+    wet.gain.value = 0.22; // reverb send — subtle tail, not a wash
+    gain.connect(wet).connect(this.reverbBus);
+
+    // One slow LFO shared by all three voices' detune params — cheaper than
+    // three independent LFOs and reads the same, since real analog drift is
+    // correlated across oscillators sharing the same warm room anyway.
+    const vibrato = ctx.createOscillator();
+    vibrato.type = 'sine';
+    vibrato.frequency.value = 5.5;
+    const vibratoDepth = ctx.createGain();
+    vibratoDepth.gain.value = 6; // cents
+    vibrato.connect(vibratoDepth);
+    vibrato.start(time);
+    vibrato.stop(time + dur + 0.05);
+
+    [-9, 0, 9].forEach((cents, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+      osc.detune.value = cents;
+      vibratoDepth.connect(osc.detune);
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = [-0.35, 0, 0.35][i];
+      osc.connect(pan).connect(filter);
       osc.start(time);
       osc.stop(time + dur + 0.02);
     });
@@ -223,7 +371,7 @@ class MusicEngine {
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 2200;
-    filter.connect(this.master);
+    filter.connect(this.duckable);
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
@@ -250,6 +398,10 @@ class MusicEngine {
     overtone.stop(time + dur + 0.05);
   }
 
+  // Analog-polysynth pad: each chord tone gets a two-voice chorus pair
+  // (detuned + panned apart) instead of one oscillator, a shared slow drift
+  // LFO for warm wander, and a reverb send for lushness — the triangle-wave
+  // sustain everything else in the mix (arps, drums) sits on top of.
   playPad(freqs, time, dur) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
@@ -261,15 +413,37 @@ class MusicEngine {
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 1400;
-    filter.connect(gain).connect(this.master);
+    filter.connect(gain);
+    gain.connect(this.duckable);
+
+    const wet = ctx.createGain();
+    wet.gain.value = 0.3; // reverb send — the "lush" in lush pad
+    gain.connect(wet).connect(this.reverbBus);
+
+    // Slow shared drift LFO — analog polysynths never sit perfectly in
+    // tune; a few cents of slow wander reads as "warm," not "out of tune."
+    const drift = ctx.createOscillator();
+    drift.type = 'sine';
+    drift.frequency.value = 0.18;
+    const driftDepth = ctx.createGain();
+    driftDepth.gain.value = 4; // cents
+    drift.connect(driftDepth);
+    drift.start(time);
+    drift.stop(time + dur + 0.1);
 
     freqs.forEach((freq) => {
-      const osc = ctx.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-      osc.connect(filter);
-      osc.start(time);
-      osc.stop(time + dur + 0.05);
+      [-6, 6].forEach((cents) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        osc.detune.value = cents;
+        driftDepth.connect(osc.detune);
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = cents < 0 ? -0.5 : 0.5;
+        osc.connect(pan).connect(filter);
+        osc.start(time);
+        osc.stop(time + dur + 0.05);
+      });
     });
   }
 
