@@ -21,8 +21,8 @@
       { "at": 95, "kind": "rocks" },
       { "at": 350, "kind": "ramp" },
       { "at": 615, "kind": "gate" },
-      { "at": 870, "kind": "combo" },
-      { "at": 1030, "kind": "rampRocks" }
+      { "at": 1092, "kind": "combo" },
+      { "at": 1252, "kind": "rampRocks" }
     ]
   },
   "pieces": [
@@ -35,8 +35,11 @@
     ["straight", 24],
     ["curve", 40, 2],
     ["straight", 28],
-    ["chicane", 18, 2],
+    ["curve", 32, 8],
+    ["straight", 32],
     ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
     ["straight", 40]
   ],
   "obstacles": 0.03,

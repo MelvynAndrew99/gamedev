@@ -155,9 +155,12 @@ test('campaign tracks stamp their authored precision-driving sequence', () => {
   }
 });
 
-test('campaign geometry escalates precision while preserving recovery beats', () => {
+test('campaign geometry preserves recovery beats around authored skill checks', () => {
   const tracks = [trainingValidation, neonGulch, syndicateRun];
-  const expectedMaxCurve = [3, 5, 7];
+  // Proving Ground repeats Training's isolated shoulder-button gate. Its
+  // single +8 hairpin is sharper than later races' individual bends; those
+  // races escalate through tighter decision spacing and compound pressure.
+  const expectedMaxCurve = [8, 5, 7];
   const models = tracks.map((track) => {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
@@ -199,7 +202,7 @@ test('training is the longer cone-only version of the story proving ground', () 
   assert.deepEqual(trainingLoop.pieces, trainingValidation.pieces);
   assert.equal(trainingLoop.laps, 2);
   assert.equal(trainingLoop.finish, 'laps');
-  assert.equal(trainingLoop.objects.length, 45);
+  assert.equal(trainingLoop.objects.length, 57);
 
   const model = new RoadModel(TUNING);
   model.buildFromData(trainingLoop);
@@ -213,15 +216,58 @@ test('training is the longer cone-only version of the story proving ground', () 
   assert.ok(model.segments.every((segment) => !segment.zipper && !segment.launchApproach));
 });
 
+test('Cone Control separates its diagnostic from the cone-lined final hairpin', () => {
+  assert.deepEqual(trainingLoop.pieces.slice(-6), [
+    ['curve', 32, 8],
+    ['straight', 32],
+    ['curve', 30, -3],
+    ['straight', 18],
+    ['curve', 28, -8],
+    ['straight', 40],
+  ]);
+  assert.deepEqual(trainingLoop.trainingCues, [
+    {
+      id: 'airbrake-hairpin',
+      kind: 'airbrake-rehearsal',
+      lap: 1,
+      diagnostic: { from: 858, to: 962 },
+      at: 962,
+    },
+  ]);
+
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingLoop);
+  const diagnostic = model.segments.slice(858, 954);
+  const challenge = model.segments.slice(1194, 1278);
+  assert.equal(Math.max(...diagnostic.map((segment) => segment.curve)), 8);
+  assert.equal(Math.min(...challenge.map((segment) => segment.curve)), -8);
+  assert.equal(
+    trainingLoop.objects.filter(
+      (object) => object.at >= 858 && object.at <= 981,
+    ).length,
+    0,
+    'diagnostic and recovery need clean road',
+  );
+  assert.ok(trainingLoop.trainingCues[0].at < 982, 'assist needs recovery road');
+  const setup = trainingLoop.objects.filter((object) => object.id.startsWith('setup-'));
+  const hairpin = trainingLoop.objects.filter((object) => object.id.startsWith('hairpin-'));
+  assert.equal(setup.length, 12);
+  assert.equal(hairpin.length, 12);
+  assert.ok(setup.every((object) => object.at > 962 && object.at < 1194));
+  assert.ok(hairpin.every((object) => object.at >= 1194 && object.at < 1278));
+  assert.ok(setup.at(-1).offset > 0.5, 'setup line should stage the outside lane');
+  assert.ok(hairpin.at(-1).offset < 0, 'hairpin line should sweep through the bend');
+});
+
 test('training uses varied cone lines and preserves missed targets for lap two', () => {
   const model = new RoadModel(TUNING);
   model.buildFromData(trainingLoop);
-  assert.equal(new Set(trainingLoop.objects.map((object) => object.at)).size, 45);
+  assert.equal(new Set(trainingLoop.objects.map((object) => object.at)).size, 57);
   assert.deepEqual(
-    ['straight-', 'taper-', 'corridor-', 'transfer-', 'slalom-'].map(
+    ['straight-', 'taper-', 'corridor-', 'transfer-', 'setup-', 'hairpin-'].map(
       (prefix) => trainingLoop.objects.filter((object) => object.id.startsWith(prefix)).length,
     ),
-    [8, 8, 8, 9, 12],
+    [8, 8, 8, 9, 12, 12],
   );
 
   const corridor = trainingLoop.objects.filter((object) => object.id.startsWith('corridor-'));
@@ -230,7 +276,7 @@ test('training uses varied cone lines and preserves missed targets for lap two',
     (object, index) => Math.sign(object.offset) !== Math.sign(corridor[index].offset),
   ));
 
-  for (const prefix of ['straight-', 'taper-', 'slalom-']) {
+  for (const prefix of ['straight-', 'taper-', 'setup-']) {
     const line = trainingLoop.objects.filter((object) => object.id.startsWith(prefix));
     assert.ok(line.slice(1).every(
       (object, index) => Math.abs(object.offset - line[index].offset) <= 0.151,
@@ -239,13 +285,13 @@ test('training uses varied cone lines and preserves missed targets for lap two',
 
   const cones = model.segments.flatMap((segment) => segment.sprites)
     .filter((sprite) => sprite.objectiveId === 'cone-sweep');
-  cones.filter((cone) => !['taper-03', 'slalom-04'].includes(cone.trackObjectId))
+  cones.filter((cone) => !['taper-03', 'hairpin-04'].includes(cone.trackObjectId))
     .forEach((cone) => { cone.hit = true; });
   model.resetLapSprites();
-  assert.equal(cones.filter((cone) => cone.hit).length, 43);
+  assert.equal(cones.filter((cone) => cone.hit).length, 55);
   assert.deepEqual(
     cones.filter((cone) => !cone.hit).map((cone) => cone.trackObjectId),
-    ['taper-03', 'slalom-04'],
+    ['taper-03', 'hairpin-04'],
   );
 });
 
@@ -260,7 +306,7 @@ test('Hazard Weave reuses the loop and places target cones through six rock gate
   assert.ok(cones.every((cone) => cone.objective === 'safe-line'));
   assert.ok(rocks.every((rock) => rock.objective == null));
 
-  for (const segment of [180, 340, 500, 660, 820, 980]) {
+  for (const segment of [180, 340, 500, 660, 820, 1160]) {
     const gate = trainingHazardWeave.objects.filter((object) => object.at === segment);
     assert.equal(gate.filter((object) => object.kind === 'cone').length, 1);
     assert.equal(gate.filter((object) => object.kind === 'rock').length, 2);

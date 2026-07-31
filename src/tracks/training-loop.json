@@ -4,14 +4,20 @@
   "seed": 1101,
   "laps": 2,
   "finish": "laps",
-  "intro": "Clear 45 cones in 2 laps. Use L1 / R1 airbrakes for fast lane changes.",
+  "intro": "Clear 57 cones in 2 laps. Stay on the road and follow the cone lines.",
   "design": {
-    "focus": "Steer smoothly through inviting traffic-control lines, then use the airbrakes for one deliberate cross-track transfer.",
+    "focus": "Steer smoothly through inviting traffic-control lines, demonstrate the long clean airbrake bend, then follow the cone setup into an outside-lane airbrake hairpin.",
     "routeMeaning": "Most cones can be collected on either lap. A staggered two-line work zone leaves a complementary route for lap two without demanding two perfect laps."
   },
-  "lapMessages": {
-    "2": "LAP 2 / 2\nCLEAN UP MISSED CONES — WIDE MOVES: L1 / R1  •  Z / X"
-  },
+  "trainingCues": [
+    {
+      "id": "airbrake-hairpin",
+      "kind": "airbrake-rehearsal",
+      "lap": 1,
+      "diagnostic": { "from": 858, "to": 962 },
+      "at": 962
+    }
+  ],
   "decoration": {
     "roadsidePosts": true,
     "nitro": false,
@@ -22,7 +28,7 @@
       "id": "cone-sweep",
       "type": "hit_all",
       "target": "cone",
-      "label": "HIT ALL 45 CONES",
+      "label": "HIT ALL 57 CONES",
       "hudLabel": "HIT CONES",
       "pointsPerUnit": 100
     }
@@ -32,9 +38,9 @@
     "version": 2,
     "objective": "cone-sweep",
     "thresholds": [
-      { "rank": "gold", "minimum": 45, "stars": 3 },
-      { "rank": "silver", "minimum": 40, "stars": 2 },
-      { "rank": "bronze", "minimum": 30, "stars": 1 }
+      { "rank": "gold", "minimum": 57, "stars": 3 },
+      { "rank": "silver", "minimum": 51, "stars": 2 },
+      { "rank": "bronze", "minimum": 38, "stars": 1 }
     ]
   },
   "objects": [
@@ -75,18 +81,31 @@
     { "id": "transfer-right-05", "at": 722, "kind": "cone", "offset": 0.46, "objective": "cone-sweep" },
     { "id": "transfer-right-06", "at": 734, "kind": "cone", "offset": 0.4, "objective": "cone-sweep" },
 
-    { "id": "slalom-01", "at": 880, "kind": "cone", "offset": 0.3, "objective": "cone-sweep" },
-    { "id": "slalom-02", "at": 894, "kind": "cone", "offset": 0.18, "objective": "cone-sweep" },
-    { "id": "slalom-03", "at": 908, "kind": "cone", "offset": 0.05, "objective": "cone-sweep" },
-    { "id": "slalom-04", "at": 922, "kind": "cone", "offset": -0.08, "objective": "cone-sweep" },
-    { "id": "slalom-05", "at": 936, "kind": "cone", "offset": -0.21, "objective": "cone-sweep" },
-    { "id": "slalom-06", "at": 950, "kind": "cone", "offset": -0.34, "objective": "cone-sweep" },
-    { "id": "slalom-07", "at": 964, "kind": "cone", "offset": -0.2, "objective": "cone-sweep" },
-    { "id": "slalom-08", "at": 978, "kind": "cone", "offset": -0.05, "objective": "cone-sweep" },
-    { "id": "slalom-09", "at": 992, "kind": "cone", "offset": 0.1, "objective": "cone-sweep" },
-    { "id": "slalom-10", "at": 1006, "kind": "cone", "offset": 0.22, "objective": "cone-sweep" },
-    { "id": "slalom-11", "at": 1020, "kind": "cone", "offset": 0.32, "objective": "cone-sweep" },
-    { "id": "slalom-12", "at": 1034, "kind": "cone", "offset": 0.2, "objective": "cone-sweep" }
+    { "id": "setup-01", "at": 982, "kind": "cone", "offset": -0.1, "objective": "cone-sweep" },
+    { "id": "setup-02", "at": 996, "kind": "cone", "offset": -0.02, "objective": "cone-sweep" },
+    { "id": "setup-03", "at": 1010, "kind": "cone", "offset": 0.06, "objective": "cone-sweep" },
+    { "id": "setup-04", "at": 1024, "kind": "cone", "offset": 0.14, "objective": "cone-sweep" },
+    { "id": "setup-05", "at": 1056, "kind": "cone", "offset": 0.2, "objective": "cone-sweep" },
+    { "id": "setup-06", "at": 1070, "kind": "cone", "offset": 0.26, "objective": "cone-sweep" },
+    { "id": "setup-07", "at": 1084, "kind": "cone", "offset": 0.32, "objective": "cone-sweep" },
+    { "id": "setup-08", "at": 1098, "kind": "cone", "offset": 0.38, "objective": "cone-sweep" },
+    { "id": "setup-09", "at": 1150, "kind": "cone", "offset": 0.44, "objective": "cone-sweep" },
+    { "id": "setup-10", "at": 1160, "kind": "cone", "offset": 0.5, "objective": "cone-sweep" },
+    { "id": "setup-11", "at": 1170, "kind": "cone", "offset": 0.55, "objective": "cone-sweep" },
+    { "id": "setup-12", "at": 1180, "kind": "cone", "offset": 0.58, "objective": "cone-sweep" },
+
+    { "id": "hairpin-01", "at": 1196, "kind": "cone", "offset": 0.58, "objective": "cone-sweep" },
+    { "id": "hairpin-02", "at": 1203, "kind": "cone", "offset": 0.52, "objective": "cone-sweep" },
+    { "id": "hairpin-03", "at": 1210, "kind": "cone", "offset": 0.42, "objective": "cone-sweep" },
+    { "id": "hairpin-04", "at": 1217, "kind": "cone", "offset": 0.3, "objective": "cone-sweep" },
+    { "id": "hairpin-05", "at": 1224, "kind": "cone", "offset": 0.16, "objective": "cone-sweep" },
+    { "id": "hairpin-06", "at": 1231, "kind": "cone", "offset": 0.02, "objective": "cone-sweep" },
+    { "id": "hairpin-07", "at": 1238, "kind": "cone", "offset": -0.12, "objective": "cone-sweep" },
+    { "id": "hairpin-08", "at": 1245, "kind": "cone", "offset": -0.26, "objective": "cone-sweep" },
+    { "id": "hairpin-09", "at": 1252, "kind": "cone", "offset": -0.4, "objective": "cone-sweep" },
+    { "id": "hairpin-10", "at": 1259, "kind": "cone", "offset": -0.52, "objective": "cone-sweep" },
+    { "id": "hairpin-11", "at": 1266, "kind": "cone", "offset": -0.42, "objective": "cone-sweep" },
+    { "id": "hairpin-12", "at": 1273, "kind": "cone", "offset": -0.3, "objective": "cone-sweep" }
   ],
   "pieces": [
     ["straight", 40],
@@ -98,8 +117,11 @@
     ["straight", 24],
     ["curve", 40, 2],
     ["straight", 28],
-    ["chicane", 18, 2],
+    ["curve", 32, 8],
+    ["straight", 32],
     ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
     ["straight", 40]
   ],
   "obstacles": 0,

@@ -91,8 +91,8 @@ export const TUNING = {
                             // carrot: you SEE the payoff of a well-hit ramp or a nitro pop.
 
   // ---- Audio -----------------------------------------------------------
-  musicVolume: 0.32,   // master gain for the procedural score (0..1)
-  sfxVolume: 0.48,     // gameplay feedback bus; slightly forward of the score
+  musicVolume: 0.16,   // internal 0..1 gain; Projection Lab presents 16%
+  sfxVolume: 1.0,      // internal 0..1 gain; playtest-approved 100% feedback
 
   // ---- Colors (F-Zero sunset / Wipeout neon) -------------------------
   colors: {

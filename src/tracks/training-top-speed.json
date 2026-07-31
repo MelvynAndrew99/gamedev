@@ -55,8 +55,11 @@
     ["straight", 24],
     ["curve", 40, 2],
     ["straight", 28],
-    ["chicane", 18, 2],
+    ["curve", 32, 8],
+    ["straight", 32],
     ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
     ["straight", 40]
   ],
   "obstacles": 0,

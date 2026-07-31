@@ -230,10 +230,13 @@ harmony beneath the hook and percussion; do not restore the earlier `0.28`–
 `0.42` range without a three-loop playtest against cone impacts and instructions.
 
 Music and gameplay feedback use independent gain buses before the shared mix
-limiter. The current defaults are `musicVolume: 0.32` and `sfxVolume: 0.48`,
-which places objective feedback forward without rewriting the musical balance.
+limiter. The playtest-approved defaults are `musicVolume: 0.16` and
+`sfxVolume: 1.0`, which place objective feedback decisively forward without
+rewriting the musical balance.
 Both values are live controls in the Projection Lab's collapsible Audio group;
-use them to audition a mix while driving before changing individual patches.
+the UI presents them as human-readable `0–100%` values and translates to the
+engine's normalized `0–1` gains. Use them to audition a mix while driving before
+changing individual patches.
 
 ## Repeated gameplay audio
 

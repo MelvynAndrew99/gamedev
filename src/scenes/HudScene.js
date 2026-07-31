@@ -155,6 +155,12 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setVisible(false);
 
+    if (this.gs.trackData?.trainingCues?.some(
+      (cue) => cue.kind === 'airbrake-rehearsal'
+    )) {
+      this.createAirbrakeRehearsal();
+    }
+
     // Training damage lives on the camera glass, not in a conventional hull
     // bar. Four authored crack clusters accumulate and never obscure the road
     // center completely; they communicate mistakes without ending the lesson.
@@ -221,6 +227,81 @@ export class HudScene extends Phaser.Scene {
 
     const off = !gs.player.airborne && Math.abs(gs.player.x) > 1;
     this.offTrack.setVisible(off && Math.floor(time / 250) % 2 === 0);
+    this.updateAirbrakeRehearsal(time, gs.trainingTutorialView);
+  }
+
+  // Just-in-time rehearsal lives in unused sky at the upper right, leaving
+  // the road and its cone line fully visible. The race is already frozen by
+  // GameScene, so the player can supply the real input without consequence.
+  createAirbrakeRehearsal() {
+    const centerX = 650;
+    const centerY = 170;
+    const panel = this.add.rectangle(centerX, centerY, 286, 194, 0x0a0a14, 0.92)
+      .setStrokeStyle(2, 0x00e5ff, 0.7);
+    this.airbrakeTitle = this.add.text(centerX, centerY - 78, 'AIRBRAKE ASSIST', {
+      fontSize: '18px', color: '#00e5ff', fontStyle: 'bold',
+      stroke: '#0a0a14', strokeThickness: 3,
+    }).setOrigin(0.5);
+    const buttonStyle = {
+      fontSize: '28px', color: '#ffffff', fontStyle: 'bold', align: 'center',
+      backgroundColor: '#142235', padding: { x: 14, y: 9 },
+      stroke: '#0a0a14', strokeThickness: 4,
+    };
+    this.airbrakeRows = [
+      {
+        label: this.add.text(centerX - 125, centerY - 24, 'VEER RIGHT  ▶', {
+          fontSize: '18px', color: '#ffffff', fontStyle: 'bold',
+          stroke: '#0a0a14', strokeThickness: 3,
+        }).setOrigin(0, 0.5),
+        button: this.add.text(centerX + 102, centerY - 24, 'R1', buttonStyle)
+          .setOrigin(0.5),
+      },
+      {
+        label: this.add.text(centerX - 125, centerY + 49, '◀  VEER LEFT', {
+          fontSize: '18px', color: '#ffffff', fontStyle: 'bold',
+          stroke: '#0a0a14', strokeThickness: 3,
+        }).setOrigin(0, 0.5),
+        button: this.add.text(centerX + 102, centerY + 49, 'L1', buttonStyle)
+          .setOrigin(0.5),
+      },
+    ];
+    this.airbrakeRehearsal = this.add.container(0, 0, [
+      panel,
+      this.airbrakeTitle,
+      ...this.airbrakeRows.flatMap((row) => [row.label, row.button]),
+    ]).setDepth(80).setAlpha(0).setVisible(false);
+  }
+
+  updateAirbrakeRehearsal(time, view) {
+    if (!this.airbrakeRehearsal) return;
+    const active = view?.kind === 'airbrake-rehearsal';
+    const alpha = Phaser.Math.Linear(
+      this.airbrakeRehearsal.alpha,
+      active ? 1 : 0,
+      active ? 0.24 : 0.18,
+    );
+    this.airbrakeRehearsal
+      .setAlpha(alpha)
+      .setVisible(alpha > 0.01 || active);
+    if (!active) return;
+
+    const keys = view.device === 'gamepad' ? ['R1', 'L1'] : ['X', 'Z'];
+    const pulse = 1 + Math.sin(time / 90) * 0.06;
+    this.airbrakeTitle
+      .setText(view.complete ? 'READY!' : 'AIRBRAKE ASSIST')
+      .setColor(view.complete ? '#2ee56b' : '#00e5ff');
+    this.airbrakeRows.forEach((row, index) => {
+      const complete = index < view.step || view.complete;
+      const current = index === view.step && !view.complete;
+      row.button.setText(keys[index]);
+      row.label
+        .setColor(complete ? '#2ee56b' : current ? '#ffcf3f' : '#63758a')
+        .setScale(current ? pulse : 1);
+      row.button
+        .setBackgroundColor(complete ? '#2e8b57' : current ? '#b48315' : '#142235')
+        .setColor(complete ? '#ffffff' : current ? '#0a0a14' : '#63758a')
+        .setScale(current ? pulse : 1);
+    });
   }
 
   drawCameraCracks(hits) {

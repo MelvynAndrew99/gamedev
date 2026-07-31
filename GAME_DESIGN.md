@@ -27,6 +27,31 @@ authoring, scoring, and validating Training mode lessons. Training is a focused
 introduction to this game language and may declare narrow, documented exceptions
 before Story mode recombines the learned skills.
 
+## Show, then tell only when needed
+
+Gameplay communication should be visual, animated, audible, and responsive
+before it becomes a paragraph. Demonstrate the desired action with road shape,
+object motion, control graphics, camera language, sound, and immediate reaction
+to the player's input. Short text may name or reinforce what the player just
+saw; it must not carry a lesson that animation or level composition could teach.
+
+- Introduce a control beside the situation that needs it, not in a detached
+  manual screen.
+- Animate the relevant button and the car/world response together.
+- Change the demonstration when the player supplies the correct input so the
+  game visibly acknowledges understanding.
+- Prefer recognizable silhouettes, color, motion, and spatial staging over
+  sentences that pause play.
+- Keep accessibility fallbacks and concise labels. “Show, don't tell” reduces
+  reading dependence; it does not remove useful reinforcement.
+
+For a control the player must learn, prefer performance-gated assistance. Offer
+a safe, readable diagnostic challenge first. If the player demonstrates the
+skill, stay silent. If the outcome shows confusion, freeze on the following
+recovery beat, display the action outside the critical road view, require the
+real input, acknowledge success, restore a fair setup, and resume only after
+release. Do it once; repetition should come from driving, not recurring panels.
+
 ## Object language
 
 - **Cones are danger indicators in Story and Endless.** A line of ordinary
@@ -73,8 +98,10 @@ the detailed curriculum and level contract live in
 [training_levels.md](./training_levels.md). Cone Control is the first lesson:
 cone-only, asphalt-only, and a fixed two-lap scored attempt. Its cone layout uses
 straight runs, gentle tapers, a staggered two-route work zone, one airbrake
-transfer, and a slalom. Missed cones persist for lap two and lower the trophy if
-they remain at finish.
+transfer, a clean `+8` diagnostic hairpin, a performance-gated airbrake assist,
+a cone-filled recovery/setup sector, and an outside-lane `-8` cone hairpin.
+Competent players are never paused. Missed cones persist for lap two and lower
+the trophy if they remain at finish.
 
 Hazard Weave is Training Level 2. Cone breadcrumbs thread six open lanes between
 rock pairs. Rock contact adds one of four persistent camera-glass crack stages
@@ -405,6 +432,8 @@ the bottom-left HUD panel. That panel is the global race-purpose display and
 replaces the old Fame readout. It shows each goal, live progress, completion
 checkmarks, and objective points. Time-based race cash remains separate from
 objective score until the economy has enough playtest evidence to price goals.
+Briefings state purpose; contextual animation teaches execution. If a briefing
+needs several sentences to explain an input, the level is missing a demonstration.
 
 ## Playtest questions
 

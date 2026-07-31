@@ -16,9 +16,6 @@
     "display": "camera-cracks",
     "penalty": "trophy-only"
   },
-  "lapMessages": {
-    "2": "LAP 2 / 2\nMISSED CONES REMAIN — PROTECT THE WINDSCREEN"
-  },
   "decoration": {
     "roadsidePosts": true,
     "nitro": false,
@@ -88,12 +85,12 @@
     { "id": "rocks-05-center", "at": 820, "kind": "rock", "offset": 0 },
     { "id": "line-05-gate", "at": 820, "kind": "cone", "offset": 0.58, "objective": "safe-line" },
 
-    { "id": "line-06-a", "at": 935, "kind": "cone", "offset": -0.2, "objective": "safe-line" },
-    { "id": "line-06-b", "at": 947, "kind": "cone", "offset": -0.35, "objective": "safe-line" },
-    { "id": "line-06-c", "at": 959, "kind": "cone", "offset": -0.5, "objective": "safe-line" },
-    { "id": "line-06-gate", "at": 980, "kind": "cone", "offset": -0.58, "objective": "safe-line" },
-    { "id": "rocks-06-center", "at": 980, "kind": "rock", "offset": 0 },
-    { "id": "rocks-06-right", "at": 980, "kind": "rock", "offset": 0.68 }
+    { "id": "line-06-a", "at": 1107, "kind": "cone", "offset": -0.2, "objective": "safe-line" },
+    { "id": "line-06-b", "at": 1119, "kind": "cone", "offset": -0.35, "objective": "safe-line" },
+    { "id": "line-06-c", "at": 1131, "kind": "cone", "offset": -0.5, "objective": "safe-line" },
+    { "id": "line-06-gate", "at": 1160, "kind": "cone", "offset": -0.58, "objective": "safe-line" },
+    { "id": "rocks-06-center", "at": 1160, "kind": "rock", "offset": 0 },
+    { "id": "rocks-06-right", "at": 1160, "kind": "rock", "offset": 0.68 }
   ],
   "pieces": [
     ["straight", 40],
@@ -105,8 +102,11 @@
     ["straight", 24],
     ["curve", 40, 2],
     ["straight", 28],
-    ["chicane", 18, 2],
+    ["curve", 32, 8],
+    ["straight", 32],
     ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
     ["straight", 40]
   ],
   "obstacles": 0,

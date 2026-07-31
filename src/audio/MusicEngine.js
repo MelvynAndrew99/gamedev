@@ -40,8 +40,8 @@ class MusicEngine {
     this.noiseBuffer = null;
     this.timer = null;
     this.track = null;
-    this.volume = 0.32;
-    this.sfxVolume = 0.48;
+    this.volume = 0.16;
+    this.sfxVolume = 1.0;
     this.lastConeVariation = -1;
   }
 

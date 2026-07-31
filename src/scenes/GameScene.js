@@ -14,6 +14,7 @@ import { checkObstacleHit } from '../systems/Collision.js';
 import { Controls } from '../systems/Controls.js';
 import { Popularity } from '../systems/Popularity.js';
 import { ObjectiveState } from '../systems/ObjectiveState.js';
+import { trainingCueDecision } from '../systems/TrainingCue.js';
 import { submitTrainingResult } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
@@ -85,6 +86,10 @@ export class GameScene extends Phaser.Scene {
     this.prevNitroHeld = false;
     this.trainingDamageHits = 0;
     this.trainingDamageMax = this.trackData?.trainingDamage?.maxHits ?? 0;
+    this.trainingTutorial = null;
+    this.trainingTutorialView = null;
+    this.completedTrainingCues = new Set();
+    this.failedTrainingCues = new Set();
     this.done = false;
 
     // Bottom-anchored (origin 0.5,1): the sprite's y IS its rear-bumper
@@ -179,6 +184,20 @@ export class GameScene extends Phaser.Scene {
       return; // no movement, collisions, or race time behind the briefing
     }
 
+    if (this.trainingTutorial) {
+      const tutorialInput = this.controls.read(TUNING);
+      this.updateTrainingTutorial(tutorialInput);
+      const speedPercent = this.player.speed / TUNING.maxSpeed;
+      this.renderer.render(
+        this.model,
+        this.player,
+        speedPercent,
+        this.speedLineBurst,
+        this.sceneryDistance,
+      );
+      return; // deliberate freeze: no race clock, movement, or collisions
+    }
+
     const dt = Math.min(delta, 50) / 1000;
     const input = this.controls.read(TUNING);
 
@@ -191,6 +210,7 @@ export class GameScene extends Phaser.Scene {
 
     this.player.update(dt, input, this.model);
     this.sceneryDistance += this.player.speed * dt;
+    this.maybeStartTrainingTutorial(input);
 
     // Zipper crossings: edge-triggered per strip (kick on entry, re-arm on
     // exit), never consumed — the paint is permanent, the skill is lining
@@ -239,8 +259,8 @@ export class GameScene extends Phaser.Scene {
         if (this.mode === 'training') {
           const lessonMessage = this.trackData.lapMessages?.[this.race.lap];
           this.showBanner(
-            lessonMessage ?? `LAP ${this.race.lap} / ${this.race.laps}`,
-            1800,
+            lessonMessage ?? `LAP ${this.race.lap}`,
+            lessonMessage ? 1800 : 1000,
           );
         } else {
           this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
@@ -280,6 +300,107 @@ export class GameScene extends Phaser.Scene {
 
   distanceM() {
     return Math.floor(this.player.position / 100);
+  }
+
+  // Adaptive onboarding: a clean bend silently measures the result. Staying
+  // on the road skips instruction; touching the shoulder schedules a safe,
+  // freeze-frame rehearsal on the recovery straight before the cone chicane.
+  maybeStartTrainingTutorial(input) {
+    const cues = this.trackData?.trainingCues ?? [];
+    if (
+      cues.length === 0 ||
+      !this.race?.crossedStart ||
+      this.race.lap !== 1 ||
+      this.trainingTutorial
+    ) return;
+    const segment = this.model.findSegment(
+      this.player.position + TUNING.playerZ,
+    );
+    const cue = cues.find(
+      (candidate) =>
+        candidate.kind === 'airbrake-rehearsal' &&
+        candidate.lap === this.race.lap &&
+        !this.completedTrainingCues.has(candidate.id),
+    );
+    if (!cue) return;
+
+    const decision = trainingCueDecision(cue, {
+      lap: this.race.lap,
+      segmentIndex: segment.index,
+      offRoad: Math.abs(this.player.x) > 1,
+      failed: this.failedTrainingCues.has(cue.id),
+    });
+    if (decision.failed) {
+      this.failedTrainingCues.add(cue.id);
+    }
+    if (decision.action === 'none') return;
+    if (decision.action === 'pass') {
+      this.completedTrainingCues.add(cue.id); // demonstrated through play
+      return;
+    }
+
+    this.trainingTutorial = {
+      cue,
+      step: 0, // road order: right shoulder, then left shoulder
+      waitingForRelease: true,
+      acceptAt: this.time.now + 250,
+      completeAt: null,
+      device: input.connected ? 'gamepad' : 'keyboard',
+    };
+    // Training assistance restores a fair setup instead of carrying the miss
+    // into the teaching corner. It is help, never an extra punishment beat.
+    this.player.x = 0;
+    this.player.speed = Math.max(this.player.speed, TUNING.maxSpeed * 0.8);
+    this.carSprite.setFrame(2);
+    this.syncTrainingTutorialView(false);
+  }
+
+  updateTrainingTutorial(input) {
+    const tutorial = this.trainingTutorial;
+    if (!tutorial) return;
+    tutorial.device = input.connected ? 'gamepad' : 'keyboard';
+    const anyHeld = input.airbrakeL || input.airbrakeR;
+
+    if (tutorial.completeAt != null) {
+      if (this.time.now >= tutorial.completeAt && !anyHeld) {
+        this.completedTrainingCues.add(tutorial.cue.id);
+        this.trainingTutorial = null;
+        this.trainingTutorialView = null;
+        this.carSprite.setFrame(2);
+      } else {
+        this.syncTrainingTutorialView(false);
+      }
+      return;
+    }
+
+    const direction = tutorial.step === 0 ? 1 : -1;
+    const correctHeld = direction > 0 ? input.airbrakeR : input.airbrakeL;
+    if (tutorial.waitingForRelease) {
+      if (!anyHeld && this.time.now >= tutorial.acceptAt) {
+        tutorial.waitingForRelease = false;
+        this.carSprite.setFrame(2);
+      }
+    } else if (correctHeld) {
+      this.carSprite.setFrame(direction > 0 ? 4 : 0);
+      tutorial.step++;
+      tutorial.waitingForRelease = true;
+      tutorial.acceptAt = this.time.now + 160;
+      if (tutorial.step >= 2) tutorial.completeAt = this.time.now + 450;
+    }
+    this.syncTrainingTutorialView(correctHeld);
+  }
+
+  syncTrainingTutorialView(pressed) {
+    const tutorial = this.trainingTutorial;
+    if (!tutorial) return;
+    this.trainingTutorialView = {
+      id: tutorial.cue.id,
+      kind: tutorial.cue.kind,
+      step: tutorial.step,
+      device: tutorial.device,
+      pressed,
+      complete: tutorial.completeAt != null,
+    };
   }
 
   onPickup(sprite) {
@@ -803,14 +924,16 @@ export class GameScene extends Phaser.Scene {
     const ac = new AbortController();
     this.events.once('shutdown', () => ac.abort());
 
-    const hook = (id, fn) => {
+    const hook = (id, fn, options = {}) => {
       const el = document.getElementById(id);
       if (!el) return;
       const out = document.getElementById(id + 'Value');
       const apply = () => {
-        const v = parseFloat(el.value);
-        fn(v);
-        if (out) out.textContent = el.value;
+        const raw = parseFloat(el.value);
+        fn(options.transform ? options.transform(raw) : raw);
+        if (out) {
+          out.textContent = options.format ? options.format(raw) : el.value;
+        }
         TUNING.recalc();
       };
       el.addEventListener('input', apply, { signal: ac.signal });
@@ -831,11 +954,11 @@ export class GameScene extends Phaser.Scene {
     hook('musicVolume',  (v) => {
       TUNING.musicVolume = v;
       MUSIC.setVolume(v);
-    });
+    }, { transform: (v) => v / 100, format: (v) => `${Math.round(v)}%` });
     hook('sfxVolume',    (v) => {
       TUNING.sfxVolume = v;
       MUSIC.setSfxVolume(v);
-    });
+    }, { transform: (v) => v / 100, format: (v) => `${Math.round(v)}%` });
 
     // Sync the track picker to however we actually got here (title menu,
     // garage "next race", or the picker itself) so it never shows a stale
