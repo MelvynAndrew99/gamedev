@@ -35,7 +35,9 @@ finished until its effect on both modes has been considered.
   existing jump physics. A ramp should lead to a benefit: clearing a hazard,
   reaching a speed line, chaining fame, or satisfying an objective.
 - **Zippers are execution rewards.** Their line should be visible early enough
-  to choose, then demand steering precision at speed.
+  to choose, then demand steering precision at speed. Green zipper paint and
+  yellow ramp-approach paint never overlap in the same lane; combo lines
+  separate them with a short clean-asphalt beat.
 - **Nitro is stored agency.** Place it before a climb or demanding section,
   but let the player choose when to spend it.
 - **Dirt is a deliberate tempo change.** Use it for a short handling test or
@@ -149,6 +151,28 @@ These presentation details are intentional parts of speed, readability, and
 game feel. Treat them as design constraints when changing art, projection,
 camera settings, HUD layout, or rendering—not as incidental implementation.
 
+### World palette and depth
+
+- Every campaign course has its own grounded near-future environment palette;
+  Endless Mode uses the same system rather than a separate rendering rule.
+- Atmospheric colors may change by course, but semantic driving colors do not:
+  cyan/magenta mark powered road edges, green marks speed, yellow marks a ramp
+  offer, and warm orange/red marks danger.
+- Background contrast stays below road-object contrast. Windows and celestial
+  lights should make the world feel inhabited without competing with a cone,
+  zipper, runway, gantry, or pickup.
+- Horizon scenery is deterministic code-native pixel art. Far and near layers
+  follow projected road curves at different rates; their small travel drift
+  must remain continuous across campaign lap wraps.
+- Large trackside landmarks are anchored to absolute road segments and use the
+  road projection, so they visibly approach and pass the player. Campaign
+  landmarks repeat consistently each lap; Endless scenery cadence survives
+  segment trimming. These objects are non-collidable and render below all
+  gameplay props.
+- Near-future landmarks favor recognizable infrastructure—renewables, power
+  lines, commuter or freight corridors, and evolving city edges—over fantasy
+  megastructures. The world should feel plausibly one generation ahead.
+
 ### Player car sprite
 
 - `tools/gen-car.js` is the source of truth for `public/assets/car.png`.
@@ -219,6 +243,40 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
 - Keep the angular dark-metal frame, cyan power cores, magenta/cyan edge
   lighting, checkered endcaps, and readable `START / FINISH` nameplate aligned
   with the game's neon road palette.
+
+### Music
+
+- [MUSIC_DESIGN.md](./MUSIC_DESIGN.md) is the source of truth for composing,
+  arranging, mixing, implementing, and reviewing the code-generated score.
+  Read it before changing a theme or `MusicEngine.js`; the rules below are the
+  non-negotiable summary shared with the wider game design.
+- `src/audio/MusicEngine.js` synthesizes every track live (no audio files) —
+  see its header comment for the scheduling model and the shared instrument
+  set (bass, lead, keys, pad, kick, snare, hat) that every theme is built
+  from.
+- A racing track's loop (`bars.length * stepsPerBar` steps at its `bpm`) must
+  run **at least 30 seconds**. Shorter loops read as visibly repetitive under
+  several minutes of driving — the loop point becomes audible instead of
+  disappearing into the background the way a racing score should.
+- The garage is an explicit short-stay exception: its loop may run **16–24
+  seconds** because repairs and upgrades usually finish quickly. A short shop
+  cue still needs a complete harmonic phrase, an audible variation, and a
+  deliberate turnaround so a longer visit never sounds like a broken loop.
+- Each theme keeps its own key, chord progression, and melodic/bass material
+  — reusing another theme's progression or riff, even for tracks that share
+  a production brief (e.g. two synthwave-styled themes), collapses their
+  identities into each other. Shared production techniques (a voice, a
+  drum pattern, a mix trick) are fine to reuse; shared songwriting is not.
+- **The score is futuristic first.** This is a futuristic racer; every
+  theme's core identity comes from unapologetically synthetic sources —
+  FM grit, detuned saw stacks, gated arps, sidechain pump, drum-machine
+  transients. Voices that imitate acoustic instruments (guitar chugs,
+  acoustic-kit snare character, and similar) may appear as accents inside
+  a bar, but must never carry a theme's identity — a listener should never
+  place the score in a past decade's garage or arena.
+- Within that palette, pop energy is welcome: hooks, funk syncopation,
+  major-key brightness, and danceable grooves are how themes get
+  personality. "Futuristic" constrains the *timbre*, not the *fun*.
 
 ## Cross-mode change checklist
 

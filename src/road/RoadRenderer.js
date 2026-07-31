@@ -10,14 +10,27 @@
 // slab sideways by the running total x. A quadratic drift builds up and
 // reads as a bend. Nothing is actually curved.
 
+import { getEnvironment } from '../config/environments.js';
+import { ParallaxBackground } from './ParallaxBackground.js';
+import { TracksideScenery } from './TracksideScenery.js';
+
 export class RoadRenderer {
-  constructor(scene, tuning) {
+  constructor(scene, tuning, environmentId = 'endless') {
     this.t = tuning;
     this.w = scene.scale.width;
     this.h = scene.scale.height;
+    this.environment = getEnvironment(environmentId);
+    this.colors = { ...tuning.colors, ...this.environment.colors };
 
-    this.sky = scene.add.graphics().setDepth(-2);
     this.g = scene.add.graphics().setDepth(-1);
+    this.background = new ParallaxBackground(
+      scene,
+      this.w,
+      this.h,
+      this.environment,
+      tuning.segmentLength,
+    );
+    this.trackside = new TracksideScenery(scene, tuning, this.environment);
     // Start/finish gantries: world geometry that rises ABOVE the road, so it
     // lives on its own layer over the asphalt (depth -1) and roadside props
     // (depth 5), but under the car (depth 10) — the car drives beneath it.
@@ -38,7 +51,6 @@ export class RoadRenderer {
     // from the vanishing point so they read as the world rushing past, not as
     // an overlay pasted on top.
     this.streaks = scene.add.graphics().setDepth(8);
-    this.drawSky();
 
     // Sprite pool for world objects (obstacles, roadside props). Created
     // once, reassigned every frame — the render loop never allocates.
@@ -52,21 +64,7 @@ export class RoadRenderer {
     }
   }
 
-  // Static gradient bands, drawn once. (Parallax scroll on curves is a
-  // week-3 juice item: shift this by accumulated curve * speed.)
-  drawSky() {
-    const bands = this.t.colors.skyBands;
-    const horizon = this.h / 2;
-    const bandH = horizon / bands.length;
-    bands.forEach((c, i) => {
-      this.sky.fillStyle(c, 1);
-      // last band bleeds below the horizon so hills (later) won't show gaps
-      const h = i === bands.length - 1 ? bandH + 4 : bandH + 1;
-      this.sky.fillRect(0, i * bandH, this.w, h);
-    });
-  }
-
-  render(model, player, speedPercent = 0, speedBurst = 0) {
+  render(model, player, speedPercent = 0, speedBurst = 0, sceneryDistance = player.position) {
     const t = this.t;
     const g = this.g;
     g.clear();
@@ -97,6 +95,8 @@ export class RoadRenderer {
     let x = 0;
     let dx = -(base.curve * basePercent);
     let maxY = this.h; // clip line: nothing draws below (screen-wise, nearer than) this
+    let horizonRoadX = this.w / 2;
+    let horizonSample = -1;
 
     for (let n = 0; n < t.drawDistance; n++) {
       const seg = model.segmentAt(base, n);
@@ -125,8 +125,29 @@ export class RoadRenderer {
 
       this.drawSegment(seg, 1 - fog(n / t.drawDistance, t.fogDensity));
       maxY = seg.p2.screen.y;
+      if (n > horizonSample) {
+        horizonSample = n;
+        horizonRoadX = seg.p2.screen.x;
+      }
     }
 
+    // The projected road supplies the camera's apparent heading. Far scenery
+    // follows less than near scenery, so curves reveal depth while straight
+    // sections remain visually calm. Smoothing prevents one-pixel projection
+    // rounding from making the skyline twitch.
+    const rawCurveOffset = clamp(
+      horizonRoadX - this.w / 2,
+      -this.w * 0.65,
+      this.w * 0.65,
+    );
+    if (this.backgroundCurveOffset === undefined) {
+      this.backgroundCurveOffset = rawCurveOffset;
+    } else {
+      this.backgroundCurveOffset += (rawCurveOffset - this.backgroundCurveOffset) * 0.12;
+    }
+    this.background.render(sceneryDistance, this.backgroundCurveOffset);
+
+    this.trackside.render(model, base);
     this.renderGates(model, base);
     this.renderSprites(model, base);
     this.drawSpeedLines();
@@ -154,7 +175,7 @@ export class RoadRenderer {
   // silhouette remains perspective-correct.
   drawGate({ x, y, w }) {
     if (w < 3) return; // too far to read — skip the sub-pixel clutter
-    const c = this.t.colors;
+    const c = this.colors;
     const OUT = 0x0a0a14;
     const FRAME = 0x2a2a3a;
     const PANEL = 0x141426;
@@ -457,7 +478,7 @@ export class RoadRenderer {
   }
 
   drawSegment(seg, fogAmount) {
-    const c = this.t.colors;
+    const c = this.colors;
     const g = this.g;
     const { x: x1, y: y1, w: w1 } = seg.p1.screen;
     const { x: x2, y: y2, w: w2 } = seg.p2.screen;
@@ -573,4 +594,8 @@ export class RoadRenderer {
 // Exponential fog, 0 (near, clear) -> approaching 1 (far, soup).
 function fog(dist, density) {
   return 1 / Math.exp(dist * dist * density);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }

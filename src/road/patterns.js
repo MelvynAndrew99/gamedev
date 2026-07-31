@@ -16,6 +16,8 @@ export const LANES = [-0.66, 0, 0.66];
 const CONE_INTERVAL = 12;
 const CONE_TO_PAYLOAD = 18;
 const RAMP_APPROACH = 28;
+const COMBO_RAMP_APPROACH = 18;
+const COMBO_TRANSITION = 4;
 
 export const DEFAULT_PATTERN_WEIGHTS = Object.freeze({
   lane: 0.55,
@@ -44,8 +46,8 @@ function warn(model, at, lane, rng) {
 
 // Yellow/cyan paint is projected as part of the road, but terminates at a
 // separate raised sprite. This is a runway leading TO a ramp, not a flat ramp.
-function markRampApproach(model, rampAt, lane) {
-  const start = Math.max(0, rampAt - RAMP_APPROACH);
+function markRampApproach(model, rampAt, lane, length = RAMP_APPROACH) {
+  const start = Math.max(0, rampAt - length);
   for (let i = start; i < rampAt; i++) {
     const seg = model.segments[i];
     if (!seg) continue;
@@ -127,8 +129,12 @@ function rampRocksLine(model, at, rng) {
 }
 
 // --- The combo line (Tony Hawk foundation) -------------------------------
-// An authored chain: zip runway -> ramp -> landing strip in the ADJACENT
-// lane -> return strip. Rocks guard the launch lane's landing zone
+// An authored chain: zip runway -> clean asphalt beat -> gold launch runway
+// -> ramp -> landing strip in the ADJACENT lane -> return strip. Keeping the
+// green zipper and gold runway on separate segments lets each reward retain
+// its own silhouette and color meaning.
+//
+// Rocks guard the launch lane's landing zone
 // (cone-warned for anyone grounded), so the trick is carving to the new
 // lane MID-AIR with the airbrakes. Every beat feeds the combo; the whole
 // line fits far inside the combo window at band speed, so a clean run
@@ -144,8 +150,8 @@ function comboLine(model, at, rng) {
   const laneB = LANES[(li + 1 + Math.floor(rng() * 2)) % LANES.length];
   let i = at;
   for (let k = 0; k < 5; k++) setZip(model, i + k, laneA);   // runway
-  i += 7;
-  markRampApproach(model, i, laneA);
+  i += 5 + COMBO_TRANSITION + COMBO_RAMP_APPROACH;
+  markRampApproach(model, i, laneA, COMBO_RAMP_APPROACH);
   put(model, i, OBSTACLES.ramp, laneA);                      // raised launch
   put(model, i + 4, OBSTACLES.cone, laneA);                  // grounded-warning:
   put(model, i + 8, OBSTACLES.cone, laneA);                  // rocks ahead in A

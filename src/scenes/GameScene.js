@@ -56,8 +56,15 @@ export class GameScene extends Phaser.Scene {
       this.model.buildFromData(this.trackData);
       this.race = new RaceState(this.model, this.trackData.laps ?? 3);
     }
-    this.renderer = new RoadRenderer(this, TUNING);
+    this.renderer = new RoadRenderer(
+      this,
+      TUNING,
+      this.trackData?.id ?? 'endless',
+    );
     this.player = new Player(TUNING);
+    // Player.position wraps at a campaign lap line. Scenery distance does not,
+    // so background drift remains continuous rather than snapping each lap.
+    this.sceneryDistance = 0;
 
     // Rolling grid start: sit the car behind the start/finish line so the
     // gantry is ahead and visible at the lights, then drive THROUGH it to
@@ -160,6 +167,7 @@ export class GameScene extends Phaser.Scene {
     this.prevNitroHeld = input.nitro;
 
     this.player.update(dt, input, this.model);
+    this.sceneryDistance += this.player.speed * dt;
 
     // Zipper crossings: edge-triggered per strip (kick on entry, re-arm on
     // exit), never consumed — the paint is permanent, the skill is lining
@@ -210,7 +218,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     const speedPercent = this.player.speed / TUNING.maxSpeed;
-    this.renderer.render(this.model, this.player, speedPercent, this.speedLineBurst);
+    this.renderer.render(
+      this.model,
+      this.player,
+      speedPercent,
+      this.speedLineBurst,
+      this.sceneryDistance,
+    );
 
     // Steering FRAMES: 0=hard-left, 1=left, 2=straight, 3=right, 4=hard-right.
     // Five buckets instead of three — needed once airbrakes are in the mix:

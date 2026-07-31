@@ -12,7 +12,7 @@
     "finishClear": 50,
     "placements": [
       { "at": 65, "kind": "combo" },
-      { "at": 135, "kind": "gate" },
+      { "at": 150, "kind": "gate" },
       { "at": 255, "kind": "rampRocks" },
       { "at": 410, "kind": "edge" },
       { "at": 540, "kind": "combo" },
