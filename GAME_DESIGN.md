@@ -244,6 +244,32 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
   lighting, checkered endcaps, and readable `START / FINISH` nameplate aligned
   with the game's neon road palette.
 
+### Music
+
+- `src/audio/MusicEngine.js` synthesizes every track live (no audio files) —
+  see its header comment for the scheduling model and the shared instrument
+  set (bass, lead, keys, pad, kick, snare, hat) that every theme is built
+  from.
+- A track's loop (`bars.length * stepsPerBar` steps at its `bpm`) must run
+  **at least 30 seconds**. Shorter loops read as visibly repetitive under
+  several minutes of gameplay — the loop point becomes audible instead of
+  disappearing into the background the way a driving game's score should.
+- Each theme keeps its own key, chord progression, and melodic/bass material
+  — reusing another theme's progression or riff, even for tracks that share
+  a production brief (e.g. two synthwave-styled themes), collapses their
+  identities into each other. Shared production techniques (a voice, a
+  drum pattern, a mix trick) are fine to reuse; shared songwriting is not.
+- **The score is futuristic first.** This is a futuristic racer; every
+  theme's core identity comes from unapologetically synthetic sources —
+  FM grit, detuned saw stacks, gated arps, sidechain pump, drum-machine
+  transients. Voices that imitate acoustic instruments (guitar chugs,
+  acoustic-kit snare character, and similar) may appear as accents inside
+  a bar, but must never carry a theme's identity — a listener should never
+  place the score in a past decade's garage or arena.
+- Within that palette, pop energy is welcome: hooks, funk syncopation,
+  major-key brightness, and danceable grooves are how themes get
+  personality. "Futuristic" constrains the *timbre*, not the *fun*.
+
 ## Cross-mode change checklist
 
 Use this checklist whenever changing the world, assets, or gameplay rules:

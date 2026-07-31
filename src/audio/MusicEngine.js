@@ -198,18 +198,30 @@ class MusicEngine {
       const freq = bar.leadRootFreq * semitoneRatio(tone);
       if (bar.leadSynth === 'keys') this.playKeys(freq, time, dur * 3);
       else if (bar.leadSynth === 'saw') this.playSawLead(freq, time, dur * 1.4);
+      else if (bar.leadSynth === 'guitar') this.playGuitar(freq, time, dur * 1.9);
       else this.playLead(freq, time, dur * 1.4);
     }
 
+    // Optional second melodic voice: a quiet gated 16th arpeggio running
+    // underneath the lead. Kept separate from bar.lead so a theme can have
+    // a hook *and* forward-momentum arps at once — the classic synthwave
+    // layering one lead line can't do. Opt-in per bar; themes without
+    // bar.arp are untouched.
+    const arpIdx = bar.arp?.[step];
+    if (arpIdx != null) {
+      const tone = bar.chordTones[arpIdx % bar.chordTones.length];
+      this.playArp((bar.arpRootFreq ?? bar.leadRootFreq) * semitoneRatio(tone), time, dur * 1.05);
+    }
+
     if (step === 0) {
-      this.playPad(bar.chordTones.map((t) => bar.padRootFreq * semitoneRatio(t)), time, dur * bar.padStepsHeld);
+      this.playPad(bar.chordTones.map((t) => bar.padRootFreq * semitoneRatio(t)), time, dur * bar.padStepsHeld, bar.padSaw);
     }
 
     if (bar.kick.includes(step)) {
       this.playKick(time);
       if (bar.sidechain) this.duck(time); // opt-in per bar — off by default, every other theme is unaffected
     }
-    if (bar.snare.includes(step)) this.playSnare(time);
+    if (bar.snare.includes(step)) this.playSnare(time, bar.punkSnare);
     if (bar.hat.includes(step)) this.playHat(time, bar.openHat?.includes(step));
   }
 
@@ -361,6 +373,92 @@ class MusicEngine {
     });
   }
 
+  // Hybrid synth-guitar power chord (opt-in via bar.leadSynth === 'guitar'):
+  // root + fifth, each as a detuned/panned saw pair (the chorus), summed
+  // *before* a shared waveshaper so the intervals intermodulate — that
+  // interaction, not any single voice's tone, is what reads as "overdriven
+  // guitar" instead of "loud saws." A lowpass rolls off the fizz, and the
+  // envelope is a chug: fast attack, sustains most of its length, no pluck.
+  // Deliberately reuses driveCurve's gentle grit (a production technique,
+  // shared per GAME_DESIGN.md) rather than adding a hotter curve the mix
+  // bus would have to fight.
+  playGuitar(freq, time, dur) {
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.17, time + 0.01);
+    gain.gain.setValueAtTime(0.17, time + Math.max(0.011, dur - 0.06));
+    gain.gain.linearRampToValueAtTime(0.001, time + dur);
+
+    const drive = ctx.createWaveShaper();
+    drive.curve = this.driveCurve();
+    drive.oversample = '2x';
+
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 2600;
+    tone.Q.value = 0.7;
+
+    const pre = ctx.createGain();
+    pre.gain.value = 0.55; // headroom into the shaper — grit, not buzzsaw
+    pre.connect(drive).connect(tone).connect(gain).connect(this.duckable);
+
+    const wet = ctx.createGain();
+    wet.gain.value = 0.1; // touch of room so chugs don't feel pasted on
+    gain.connect(wet).connect(this.reverbBus);
+
+    [0, 7].forEach((interval) => {
+      const voiceFreq = freq * semitoneRatio(interval);
+      [-8, 8].forEach((cents) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = voiceFreq;
+        osc.detune.value = cents;
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = cents < 0 ? -0.3 : 0.3;
+        osc.connect(pan).connect(pre);
+        osc.start(time);
+        osc.stop(time + dur + 0.02);
+      });
+    });
+  }
+
+  // Gated 16th-note arp voice: a detuned saw pair with a hard gate — near-
+  // instant attack, short decay, done well before the next 16th so the gaps
+  // *are* the rhythm (that silence-between-notes is what "gated arp" means
+  // in this genre; a legato version just reads as a busy lead). Deliberately
+  // quiet and routed through the duckable bus so the kick pumps it — the
+  // arp is texture and momentum under the hook, never competition for it.
+  playArp(freq, time, dur) {
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.11, time + 0.003); // hard gate open
+    gain.gain.exponentialRampToValueAtTime(0.001, time + dur * 0.7); // closed before next step
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = freq * 4;
+    filter.Q.value = 1.1;
+    filter.connect(gain).connect(this.duckable);
+
+    const wet = ctx.createGain();
+    wet.gain.value = 0.12; // faint tail — shimmer, not wash
+    gain.connect(wet).connect(this.reverbBus);
+
+    [-5, 5].forEach((cents) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+      osc.detune.value = cents;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = cents < 0 ? -0.25 : 0.25;
+      osc.connect(pan).connect(filter);
+      osc.start(time);
+      osc.stop(time + dur + 0.02);
+    });
+  }
+
   // Warm electric-piano comp for the shop theme: a sine fundamental plus a
   // quiet triangle an octave up (the classic cheap-Rhodes trick — a pure
   // fundamental reads as dull, one bright overtone on top reads as warm),
@@ -402,7 +500,10 @@ class MusicEngine {
   // (detuned + panned apart) instead of one oscillator, a shared slow drift
   // LFO for warm wander, and a reverb send for lushness — the triangle-wave
   // sustain everything else in the mix (arps, drums) sits on top of.
-  playPad(freqs, time, dur) {
+  // withSaw (opt-in via bar.padSaw) blends a quiet centered sawtooth per
+  // tone under the triangle pairs — the triangle/saw-blend pad brighter
+  // synthwave briefs call for, without changing any theme that doesn't ask.
+  playPad(freqs, time, dur, withSaw) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
@@ -444,6 +545,21 @@ class MusicEngine {
         osc.start(time);
         osc.stop(time + dur + 0.05);
       });
+      if (withSaw) {
+        // One quiet centered saw per tone; its harmonics land above the
+        // triangles' and the shared lowpass tames them, so the blend adds
+        // presence rather than buzz. Attenuated well below the pairs.
+        const sawGain = ctx.createGain();
+        sawGain.gain.value = 0.35;
+        sawGain.connect(filter);
+        const saw = ctx.createOscillator();
+        saw.type = 'sawtooth';
+        saw.frequency.value = freq;
+        driftDepth.connect(saw.detune);
+        saw.connect(sawGain);
+        saw.start(time);
+        saw.stop(time + dur + 0.05);
+      }
     });
   }
 
@@ -463,19 +579,38 @@ class MusicEngine {
     osc.stop(time + 0.2);
   }
 
-  playSnare(time) {
+  // punk (opt-in via bar.punkSnare): layers a short low "body" thump under
+  // a wider, longer noise burst — the acoustic pop-punk snare character
+  // (drum *kit*, not drum *machine*) versus the default's tight electronic
+  // crack. The default path is bit-identical to before.
+  playSnare(time, punk) {
     const ctx = this.ctx;
     const noise = ctx.createBufferSource();
     noise.buffer = this.noiseBuffer;
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.value = 1800;
+    filter.frequency.value = punk ? 2100 : 1800;
+    if (punk) filter.Q.value = 0.5; // wider band — more "shhk," less "tick"
     const gain = ctx.createGain();
+    const dur = punk ? 0.17 : 0.12;
     gain.gain.setValueAtTime(0.7, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
     noise.connect(filter).connect(gain).connect(this.master);
     noise.start(time);
-    noise.stop(time + 0.13);
+    noise.stop(time + dur + 0.01);
+
+    if (punk) {
+      const body = ctx.createOscillator();
+      body.type = 'triangle';
+      body.frequency.setValueAtTime(210, time);
+      body.frequency.exponentialRampToValueAtTime(150, time + 0.06);
+      const bodyGain = ctx.createGain();
+      bodyGain.gain.setValueAtTime(0.5, time);
+      bodyGain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+      body.connect(bodyGain).connect(this.master);
+      body.start(time);
+      body.stop(time + 0.09);
+    }
   }
 
   playHat(time, open) {
