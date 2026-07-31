@@ -74,8 +74,8 @@ export class GarageScene extends Phaser.Scene {
     this.prevPad = null;
     this.refresh();
 
-    // Wrench-down music: warmer, slower, swung — the shop should not feel
-    // like the race it just interrupted (see audio/tracks/shopTheme.js).
+    // Compact 16-bit future-funk: relaxed enough to browse, but with a dance
+    // pulse that makes repairs feel like a neon service-bay montage.
     MUSIC.setVolume(TUNING.musicVolume);
     MUSIC.start(SHOP_THEME);
     this.events.once('shutdown', () => MUSIC.stop());

@@ -129,9 +129,8 @@ class MusicEngine {
   // Sidechain-style pump: a quick dip and analog-ish recovery on the
   // duckable bus, timed to a kick hit. setTargetAtTime (not a hard ramp +
   // cancel) so overlapping kicks layer smoothly instead of clicking.
-  duck(time) {
+  duck(time, depth = 0.4) {
     const g = this.duckable.gain;
-    const depth = 0.4;
     const attack = 0.015;
     const release = 0.16;
     g.setTargetAtTime(depth, time, attack);
@@ -189,18 +188,30 @@ class MusicEngine {
 
     const bassOffset = bar.bass[step];
     if (bassOffset != null) {
-      this.playBass(bar.bassRootFreq * semitoneRatio(bassOffset), time, dur * 1.8, bar.driveBass, bar.bassFM);
+      this.playBass(
+        bar.bassRootFreq * semitoneRatio(bassOffset),
+        time,
+        dur * 1.8,
+        bar.driveBass,
+        bar.bassFM,
+        bar.bassGain,
+      );
     }
 
     const leadIdx = bar.lead[step];
     if (leadIdx != null) {
-      const tone = bar.chordTones[leadIdx % bar.chordTones.length];
+      // A lead can opt into its own chord/color-tone palette while the pad
+      // keeps the actual harmony. This lets compact themes repeat one catchy
+      // contour across different chord qualities without forcing those extra
+      // melody notes into the sustained chord voicing.
+      const leadTones = bar.leadTones ?? bar.chordTones;
+      const tone = leadTones[leadIdx % leadTones.length];
       const freq = bar.leadRootFreq * semitoneRatio(tone);
       if (bar.leadSynth === 'keys') this.playKeys(freq, time, dur * 3);
       else if (bar.leadSynth === 'saw') this.playSawLead(freq, time, dur * 1.4);
       else if (bar.leadSynth === 'metal') this.playMetalLead(freq, time, dur * 1.65);
       else if (bar.leadSynth === 'guitar') this.playGuitar(freq, time, dur * 1.9);
-      else this.playLead(freq, time, dur * 1.4);
+      else this.playLead(freq, time, dur * 1.4, bar.leadGain);
     }
 
     // Optional second melodic voice: a quiet gated 16th arpeggio running
@@ -246,11 +257,11 @@ class MusicEngine {
     }
 
     if (bar.kick.includes(step)) {
-      this.playKick(time);
-      if (bar.sidechain) this.duck(time); // opt-in per bar — off by default, every other theme is unaffected
+      this.playKick(time, bar.kickGain);
+      if (bar.sidechain) this.duck(time, bar.sidechainDepth); // opt-in per bar — off by default
     }
-    if (bar.snare.includes(step)) this.playSnare(time, bar.punkSnare);
-    if (bar.hat.includes(step)) this.playHat(time, bar.openHat?.includes(step));
+    if (bar.snare.includes(step)) this.playSnare(time, bar.punkSnare, bar.snareGain);
+    if (bar.hat.includes(step)) this.playHat(time, bar.openHat?.includes(step), bar.hatGain);
     if (bar.industrial?.includes(step)) {
       this.playIndustrialHit(time, bar.industrialAccent?.includes(step));
     }
@@ -261,7 +272,7 @@ class MusicEngine {
   // schedule stop, let the garbage collector take it. No pooling — at this
   // note rate the churn is trivial next to Phaser's own per-frame allocs.
 
-  playBass(freq, time, dur, drive, fm) {
+  playBass(freq, time, dur, drive, fm, level = 1) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
@@ -289,7 +300,7 @@ class MusicEngine {
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.75, time + 0.008); // was 0.9 — headroom for the limiter
+    gain.gain.linearRampToValueAtTime(0.75 * (level ?? 1), time + 0.008); // headroom for the limiter
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
 
     // Gritty engine-pulse bass (F-Zero's punchy analog low end) instead of
@@ -325,11 +336,11 @@ class MusicEngine {
     return curve;
   }
 
-  playLead(freq, time, dur) {
+  playLead(freq, time, dur, level = 1) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.22, time + 0.004); // bright bell pluck
+    gain.gain.linearRampToValueAtTime(0.22 * (level ?? 1), time + 0.004); // bright bell pluck
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
 
     const filter = ctx.createBiquadFilter();
@@ -699,7 +710,7 @@ class MusicEngine {
     });
   }
 
-  playKick(time) {
+  playKick(time, level = 1) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -707,7 +718,7 @@ class MusicEngine {
     osc.frequency.exponentialRampToValueAtTime(58, time + 0.12); // was 45 — below the master highpass anyway
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.85, time); // was 1.0, the loudest voice in the engine
+    gain.gain.setValueAtTime(0.85 * (level ?? 1), time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
 
     osc.connect(gain).connect(this.master);
@@ -719,7 +730,7 @@ class MusicEngine {
   // a wider, longer noise burst — the acoustic pop-punk snare character
   // (drum *kit*, not drum *machine*) versus the default's tight electronic
   // crack. The default path is bit-identical to before.
-  playSnare(time, punk) {
+  playSnare(time, punk, level = 1) {
     const ctx = this.ctx;
     const noise = ctx.createBufferSource();
     noise.buffer = this.noiseBuffer;
@@ -729,7 +740,7 @@ class MusicEngine {
     if (punk) filter.Q.value = 0.5; // wider band — more "shhk," less "tick"
     const gain = ctx.createGain();
     const dur = punk ? 0.17 : 0.12;
-    gain.gain.setValueAtTime(0.7, time);
+    gain.gain.setValueAtTime(0.7 * (level ?? 1), time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
     noise.connect(filter).connect(gain).connect(this.master);
     noise.start(time);
@@ -741,7 +752,7 @@ class MusicEngine {
       body.frequency.setValueAtTime(210, time);
       body.frequency.exponentialRampToValueAtTime(150, time + 0.06);
       const bodyGain = ctx.createGain();
-      bodyGain.gain.setValueAtTime(0.5, time);
+      bodyGain.gain.setValueAtTime(0.5 * (level ?? 1), time);
       bodyGain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
       body.connect(bodyGain).connect(this.master);
       body.start(time);
@@ -749,7 +760,7 @@ class MusicEngine {
     }
   }
 
-  playHat(time, open) {
+  playHat(time, open, level = 1) {
     const ctx = this.ctx;
     const noise = ctx.createBufferSource();
     noise.buffer = this.noiseBuffer;
@@ -758,7 +769,7 @@ class MusicEngine {
     filter.frequency.value = 7000;
     const gain = ctx.createGain();
     const dur = open ? 0.14 : 0.035;
-    gain.gain.setValueAtTime(open ? 0.3 : 0.22, time);
+    gain.gain.setValueAtTime((open ? 0.3 : 0.22) * (level ?? 1), time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
     noise.connect(filter).connect(gain).connect(this.master);
     noise.start(time);

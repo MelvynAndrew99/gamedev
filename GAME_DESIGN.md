@@ -246,14 +246,22 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
 
 ### Music
 
+- [MUSIC_DESIGN.md](./MUSIC_DESIGN.md) is the source of truth for composing,
+  arranging, mixing, implementing, and reviewing the code-generated score.
+  Read it before changing a theme or `MusicEngine.js`; the rules below are the
+  non-negotiable summary shared with the wider game design.
 - `src/audio/MusicEngine.js` synthesizes every track live (no audio files) —
   see its header comment for the scheduling model and the shared instrument
   set (bass, lead, keys, pad, kick, snare, hat) that every theme is built
   from.
-- A track's loop (`bars.length * stepsPerBar` steps at its `bpm`) must run
-  **at least 30 seconds**. Shorter loops read as visibly repetitive under
-  several minutes of gameplay — the loop point becomes audible instead of
-  disappearing into the background the way a driving game's score should.
+- A racing track's loop (`bars.length * stepsPerBar` steps at its `bpm`) must
+  run **at least 30 seconds**. Shorter loops read as visibly repetitive under
+  several minutes of driving — the loop point becomes audible instead of
+  disappearing into the background the way a racing score should.
+- The garage is an explicit short-stay exception: its loop may run **16–24
+  seconds** because repairs and upgrades usually finish quickly. A short shop
+  cue still needs a complete harmonic phrase, an audible variation, and a
+  deliberate turnaround so a longer visit never sounds like a broken loop.
 - Each theme keeps its own key, chord progression, and melodic/bass material
   — reusing another theme's progression or riff, even for tracks that share
   a production brief (e.g. two synthwave-styled themes), collapses their
