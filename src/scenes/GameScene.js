@@ -86,6 +86,13 @@ export class GameScene extends Phaser.Scene {
     this.prevNitroHeld = false;
     this.trainingDamageHits = 0;
     this.trainingDamageMax = this.trackData?.trainingDamage?.maxHits ?? 0;
+    this.trainingDamageTaught = false; // one-time "rocks damage you" notice, shown on first hit
+    this.coneHits = 0;        // running index for loose-cone smash variety
+    this.conesThisLap = 0;    // cones collected on the current lap (reset each lap)
+    // Cones reset at the line, so the finishing lap is the fair "did you get
+    // them" check. A track with no cones leaves this at zero and never gates.
+    this.trainingConeTotal = (this.trackData?.objects ?? [])
+      .filter((object) => object.kind === 'cone').length;
     this.trainingTutorial = null;
     this.trainingTutorialView = null;
     this.completedTrainingCues = new Set();
@@ -256,6 +263,7 @@ export class GameScene extends Phaser.Scene {
       } else if (event === 'lap') {
         this.recordObjective('lap_complete');
         this.model.resetLapSprites();
+        this.conesThisLap = 0; // cones re-arm at the line; grade the finishing lap
         if (this.mode === 'training') {
           const lessonMessage = this.trackData.lapMessages?.[this.race.lap];
           this.showBanner(
@@ -425,8 +433,20 @@ export class GameScene extends Phaser.Scene {
     const { def } = sprite;
     const result = this.objectives.record('object_hit', { sprite });
     const objective = result?.changes[0];
+    // Smashing a cone always looks and sounds like a hit — the juice is a
+    // property of the object, not of an objective. When a cone belongs to a
+    // sweep objective the burst also carries progress/milestone weight; when
+    // it's a loose warning or edge lure (Endless, campaign, Hazard Weave) it
+    // still pops. `coneHits` gives loose cones the running index the burst
+    // needs for variety.
+    this.coneHits++;
+    this.conesThisLap++;
+    this.juiceConeHit(sprite, {
+      index: objective ? objective.progress : this.coneHits,
+      milestone: objective ? (objective.complete || objective.progress % 10 === 0) : false,
+      complete: objective ? objective.complete : false,
+    });
     if (objective) {
-      this.juiceConeHit(sprite, objective);
       this.popup(`CONE  ${objective.progress} / ${objective.total}`, '#ffcf3f');
       if (
         result.allComplete &&
@@ -468,6 +488,17 @@ export class GameScene extends Phaser.Scene {
         `WINDSCREEN  ${this.trainingDamageHits} / ${this.trainingDamageMax}`,
         '#ff6b6b',
       );
+      // Show, don't tell: the intro never mentions damage. The player only
+      // learns how it works once they prove they need to — the same adaptive
+      // rule as Lesson 1's airbrake rehearsal, which stays silent until a
+      // player drifts off the road.
+      if (!this.trainingDamageTaught) {
+        this.trainingDamageTaught = true;
+        this.showBanner(
+          'ROCKS CRACK YOUR WINDSCREEN\nSteer around them to stay clean\nFinish with no cracks for GOLD',
+          3200,
+        );
+      }
       // Training damage is communication, not punishment: no speed loss,
       // campaign hull damage, wreck, or restart. The cracks affect the medal.
       this.cameras.main.shake(140, 0.01);
@@ -517,8 +548,19 @@ export class GameScene extends Phaser.Scene {
       const target = this.objectives.views.find(
         (objective) => objective.id === this.trackData.scoring.objective,
       ) ?? this.objectives.primary;
+      // Cones gate the trophy only when a threshold says so (Hazard Weave).
+      // Where cones ARE the objective (Cone Control) they reset each lap and
+      // the objective row tracks unique hits, so the finishing-lap tally must
+      // not feed the trophy or the perfect flag.
+      const coneGated = this.trackData.scoring?.thresholds?.some(
+        (threshold) => threshold.maximumConesMissed != null,
+      );
+      const conesMissed = coneGated
+        ? Math.max(0, this.trainingConeTotal - this.conesThisLap)
+        : 0;
       const result = submitTrainingResult(this.trackData, target.progress, t, {
         damageHits: this.trainingDamageHits,
+        conesMissed,
         total: target.total,
       });
       const firstTrophy = [...this.trackData.scoring.thresholds]
@@ -529,13 +571,18 @@ export class GameScene extends Phaser.Scene {
           (firstTrophy.maximumDamageHits == null
             ? ''
             : ` / ${firstTrophy.maximumDamageHits} HITS MAX`);
-      const perfect = target.complete && this.trainingDamageHits === 0;
+      const perfect = target.complete && this.trainingDamageHits === 0 && conesMissed === 0;
       const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
       this.trainingAdvanceTo = nextTrack && nextTrack.status !== 'placeholder'
         ? this.trackIndex + 1
         : null;
       const damageLine = this.trainingDamageMax > 0
         ? `WINDSCREEN ${this.trainingDamageHits} / ${this.trainingDamageMax} HITS\n`
+        : '';
+      // Surface a cones tally only when cones gate the trophy (Hazard Weave);
+      // when cones ARE the objective the objective row already reports them.
+      const coneLine = coneGated && this.trainingConeTotal > 0
+        ? `CONES ${this.conesThisLap} / ${this.trainingConeTotal}\n`
         : '';
       const nextLine = this.trainingAdvanceTo == null
         ? (nextTrack
@@ -547,6 +594,7 @@ export class GameScene extends Phaser.Scene {
         `${perfect ? 'PERFECT CLEAR!' : 'TRAINING COMPLETE'}\n` +
           `${target.hudLabel}  ${target.progress} / ${target.total}\n` +
           damageLine +
+          coneLine +
           `${trophyLine}\n${fmtTime(t)}  •  ${this.objectives.score} PTS` +
           `${result.newBest ? '  •  NEW BEST' : ''}\n\n` +
           nextLine,
@@ -646,9 +694,7 @@ export class GameScene extends Phaser.Scene {
   // leaves a kart racer: physical motion, sparks, sound, and a larger beat at
   // each ten-count milestone and the final target. Milestones fly toward the
   // chase camera; ordinary hits kick off-road so dense lines retain variation.
-  juiceConeHit(sprite, objective) {
-    const complete = objective.complete;
-    const milestone = complete || objective.progress % 10 === 0;
+  juiceConeHit(sprite, { index = 0, milestone = false, complete = false } = {}) {
     MUSIC.playConeHit({ milestone, complete });
 
     const x = this.carSprite.x + (sprite.offset - this.player.x) * 22;
@@ -658,7 +704,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(milestone ? 38 : 24);
     const baseScaleX = cone.scaleX;
     const baseScaleY = cone.scaleY;
-    const side = objective.progress % 2 === 0 ? 1 : -1;
+    const side = index % 2 === 0 ? 1 : -1;
 
     if (milestone) {
       this.tweens.add({
@@ -676,7 +722,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.tweens.add({
         targets: cone,
-        x: x + side * (130 + (objective.progress % 3) * 24),
+        x: x + side * (130 + (index % 3) * 24),
         y: y - 135,
         angle: side * 540,
         scaleX: baseScaleX * 0.35,
@@ -690,7 +736,7 @@ export class GameScene extends Phaser.Scene {
 
     const colors = [0xff8a32, 0xffcf3f, 0x00e5ff];
     for (let i = 0; i < 7; i++) {
-      const angle = (Math.PI * 2 * i) / 7 + objective.progress * 0.23;
+      const angle = (Math.PI * 2 * i) / 7 + index * 0.23;
       const spark = this.add.rectangle(x, y, 4, 4, colors[i % colors.length])
         .setDepth(37);
       const distance = milestone ? 92 : 54;
@@ -822,7 +868,10 @@ export class GameScene extends Phaser.Scene {
             `${threshold.rank.toUpperCase()} ${threshold.minimum}` +
             (threshold.maximumDamageHits == null
               ? ''
-              : ` / ${threshold.maximumDamageHits} HITS MAX`)
+              : ` / ${threshold.maximumDamageHits} HITS MAX`) +
+            (threshold.maximumConesMissed == null
+              ? ''
+              : ' / ALL CONES')
           )
           .join('  •  '),
         {

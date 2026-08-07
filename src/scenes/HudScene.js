@@ -98,7 +98,10 @@ export class HudScene extends Phaser.Scene {
             `${threshold.rank[0].toUpperCase()} ${threshold.minimum}` +
             (threshold.maximumDamageHits == null
               ? ''
-              : `/H≤${threshold.maximumDamageHits}`)
+              : `/H≤${threshold.maximumDamageHits}`) +
+            (threshold.maximumConesMissed == null
+              ? ''
+              : '/CONES')
           )
           .join('  •  ');
         this.trophyGuide = this.add.text(

@@ -144,24 +144,55 @@ added line should create meaningful cleanup, not merely raise the count.
 
 ## Lesson 2: Hazard Weave
 
-**Player sentence:** Follow the smashable cone breadcrumbs through the rocks
-and protect the windscreen until the finish.
+**Player sentence:** Follow the open line through the weaving rocks and reach the
+finish with a clean windscreen.
 
-**Skill:** distinguish a collectible target from a momentum hazard, acquire the
-safe lane before the formation arrives, and recover after a bad read.
+**Skill:** read a bending line of hazards, steer continuously to stay on its open
+side, and recover after a clip.
 
-Hazard Weave reuses the Training Loop geometry and Open Circuit music identity.
-Six formations lead with three target cones, then place one final target cone in
-the open lane between two rocks. The safe lane moves center, right, left, then
-repeats. Twenty-four cones remain persistent across two laps; twelve rocks reset
-normally at the line.
+**Show, don't tell.** The intro is two clauses — *"Rocks cause damage. Avoid the
+rocks."* — and never explains the mechanic. Rocks are strung one behind another
+into long lines whose lateral offset marches back and forth across the lanes, so
+the open racing line keeps sliding and the player has to keep steering to trace
+it. Roughly a hundred rocks fill seven weaving runs across the whole loop
+(gentler, lower-amplitude bends through the two hairpins so the corner and the
+slalom don't fight), separated by short clear breathers, and they reset at the
+line so both laps rehearse the same weave. There are no gates to thread and no
+text telling the player which lane is open.
+
+The mechanic is taught the way Lesson 1 rehearses the airbrake: only once the
+player proves they need it. The first time the car actually clips a rock, a
+one-time notification appears — *"Rocks crack your windscreen / Steer around them
+to stay clean / Finish with no cracks for Gold."* A player who reads the line and
+never touches a rock is never interrupted.
+
+Two smaller touches sit on top of the weave. At three pinch points — where a rock
+strand bulges out to one edge — a few cones are laid along the *open* edge to bait
+the fast line, reusing Lesson 1's "drive here" cue as a lure rather than a
+collectible (they carry no objective and no penalty). And the loop ends with a
+short, gentle thread-the-needle corridor: parallel rock rails on the final
+straight form a ~0.8-wide channel whose center drifts slightly, so the player
+follows a lane down the middle. It sits on the easiest geometry (a straight) and
+is deliberately roomy — a fun capstone that rewards a steady hand, not a
+precision gate that punishes.
 
 Rock contact has four visual stages drawn as cracks on the camera glass. It does
 not reduce speed, campaign hull, money, objective score, or access to the finish,
-and it never wrecks the player. The cracks are mastery feedback: Gold requires
-24 cones and zero hits, Silver requires 20 cones and at most one hit, Bronze
-requires 16 cones and at most three hits. Four hits means no trophy, but the
-lesson still completes and progression continues.
+and it never wrecks the player. The tiers grade only steering and damage:
+
+- **Gold** — zero cracks *and* every edge cone collected on the finishing lap.
+- **Silver** — zero cracks.
+- **Bronze** — fewer than four cracks.
+
+Four cracks earns no trophy but still completes and unlocks the next lesson, so
+progression is never blocked. Cones only ever separate Silver from Gold — they
+prove mastery of movement and damage and never gate anything else. The rest of
+the track exists to teach one thing: rocks cause damage, so avoid them.
+
+Cone contact now bursts and pops in every mode. The smash juice used to fire only
+when a cone belonged to a sweep objective (Lesson 1); it is now a property of the
+cone itself, so the loose warning cones in Endless and campaign — and Hazard
+Weave's edge lures — all react when struck.
 
 The finish result is the reward transition. It plays a short fanfare, bursts
 confetti, calls out a perfect clear when appropriate, and records the best

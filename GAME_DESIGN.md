@@ -103,10 +103,18 @@ a performance-gated airbrake assist, a cone-filled recovery/setup sector, and a
 fixed right-lane `-8` cone hairpin. Competent players are never paused. Missed
 cones persist for lap two and lower the trophy if they remain at finish.
 
-Hazard Weave is Training Level 2. Cone breadcrumbs thread six open lanes between
-rock pairs. Rock contact adds one of four persistent camera-glass crack stages
-but never reduces speed, hull, money, or access to completion. Cone count and
-crack count combine only at the finish to determine the trophy.
+Hazard Weave is Training Level 2, and it teaches by showing, not telling. The
+intro is only "Rocks cause damage. Avoid the rocks." Rocks are strung one behind
+another into bending lines whose offset sweeps across the lanes, so the open
+racing line keeps moving and the player must steer continuously to follow it —
+about a hundred rocks in seven weaving runs across the loop, gentler through the
+two hairpins. The damage mechanic is never explained up front; the first time the
+player actually clips a rock (proving they need the lesson) a one-time
+notification appears, the same adaptive rule as Lesson 1's airbrake rehearsal.
+Rock contact adds one of four persistent camera-glass crack stages but never
+reduces speed, hull, money, or access to completion. Finishing awards a trophy
+based only on crack count. Cones are intentionally absent while the rock layout
+is tuned.
 
 Redline and Air School are Training Levels 3 and 4 on that same geometry.
 Redline introduces reaching and retaining top speed; Air School introduces

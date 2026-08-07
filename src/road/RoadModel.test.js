@@ -306,21 +306,91 @@ test('training uses varied cone lines and preserves missed targets for lap two',
   );
 });
 
-test('Hazard Weave reuses the loop and places target cones through six rock gates', () => {
+test('Hazard Weave strings rocks into bending lines that force the player to steer', () => {
   assert.deepEqual(trainingHazardWeave.pieces, trainingLoop.pieces);
   assert.equal(trainingHazardWeave.trainingDamage.maxHits, 4);
+  assert.equal(trainingHazardWeave.scoring.objective, 'finish');
+  assert.ok(trainingHazardWeave.scoring.thresholds.every(
+    (threshold) => threshold.minimum === trainingHazardWeave.laps,
+  ));
 
-  const cones = trainingHazardWeave.objects.filter((object) => object.kind === 'cone');
+  // Show, don't tell: the intro must be short and never explain the mechanic.
+  assert.ok(trainingHazardWeave.intro.length <= 60, trainingHazardWeave.intro);
+  assert.ok(!/damage works|windscreen|crack/i.test(trainingHazardWeave.intro));
+
   const rocks = trainingHazardWeave.objects.filter((object) => object.kind === 'rock');
-  assert.equal(cones.length, 24);
-  assert.equal(rocks.length, 12);
-  assert.ok(cones.every((cone) => cone.objective === 'safe-line'));
+  const cones = trainingHazardWeave.objects.filter((object) => object.kind === 'cone');
+  assert.equal(trainingHazardWeave.objects.length, rocks.length + cones.length);
+  assert.ok(rocks.length >= 90, `expected a dense field, got ${rocks.length}`);
   assert.ok(rocks.every((rock) => rock.objective == null));
 
-  for (const segment of [180, 340, 500, 660, 820, 1160]) {
-    const gate = trainingHazardWeave.objects.filter((object) => object.at === segment);
-    assert.equal(gate.filter((object) => object.kind === 'cone').length, 1);
-    assert.equal(gate.filter((object) => object.kind === 'rock').length, 2);
+  // Weaving strands (weave-N / bend-N) sit one behind another — no two ever
+  // share a segment. The thread-the-needle corridor (thread-N) is separate.
+  const weaveRocks = rocks.filter((rock) => /^(weave|bend)-/.test(rock.id));
+  const threadRocks = rocks.filter((rock) => /^thread-/.test(rock.id));
+  assert.equal(weaveRocks.length + threadRocks.length, rocks.length);
+
+  const weaveAts = weaveRocks.map((rock) => rock.at);
+  assert.equal(new Set(weaveAts).size, weaveAts.length);
+
+  const runs = new Map();
+  for (const rock of weaveRocks) {
+    const run = rock.id.match(/^([a-z]+-\d+)-/)[1];
+    if (!runs.has(run)) runs.set(run, []);
+    runs.get(run).push(rock);
+  }
+  for (const [run, members] of runs) {
+    const runAts = members.map((rock) => rock.at);
+    assert.deepEqual(runAts, [...runAts].sort((a, b) => a - b), run);
+
+    const offsets = members.map((rock) => rock.offset);
+    // Always leaves an open racing line: a single strand never blocks the road.
+    assert.ok(offsets.every((offset) => Math.abs(offset) <= 0.6), run);
+    // The line bends across the lanes rather than holding one — that is what
+    // makes the player steer as they pass.
+    const span = Math.max(...offsets) - Math.min(...offsets);
+    assert.ok(span >= 0.4, `${run} must weave across lanes (span ${span})`);
+    // Each step is gentle enough to follow at speed (no teleporting wall).
+    for (let i = 1; i < offsets.length; i++) {
+      assert.ok(
+        Math.abs(offsets[i] - offsets[i - 1]) <= 0.16,
+        `${run} step too sharp between rocks ${i - 1} and ${i}`,
+      );
+    }
+  }
+
+  // Thread-the-needle capstone: parallel rails you follow down a lane. It sits
+  // at the end (final straight) and is sized to be fun, not frustrating.
+  assert.ok(threadRocks.length >= 8, `expected a corridor, got ${threadRocks.length}`);
+  assert.ok(threadRocks.every((rock) => rock.at >= 1278), 'corridor is toward the end');
+  const pairs = new Map();
+  for (const rock of threadRocks) {
+    if (!pairs.has(rock.at)) pairs.set(rock.at, []);
+    pairs.get(rock.at).push(rock.offset);
+  }
+  for (const [at, offsets] of pairs) {
+    assert.equal(offsets.length, 2, `corridor pair at ${at}`);
+    const [lo, hi] = [...offsets].sort((a, b) => a - b);
+    assert.ok(lo < 0 && hi > 0, `corridor straddles center at ${at}`);
+    assert.ok(Math.abs(lo) <= 0.55 && hi <= 0.55, `corridor rails on-road at ${at}`);
+    const gap = hi - lo;
+    // Wide enough that the car (2 * (playerW 0.14 + rockW 0.11) = 0.5) threads
+    // with real margin; not so wide it stops being a needle.
+    assert.ok(gap >= 0.72 && gap <= 0.88, `corridor gap ${gap} at ${at}`);
+  }
+
+  // A few edge cones bait the open racing line exactly where a rock strand
+  // bulges to the far edge — Lesson 1's "drive here" cue reused as a lure.
+  assert.ok(cones.length >= 3 && cones.length <= 12, `a few cones, got ${cones.length}`);
+  assert.ok(cones.every((cone) => cone.objective == null));
+  for (const cone of cones) {
+    assert.ok(Math.abs(cone.offset) >= 0.6, `edge cone ${cone.id}`);
+    const bulge = weaveRocks.some(
+      (rock) => Math.abs(rock.at - cone.at) <= 40 &&
+        Math.sign(rock.offset) === -Math.sign(cone.offset) &&
+        Math.abs(rock.offset) >= 0.45,
+    );
+    assert.ok(bulge, `cone ${cone.id} should sit opposite a rock bulge`);
   }
 });
 
