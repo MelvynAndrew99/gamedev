@@ -819,8 +819,10 @@ export class GameScene extends Phaser.Scene {
     if (!this.objectives.active) return;
     const centerX = this.scale.width / 2;
     const trophyThresholds = this.trackData.scoring?.thresholds;
-    const panelH = 230 + this.objectives.views.length * 30 +
-      (trophyThresholds ? 28 : 0);
+    const trophyBlockH = trophyThresholds
+      ? 30 + trophyThresholds.length * 22
+      : 0;
+    const panelH = 230 + this.objectives.views.length * 30 + trophyBlockH;
     const panelTop = (this.scale.height - panelH) / 2;
     const panel = this.add.rectangle(
       centerX,
@@ -858,28 +860,46 @@ export class GameScene extends Phaser.Scene {
         .setDepth(41)
       );
     });
-    const trophyLine = trophyThresholds
-      ? this.add.text(
-        centerX + 90,
-        panelTop + 143 + rows.length * 30,
-        [...trophyThresholds]
-          .sort((a, b) => a.minimum - b.minimum)
-          .map((threshold) =>
-            `${threshold.rank.toUpperCase()} ${threshold.minimum}` +
-            (threshold.maximumDamageHits == null
-              ? ''
-              : ` / ${threshold.maximumDamageHits} HITS MAX`) +
-            (threshold.maximumConesMissed == null
-              ? ''
-              : ' / ALL CONES')
-          )
-          .join('  •  '),
-        {
-          fontSize: '15px', color: '#ffcf3f', fontStyle: 'bold',
-          stroke: '#0a0a14', strokeThickness: 4,
-        },
-      ).setOrigin(0.5).setAlpha(0).setDepth(41)
-      : null;
+    // Trophy tiers as a labelled, color-coded stack — one plain-language line
+    // per rank. Reads as a scoreboard, not a debug string, and can't overflow
+    // the panel the way a single joined line did.
+    let trophyEls = [];
+    if (trophyThresholds) {
+      const rankColor = { gold: '#ffce54', silver: '#cdd6e2', bronze: '#d08a4e' };
+      const scoringObjective = this.trackData.objectives?.find(
+        (objective) => objective.id === this.trackData.scoring?.objective,
+      );
+      const lapFinish = !scoringObjective ||
+        scoringObjective.type === 'complete_laps';
+      const trophyTop = panelTop + 149 + rows.length * 30;
+      const trophyHeader = this.add.text(centerX + 90, trophyTop, 'TROPHIES', {
+        fontSize: '14px', color: '#ffcf3f', fontStyle: 'bold',
+        stroke: '#0a0a14', strokeThickness: 4,
+      }).setOrigin(0.5).setAlpha(0).setDepth(41);
+      const tiers = [...trophyThresholds]
+        .sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0))
+        .map((threshold, index) => {
+          const reqs = [];
+          if (!lapFinish) reqs.push(`${threshold.minimum}`);
+          if (threshold.maximumDamageHits != null) {
+            reqs.push(threshold.maximumDamageHits === 0
+              ? 'No damage'
+              : `Under ${threshold.maximumDamageHits + 1} hits`);
+          }
+          if (threshold.maximumConesMissed === 0) reqs.push('all cones');
+          if (reqs.length === 0) reqs.push('Finish');
+          return this.add.text(
+            centerX + 90,
+            trophyTop + 24 + index * 22,
+            `${threshold.rank.toUpperCase()}   ${reqs.join('  ·  ')}`,
+            {
+              fontSize: '16px', color: rankColor[threshold.rank] ?? '#ffcf3f',
+              fontStyle: 'bold', stroke: '#0a0a14', strokeThickness: 4,
+            },
+          ).setOrigin(0.5).setAlpha(0).setDepth(41);
+        });
+      trophyEls = [trophyHeader, ...tiers];
+    }
     const prompt = this.add.text(
       centerX,
       panelTop + panelH - 27,
@@ -889,7 +909,7 @@ export class GameScene extends Phaser.Scene {
         stroke: '#0a0a14', strokeThickness: 4,
       },
     ).setOrigin(0.5).setAlpha(0).setDepth(41);
-    const lines = [title, intro, header, ...rows, ...(trophyLine ? [trophyLine] : [])];
+    const lines = [title, intro, header, ...rows, ...trophyEls];
     this.objectiveIntroElements = [panel, ...lines, prompt];
     this.awaitingBriefing = true;
     // Prevent the title-screen confirm that opened the race from also
