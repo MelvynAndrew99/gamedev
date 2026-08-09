@@ -6,6 +6,7 @@ import { TUNING } from '../config/tuning.js';
 import { RoadModel } from '../road/RoadModel.js';
 import { checkObstacleHit } from '../systems/Collision.js';
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
+import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
 import { Player } from './Player.js';
 
 function drive(piece, controls, { startX = 0, speed = 0.9 } = {}) {
@@ -102,8 +103,147 @@ function flatModel() {
 }
 
 const NEUTRAL_INPUT = {
-  steer: 0, throttle: 0, brake: 0, airbrakeL: false, airbrakeR: false, nitro: false,
+  steer: 0, glide: 0, throttle: 0, brake: 0,
+  airbrakeL: false, airbrakeR: false, nitro: false,
 };
+
+function completeJump({ speed = 1, glide = 0, boosted = false } = {}) {
+  const player = new Player(TUNING);
+  player.speed = TUNING.maxSpeed * speed;
+  player.launch({ boosted });
+  let landingEvents = 0;
+  for (let frame = 0; frame < 300 && (player.airborne || frame === 0); frame++) {
+    player.update(1 / 120, { ...NEUTRAL_INPUT, glide }, flatModel());
+    if (player.justLanded) landingEvents++;
+  }
+  return { player, landingEvents };
+}
+
+test('airtime is measured once and nose pitch changes a bounded jump length', () => {
+  const short = completeJump({ glide: -1 });
+  const neutral = completeJump();
+  const long = completeJump({ glide: 1 });
+
+  assert.ok(short.player.lastAirtime < neutral.player.lastAirtime);
+  assert.ok(neutral.player.lastAirtime < long.player.lastAirtime);
+  assert.ok(long.player.lastAirtime < 2, 'full pull-back must remain a finite glide');
+  assert.equal(long.landingEvents, 1);
+  assert.equal(long.player.totalAirtime, long.player.lastAirtime);
+  assert.equal(long.player.bestAirtime, long.player.lastAirtime);
+  assert.equal(long.player.glide, 0, 'landing resets the flight control state');
+});
+
+test('a live boost at ramp contact adds lift beyond its speed benefit', () => {
+  const normal = completeJump({ speed: 1.15, glide: 1 });
+  const boosted = completeJump({ speed: 1.15, glide: 1, boosted: true });
+  assert.ok(boosted.player.lastAirtime > normal.player.lastAirtime + 0.2);
+  assert.equal(boosted.player.boostedLaunch, true);
+  assert.equal(boosted.player.launchSpeed, TUNING.maxSpeed * 1.15);
+});
+
+function attemptTrainingGap({ speed, boosted, glide }) {
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingAirtime);
+  const player = new Player(TUNING);
+  const {
+    rampSegment,
+    rockEndSegment,
+    requiredSpeedMultiplier,
+  } = trainingAirtime.airtimeTraining.gap;
+  player.position = rampSegment * TUNING.segmentLength - TUNING.playerZ;
+  player.x = -0.66;
+  player.speed = TUNING.maxSpeed * speed;
+  player.launch({ boosted });
+  let landedAt = null;
+  let rockHit = null;
+
+  for (let frame = 0; frame < 400; frame++) {
+    const previous = { position: player.position, x: player.x };
+    player.update(1 / 120, {
+      ...NEUTRAL_INPUT,
+      throttle: 1,
+      glide,
+      boostActive: boosted,
+      boostCeiling: boosted ? TUNING.boostTierCeilings[0] : undefined,
+    }, model);
+    const segment = model.findSegment(player.position + TUNING.playerZ).index;
+    if (player.justLanded) {
+      landedAt = segment;
+      // GameScene latches this at ramp contact and makes the authoritative
+      // clear before the landing-frame collision sweep reaches the last row.
+      const ready = boosted && speed >= requiredSpeedMultiplier;
+      if (ready && landedAt > rockEndSegment) break;
+    }
+    if (!player.airborne) {
+      const contact = checkObstacleHit(player, model, TUNING, previous);
+      if (contact?.trackObjectId?.startsWith('air-gap-rock-')) {
+        rockHit = contact.trackObjectId;
+        break;
+      }
+    }
+    if (landedAt != null && segment > rockEndSegment + 3) break;
+  }
+  return { landedAt, rockHit };
+}
+
+test('Air School rock rows require boosted speed and a long glide', () => {
+  const ordinary = attemptTrainingGap({ speed: 1, boosted: false, glide: 1 });
+  const boostedTooSlow = attemptTrainingGap({ speed: 0.9, boosted: true, glide: 1 });
+  const justUnderSpeed = attemptTrainingGap({ speed: 1.125, boosted: true, glide: 1 });
+  const boundaryMiss = attemptTrainingGap({ speed: 1.149, boosted: true, glide: 1 });
+  const noseDown = attemptTrainingGap({ speed: 1.15, boosted: true, glide: 0 });
+  const mastery = attemptTrainingGap({ speed: 1.15, boosted: true, glide: 1 });
+  const end = trainingAirtime.airtimeTraining.gap.rockEndSegment;
+
+  assert.match(ordinary.rockHit, /^air-gap-rock-/);
+  assert.ok(boostedTooSlow.landedAt <= end);
+  assert.ok(justUnderSpeed.landedAt <= end);
+  assert.ok(boundaryMiss.landedAt > end, 'distance alone can cross the last row');
+  assert.match(boundaryMiss.rockHit, /^air-gap-rock-/,
+    'an unarmed boundary crossing remains a miss at collision resolution');
+  assert.ok(noseDown.landedAt <= end);
+  assert.equal(mastery.rockHit, null);
+  assert.ok(mastery.landedAt > end);
+});
+
+function attemptPrecisionPickup(glide) {
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingAirtime);
+  const player = new Player(TUNING);
+  player.position = 438 * TUNING.segmentLength - TUNING.playerZ;
+  player.x = -0.66;
+  player.speed = TUNING.maxSpeed;
+  player.launch();
+  let landedAt = null;
+  let collected = false;
+
+  for (let frame = 0; frame < 240; frame++) {
+    const previous = { position: player.position, x: player.x };
+    player.update(1 / 120, {
+      ...NEUTRAL_INPUT, throttle: 1, glide,
+    }, model);
+    const segment = model.findSegment(player.position + TUNING.playerZ).index;
+    if (player.justLanded) landedAt = segment;
+    if (!player.airborne) {
+      const contact = checkObstacleHit(player, model, TUNING, previous);
+      if (contact?.trackObjectId === 'air-boost-1') {
+        collected = true;
+        break;
+      }
+    }
+    if (segment > 500) break;
+  }
+  return { landedAt, collected };
+}
+
+test('Air School teaches nose-down precision by placing boost after the short landing', () => {
+  const short = attemptPrecisionPickup(-1);
+  const neutral = attemptPrecisionPickup(0);
+  assert.equal(short.landedAt, 478);
+  assert.equal(short.collected, true);
+  assert.ok(neutral.landedAt > 480);
+  assert.equal(neutral.collected, false);
+});
 
 test('boost() gives a capped activation kick instead of teleporting to redline', () => {
   const player = new Player(TUNING);

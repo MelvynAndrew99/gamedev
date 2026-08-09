@@ -10,7 +10,7 @@ import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json
 import trainingValidation from '../tracks/training-validation.json' with { type: 'json' };
 import neonGulch from '../tracks/neon-gulch.json' with { type: 'json' };
 import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
-import { ObjectiveState } from './ObjectiveState.js';
+import { ObjectiveState, formatObjectiveValue } from './ObjectiveState.js';
 
 function target(id, objectiveId = 'cone-sweep', key = 'cone') {
   return { trackObjectId: id, objectiveId, key };
@@ -72,6 +72,21 @@ test('per-unit objectives score partial progress without marking mastery complet
   assert.equal(state.primary.points, 200);
   assert.equal(state.primary.unitPoints, 100);
   assert.equal(state.primary.complete, false);
+});
+
+test('objectives can score integer units while displaying player-facing seconds', () => {
+  const display = { scale: 0.1, precision: 1, unit: 's' };
+  const state = new ObjectiveState([
+    {
+      id: 'airtime', type: 'count_event', event: 'airtime', value: 90,
+      label: 'BANK 9.0s AIRTIME', pointsPerUnit: 15, display,
+    },
+  ], { segments: [] });
+  state.record('airtime', { amount: 13 });
+  assert.equal(state.primary.progress, 13);
+  assert.equal(state.primary.progressLabel, '1.3s');
+  assert.equal(state.primary.totalLabel, '9.0s');
+  assert.equal(formatObjectiveValue(65, display), '6.5s');
 });
 
 test('unrelated contacts do not change objective progress', () => {

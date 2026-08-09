@@ -31,6 +31,14 @@
       "label": "HIT ALL 60 CONES",
       "hudLabel": "HIT CONES",
       "pointsPerUnit": 100
+    },
+    {
+      "id": "finish",
+      "type": "complete_laps",
+      "value": 2,
+      "label": "FINISH 2 LAPS",
+      "hudLabel": "FINISH",
+      "points": 1000
     }
   ],
   "scoring": {

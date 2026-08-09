@@ -1,5 +1,5 @@
 // BoostGauge.js — the boost bank and its active burn, same chip/frame/neon
-// convention as HealthBar/ProgressBar. Three discrete cells show banked
+// convention as the course ribbon and speed chip. Three discrete cells show banked
 // slots (green); a thin afterburner strip beneath fills with however far
 // above the normal overspeed cap the LIVE ceiling currently sits, relative
 // to the top tier. That strip IS the "gauge wears off" readout — it shrinks

@@ -19,6 +19,14 @@ export class Player {
     this.air = 0;      // seconds of airtime remaining
     this.hitRecovery = 0; // post-impact engine surge countdown
     this.airTotal = 0; // total airtime of the current jump (for the arc)
+    this.jumpElapsed = 0; // measured wall-clock airtime for the live jump
+    this.lastAirtime = 0;
+    this.bestAirtime = 0;
+    this.totalAirtime = 0;
+    this.justLanded = false; // one update-frame event for scoring/feedback
+    this.glide = 0; // -1 nose-down/shorter, +1 nose-up/longer
+    this.launchSpeed = 0;
+    this.boostedLaunch = false;
   }
 
   get airborne() {
@@ -53,9 +61,15 @@ export class Player {
   }
 
   // Hit a ramp. Faster launch = longer flight = more cleared road.
-  launch() {
-    const speedPercent = this.speed / this.t.maxSpeed;
-    this.airTotal = this.t.jumpMinAir + this.t.jumpMaxAir * speedPercent;
+  launch({ boosted = false } = {}) {
+    const speedPercent = Math.max(0, this.speed / this.t.maxSpeed);
+    this.launchSpeed = this.speed;
+    this.boostedLaunch = boosted;
+    this.jumpElapsed = 0;
+    this.justLanded = false;
+    this.glide = 0;
+    this.airTotal = this.t.jumpMinAir + this.t.jumpMaxAir * speedPercent +
+      (boosted ? this.t.jumpBoostAir : 0);
     this.air = this.airTotal;
   }
 
@@ -64,9 +78,32 @@ export class Player {
     const seg = model.findSegment(this.position + t.playerZ); // segment under the CAR, not the camera
     const speedPercent = this.speed / t.maxSpeed;
 
-    // Airborne: tick the timer; steering authority drops to a whisper —
-    // you committed at the ramp, the air is where commitment lives.
-    this.air = Math.max(0, this.air - dt);
+    // Airborne pitch borrows the readable snowboard/skateboard convention:
+    // push forward to put the nose down and land sooner; pull back to hold a
+    // longer glide. This only changes how fast the finite timer burns, so a
+    // held stick can never create an infinite hover. Measured airtime is real
+    // elapsed time (not timer units), which keeps trophies honest.
+    this.justLanded = false;
+    if (this.airborne) {
+      this.glide = clamp(input.glide ?? 0, -1, 1);
+      const timerRate = this.glide < 0
+        ? 1 + (this.t.glideShortenRate - 1) * -this.glide
+        : 1 - (1 - this.t.glideExtendRate) * this.glide;
+      const airborneDt = Math.min(dt, this.air / timerRate);
+      this.jumpElapsed += airborneDt;
+      this.air = Math.max(0, this.air - dt * timerRate);
+      if (!this.airborne) {
+        this.lastAirtime = this.jumpElapsed;
+        this.bestAirtime = Math.max(this.bestAirtime, this.lastAirtime);
+        this.totalAirtime += this.lastAirtime;
+        this.justLanded = true;
+        this.glide = 0;
+      }
+    } else {
+      this.glide = 0;
+    }
+    // Steering authority drops to a whisper — you committed at the ramp,
+    // and pitch controls distance while ordinary steering chooses the line.
     const grip = this.airborne ? 0.25 : 1;
 
     // Steering authority scales with speed (can't turn a parked hovercar).

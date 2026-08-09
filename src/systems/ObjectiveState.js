@@ -109,6 +109,7 @@ export class ObjectiveState {
   }
 
   view(objective) {
+    const display = objective.definition.display;
     return {
       id: objective.definition.id,
       label: objective.definition.label,
@@ -118,6 +119,9 @@ export class ObjectiveState {
       points: this.maximumPoints(objective),
       earnedPoints: this.earnedPoints(objective),
       unitPoints: objective.definition.pointsPerUnit ?? null,
+      display: display ?? null,
+      progressLabel: formatObjectiveValue(objective.progress, display),
+      totalLabel: formatObjectiveValue(objective.total, display),
       complete: objective.progress >= objective.total,
     };
   }
@@ -139,4 +143,16 @@ export class ObjectiveState {
       ? objective.total * perUnit
       : objective.definition.points ?? 0;
   }
+}
+
+// Physics/scoring and presentation can use different units without teaching
+// that implementation detail. Air School stores measured tenths as integers
+// and consistently formats them as seconds in HUD, briefing, and result.
+export function formatObjectiveValue(value, display = null) {
+  const scale = Number.isFinite(display?.scale) ? display.scale : 1;
+  const precision = Number.isInteger(display?.precision)
+    ? Math.max(0, display.precision)
+    : scale === 1 ? 0 : 1;
+  const amount = Number.isFinite(value) ? value * scale : 0;
+  return `${amount.toFixed(precision)}${display?.unit ?? ''}`;
 }

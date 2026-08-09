@@ -87,6 +87,9 @@ export const TUNING = {
   // ---- Jumps ----------------------------------------------------------
   jumpMinAir: 0.35,    // seconds airborne at crawl speed
   jumpMaxAir: 0.55,    // ADDITIONAL seconds at max speed (total ~0.9s)
+  jumpBoostAir: 0.18,  // live nitro at takeoff adds lift as well as raw speed
+  glideShortenRate: 1.35, // stick forward/nose-down spends the flight timer faster
+  glideExtendRate: 0.78,  // stick back/nose-up stretches it, but can never stall forever
 
 
   // ---- Speed feel ----------------------------------------------------

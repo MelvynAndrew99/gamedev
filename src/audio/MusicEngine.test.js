@@ -29,3 +29,41 @@ test('music and gameplay feedback retain independent live volume settings', () =
     MUSIC.setSfxVolume(previousSfx);
   }
 });
+
+test('airtime audio exposes a safe lifecycle before browser audio is unlocked', () => {
+  const handle = MUSIC.startAirtimeFlight({ boosted: true, speedRatio: 1.2 });
+  assert.equal(typeof handle.update, 'function');
+  assert.equal(typeof handle.stop, 'function');
+  assert.doesNotThrow(() => handle.update({ progress: 0.5, glide: 1, elapsed: 0.6 }));
+  assert.equal(handle.getControl(), 'long', 'state-only handle still captures the landing arc');
+  assert.doesNotThrow(() => handle.stop());
+  assert.doesNotThrow(() => handle.stop(), 'terminal cleanup is idempotent');
+  assert.doesNotThrow(() => MUSIC.playRampTakeoff());
+  assert.doesNotThrow(() => MUSIC.playAirtimeLanding());
+  assert.doesNotThrow(() => MUSIC.playAirtimeGapMiss());
+  assert.doesNotThrow(() => MUSIC.playAirtimeMasteryClear());
+});
+
+test('held or changing glide schedules no in-flight sound and only records the landing pose', () => {
+  const previousContext = MUSIC.ctx;
+  try {
+    MUSIC.ctx = new Proxy({}, {
+      get() {
+        throw new Error('in-flight updates must not touch the audio graph');
+      },
+    });
+    const handle = MUSIC.startAirtimeFlight({ boosted: true, speedRatio: 1.2 });
+    for (let frame = 0; frame < 90; frame++) {
+      assert.doesNotThrow(() => handle.update({
+        progress: frame / 89,
+        glide: frame < 30 ? -1 : 1,
+        elapsed: frame / 60,
+        currentSpeedRatio: 1.2,
+      }));
+    }
+    assert.equal(handle.getControl(), 'long');
+    handle.stop();
+  } finally {
+    MUSIC.ctx = previousContext;
+  }
+});

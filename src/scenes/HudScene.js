@@ -11,12 +11,19 @@ import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
 import { RACER } from '../systems/RacerState.js';
 import { getScore } from '../systems/HighScores.js';
-import { fmtTime } from '../systems/RaceState.js';
-import { HealthBar } from '../ui/HealthBar.js';
 import { ProgressBar } from '../ui/ProgressBar.js';
 import { BoostGauge } from '../ui/BoostGauge.js';
 import { OBSTACLES } from '../config/obstacles.js';
 import { damageFeedbackState } from '../systems/DamageFeedback.js';
+import {
+  airtimeCoachView,
+} from '../systems/AirtimeCoach.js';
+import { hudVisibilityPolicy } from '../systems/HudPolicy.js';
+import { nextObjectiveFeedback } from '../systems/ObjectiveFeedback.js';
+import {
+  objectivePanelLayout,
+  objectiveRowView,
+} from '../systems/ObjectivePresentation.js';
 
 const CAMERA_CRACKS = [
   [
@@ -48,11 +55,49 @@ export class HudScene extends Phaser.Scene {
   }
 
   create() {
+    // Phaser reuses this Scene instance after stop/start. Optional HUD
+    // objects from the previous mode have already been destroyed, but their
+    // JavaScript references survive unless we clear them. A stale objective
+    // row from Story/Training, for example, makes Endless call setText() on a
+    // destroyed canvas texture and crash inside Text.updateText/drawImage.
+    // Reset every mode-conditional reference before constructing this run.
+    this.line1 = null;
+    this.line2 = null;
+    this.progressBar = null;
+    this.objectiveHeader = null;
+    this.objectiveRows = null;
+    this.objectivePanelParts = null;
+    this.objectiveAccent = null;
+    this.objectiveToastParts = null;
+    this.objectiveToastSequence = 0;
+    this.objectiveToastBusy = false;
+    this.boostGauge = null;
+    this.airtimeCoachPanel = null;
+    this.airtimeCoachParts = null;
+    this.airtimeCoachLayout = null;
+    this.airbrakeRehearsal = null;
+    this.airbrakeRows = null;
+    this.crackGraphics = null;
+    this.criticalDamageParts = null;
+
     this.gs = this.scene.get('GameScene');
     this.training = this.gs.mode === 'training';
     this.cachedBest = getScore('endless'); // once — not a disk read per frame
     const w = this.scale.width;
     const h = this.scale.height;
+    const hasAuthoredBoosts = this.gs.trackData?.objects?.some(
+      (object) => object.kind === 'boost',
+    );
+    const hasBoostCapability = hasAuthoredBoosts ||
+      this.gs.trackData?.decoration?.nitro !== false;
+    this.hudPolicy = hudVisibilityPolicy({
+      mode: this.gs.mode,
+      hasRace: !!this.gs.race,
+      hasObjectives: this.gs.objectives.active,
+      trackId: this.gs.trackData?.id,
+      hasBoostCapability,
+      trainingDamageMax: this.gs.trainingDamageMax,
+    });
 
     const chip = (x, y, cw, ch) => {
       const g = this.add.graphics();
@@ -63,78 +108,80 @@ export class HudScene extends Phaser.Scene {
       return g;
     };
 
-    // Top-left: lap + time (story) / distance + best (endless).
-    chip(10, 10, 172, 46);
-    this.line1 = this.add.text(22, 15, '', { fontSize: '18px', fontStyle: 'bold', color: '#ffffff' });
-    this.line2 = this.add.text(22, 36, '', { fontSize: '13px', color: '#b8b8c8' });
-
-    // Top-center: race progress, alone in its lane.
-    this.progressBar = this.gs.race ? new ProgressBar(this, this.gs.race.laps, 30) : null;
-
-    // Training never exposes campaign hull; Hazard Weave uses glass cracks.
-    if (!this.training) this.healthBar = new HealthBar(this, w - 196, 22);
-
-    // Bottom-left: objectives are now the global race language. The panel is
-    // authored from track data and animates each newly completed row.
-    this.objectiveDone = new Set();
-    this.trophyGuide = null;
-    if (this.gs.objectives.active) {
-      const views = this.gs.objectives.views;
-      const trophyThresholds = this.training
-        ? this.gs.trackData.scoring?.thresholds
-        : null;
-      const panelH = 31 + views.length * 22 + (trophyThresholds ? 20 : 0);
-      const panelY = h - panelH - 10;
-      const objectiveChip = chip(10, panelY, 354, panelH).setAlpha(0);
-      this.objectiveHeader = this.add.text(22, panelY + 7, '', {
-        fontSize: '13px', fontStyle: 'bold', color: '#ff2d95',
-      }).setAlpha(0);
-      this.objectiveRows = views.map((_, index) =>
-        this.add.text(22, panelY + 27 + index * 22, '', {
-          fontSize: '14px', fontStyle: 'bold', color: '#ffffff',
-        }).setAlpha(0)
-      );
-      if (trophyThresholds) {
-        const label = [...trophyThresholds]
-          .sort((a, b) => a.minimum - b.minimum)
-          .map((threshold) =>
-            `${threshold.rank[0].toUpperCase()} ${threshold.minimum}` +
-            (threshold.maximumDamageHits == null
-              ? ''
-              : `/H≤${threshold.maximumDamageHits}`) +
-            (threshold.maximumConesMissed == null
-              ? ''
-              : '/CONES')
-          )
-          .join('  •  ');
-        this.trophyGuide = this.add.text(
-          22,
-          panelY + 27 + views.length * 22,
-          `TROPHIES  ${label}`,
-          { fontSize: '12px', fontStyle: 'bold', color: '#ffcf3f' },
-        ).setAlpha(0);
-      }
-      this.tweens.add({
-        targets: [
-          objectiveChip,
-          this.objectiveHeader,
-          ...this.objectiveRows,
-          ...(this.trophyGuide ? [this.trophyGuide] : []),
-        ],
-        alpha: 1,
-        delay: 350,
-        duration: 420,
-        ease: 'Quad.out',
+    // Endless has no finite course ribbon, so distance/best is its single run
+    // read. Circuit races use the numbered ribbon and do not repeat LAP x/y.
+    if (this.hudPolicy.endlessDistance) {
+      chip(10, 10, 172, 46);
+      this.line1 = this.add.text(22, 15, '', {
+        fontSize: '18px', fontStyle: 'bold', color: '#ffffff',
       });
-    } else {
-      chip(10, h - 56, 254, 44);
-      this.add.text(22, h - 50, 'RUN OBJECTIVE', {
-        fontSize: '13px', fontStyle: 'bold', color: '#ff2d95',
-      });
-      this.add.text(22, h - 30, 'DRIVE AS FAR AS YOU CAN', {
-        fontSize: '14px', fontStyle: 'bold', color: '#ffffff',
+      this.line2 = this.add.text(22, 36, '', {
+        fontSize: '13px', color: '#b8b8c8',
       });
     }
+
+    // Top-center: race progress, alone in its lane.
+    this.progressBar = this.hudPolicy.courseProgress
+      ? new ProgressBar(this, this.gs.race.laps, 30)
+      : null;
+
+    // Training lessons without a dedicated live coach retain one compact
+    // checkable list in the safe left column. Story objectives are expressed
+    // through the world and a brief completion toast instead of a checklist.
+    // A reconstructed HUD must reflect authoritative completion without
+    // replaying old confirmation pulses. New completions are added below on
+    // the same update that changes their row to a green check.
+    this.objectiveDone = new Set(
+      this.gs.objectives.views
+        .filter((objective) => objective.complete)
+        .map((objective) => objective.id),
+    );
+    if (this.hudPolicy.objectiveRows) {
+      const views = this.gs.objectives.views;
+      const layout = objectivePanelLayout(views.length);
+      const panelX = layout.x;
+      const panelY = layout.y;
+      const panelW = layout.width;
+      const panelH = layout.height;
+      const objectiveChip = this.add.graphics().setAlpha(0);
+      objectiveChip.fillStyle(0x080812, 0.86);
+      objectiveChip.fillRect(panelX, panelY, panelW, panelH);
+      objectiveChip.lineStyle(2, 0x00e5ff, 0.7);
+      objectiveChip.strokeRect(panelX, panelY, panelW, panelH);
+      this.objectiveAccent = this.add.rectangle(
+        panelX + 5,
+        panelY + panelH / 2,
+        6,
+        panelH - 10,
+        0xff2d95,
+        0.95,
+      ).setAlpha(0);
+      this.objectiveHeader = this.add.text(panelX + 16, panelY + 7, '', {
+        fontSize: '12px', fontStyle: 'bold', color: '#ff2d95',
+        stroke: '#080812', strokeThickness: 3,
+      }).setAlpha(0);
+      this.objectiveRows = views.map((_, index) =>
+        this.add.text(panelX + 16, panelY + 27 + index * layout.rowGap, '', {
+          fontSize: '13px', fontStyle: 'bold', color: '#ffffff',
+          stroke: '#080812', strokeThickness: 3,
+        }).setAlpha(0)
+      );
+      this.objectivePanelParts = [
+        objectiveChip,
+        this.objectiveAccent,
+        this.objectiveHeader,
+        ...this.objectiveRows,
+      ];
+      this.tweens.add({
+        targets: this.objectivePanelParts,
+        alpha: 1,
+        delay: 220,
+        duration: 320,
+        ease: 'Quad.out',
+      });
+    }
+
+    if (this.hudPolicy.objectiveToast) this.createObjectiveToast();
 
     // Bottom-right: the speedo. Big number, small label — read at a glance.
     chip(w - 148, h - 68, 136, 56);
@@ -149,10 +196,7 @@ export class HudScene extends Phaser.Scene {
     // non-training modes — Redline (Training 3) is the first training track
     // that needs it, while Cone Control/Hazard Weave keep decoration.nitro
     // off and stay clutter-free.
-    const hasAuthoredBoosts = this.gs.trackData?.objects?.some(
-      (object) => object.kind === 'boost',
-    );
-    if (hasAuthoredBoosts || this.gs.trackData?.decoration?.nitro !== false) {
+    if (this.hudPolicy.boostGauge) {
       this.boostGauge = new BoostGauge(this, w - 126, h - 92, 108, 14);
     }
 
@@ -161,6 +205,12 @@ export class HudScene extends Phaser.Scene {
       .text(w / 2, 66, 'OFF TRACK', { fontSize: '18px', fontStyle: 'bold', color: '#ff2d55', stroke: '#0a0a14', strokeThickness: 4 })
       .setOrigin(0.5)
       .setVisible(false);
+
+    // Training 4 teaches a continuous input, not a one-time button press. Its
+    // coach replaces—not accompanies—the generic objective checklist.
+    if (this.hudPolicy.airtimeCoach) {
+      this.createAirtimeCoach();
+    }
 
     if (this.gs.trackData?.trainingCues?.some(
       (cue) => cue.kind === 'airbrake-rehearsal'
@@ -172,11 +222,11 @@ export class HudScene extends Phaser.Scene {
     // authored safe hit count, while normal modes mirror persistent hull.
     // Four crack clusters accumulate without obscuring the road center.
     this.crackStage = -1;
-    if (this.gs.trainingDamageMax > 0 || !this.training) {
+    if (this.hudPolicy.windshieldDamage) {
       this.crackGraphics = this.add.graphics().setDepth(100);
       this.drawCameraCracks(0);
+      this.createCriticalDamageWarning();
     }
-    this.createCriticalDamageWarning();
   }
 
   update(time) {
@@ -184,19 +234,15 @@ export class HudScene extends Phaser.Scene {
     if (!gs || !gs.player) return;
 
     if (gs.race) {
-      this.line1.setText(`LAP ${gs.race.lap}/${gs.race.laps}`);
-      this.line2.setText(fmtTime(gs.race.time));
       const inLap = gs.player.position / gs.model.trackLength;
       const raceProgress = gs.race.lap > gs.race.laps
         ? 1
         : (gs.race.lap - 1 + inLap) / gs.race.laps;
-      this.progressBar.draw(raceProgress);
-    } else {
+      this.progressBar?.draw(raceProgress);
+    } else if (this.line1) {
       this.line1.setText(`${gs.distanceM()}m`);
       this.line2.setText(this.cachedBest ? `BEST ${this.cachedBest}m` : '');
     }
-
-    if (this.healthBar) this.healthBar.draw(RACER.healthFrac);
 
     const damageFeedback = damageFeedbackState({
       training: this.training,
@@ -209,19 +255,19 @@ export class HudScene extends Phaser.Scene {
     if (this.crackGraphics && this.crackStage !== damageFeedback.stage) {
       this.drawCameraCracks(damageFeedback.stage);
     }
-    this.updateCriticalDamageWarning(time, damageFeedback);
+    if (this.criticalDamageParts) {
+      this.updateCriticalDamageWarning(time, damageFeedback);
+    }
 
     if (this.objectiveRows) {
       this.objectiveHeader.setText(gs.race?.finishArmed
-        ? 'OBJECTIVES COMPLETE  •  FINISH THIS LAP'
-        : `OBJECTIVES  •  ${gs.objectives.score} PTS`);
+        ? 'FINISH THIS LAP'
+        : 'TRAINING GOALS');
       gs.objectives.views.forEach((objective, index) => {
         const row = this.objectiveRows[index];
-        const progress = objective.total > 1
-          ? `  ${objective.progress}/${objective.total}`
-          : '';
-        row.setText(`${objective.complete ? '✓' : '○'}  ${objective.label}${progress}`);
-        row.setColor(objective.complete ? '#2ee56b' : '#ffffff');
+        const presentation = objectiveRowView(objective);
+        row.setText(presentation.text);
+        row.setColor(presentation.color);
         if (objective.complete && !this.objectiveDone.has(objective.id)) {
           this.objectiveDone.add(objective.id);
           row.setScale(1.18);
@@ -234,6 +280,7 @@ export class HudScene extends Phaser.Scene {
         }
       });
     }
+    this.updateObjectiveToast();
     if (this.boostGauge) {
       const maxCeiling = TUNING.boostTierCeilings[TUNING.boostTierCeilings.length - 1];
       this.boostGauge.draw({
@@ -256,7 +303,161 @@ export class HudScene extends Phaser.Scene {
 
     const off = !gs.player.airborne && Math.abs(gs.player.x) > 1;
     this.offTrack.setVisible(off && Math.floor(time / 250) % 2 === 0);
+    this.updateAirtimeCoach(time, gs.airtimeTrainingView);
     this.updateAirbrakeRehearsal(time, gs.trainingTutorialView);
+  }
+
+  createObjectiveToast() {
+    const x = 10;
+    const y = this.hudPolicy.airtimeCoach ? 150 : 68;
+    const w = 230;
+    const h = 38;
+    const panel = this.add.rectangle(x + w / 2, y + h / 2, w, h, 0x080812, 0.88)
+      .setStrokeStyle(1, 0x2ee56b, 0.85)
+      .setDepth(88);
+    const accent = this.add.rectangle(x + 3, y + h / 2, 6, h, 0x2ee56b, 1)
+      .setDepth(89);
+    this.objectiveToastText = this.add.text(x + 15, y + 10, '', {
+      fontSize: '13px', fontStyle: 'bold', color: '#2ee56b',
+      stroke: '#080812', strokeThickness: 3,
+    }).setDepth(90);
+    this.objectiveToastParts = [panel, accent, this.objectiveToastText];
+    this.objectiveToastParts.forEach((part) => part.setAlpha(0));
+    this.objectiveToastSequence = 0;
+  }
+
+  updateObjectiveToast() {
+    if (!this.objectiveToastParts) return;
+    if (this.objectiveToastBusy) return;
+    const event = nextObjectiveFeedback(
+      this.gs.objectiveHudEvents,
+      this.objectiveToastSequence,
+    );
+    if (!event) return;
+    this.objectiveToastSequence = event.sequence;
+    this.objectiveToastBusy = true;
+    this.tweens.killTweensOf(this.objectiveToastParts);
+    this.objectiveToastText.setText(`✓  ${event.hudLabel ?? event.label}`);
+    this.objectiveToastParts.forEach((part) => part.setAlpha(1));
+    this.tweens.add({
+      targets: this.objectiveToastParts,
+      alpha: 0,
+      delay: 800,
+      duration: 240,
+      ease: 'Quad.in',
+      onComplete: () => { this.objectiveToastBusy = false; },
+    });
+  }
+
+  createAirtimeCoach() {
+    // This single teaching chip owns the safe left column. It never competes
+    // with an objective stack or crosses into the rising car's screen area.
+    const panelX = 10;
+    const panelY = 66;
+    const panelW = 230;
+    const panelH = 76;
+    this.airtimeCoachLayout = { panelX, panelY, panelW, panelH };
+
+    this.airtimeCoachPanel = this.add.rectangle(
+      panelX + panelW / 2,
+      panelY + panelH / 2,
+      panelW,
+      panelH,
+      0x0a0a14,
+      0.82,
+    ).setStrokeStyle(1, 0x00e5ff, 0.5).setDepth(70);
+    this.airtimeCoachAccent = this.add.rectangle(
+      panelX + 3,
+      panelY + panelH / 2,
+      5,
+      panelH - 10,
+      0x00e5ff,
+      0.9,
+    ).setDepth(71);
+    this.airtimeCoachTitle = this.add.text(panelX + 12, panelY + 7, '', {
+      fontSize: '11px', color: '#00e5ff', fontStyle: 'bold',
+      stroke: '#0a0a14', strokeThickness: 3,
+    }).setDepth(72);
+    this.airtimeCoachValue = this.add.text(panelX + panelW - 10, panelY + 4, '', {
+      fontSize: '16px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#0a0a14', strokeThickness: 3,
+    }).setOrigin(1, 0).setDepth(72);
+    this.airtimeCoachDetail = this.add.text(panelX + 12, panelY + 28, '', {
+      fontSize: '11px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#0a0a14', strokeThickness: 3,
+    }).setDepth(72);
+
+    this.airtimeMeterBack = this.add.rectangle(
+      panelX + panelW / 2,
+      panelY + 48,
+      panelW - 24,
+      6,
+      0x3a3a46,
+      1,
+    ).setDepth(72).setVisible(false);
+    this.airtimeMeterFill = this.add.rectangle(
+      panelX + 12,
+      panelY + 48,
+      1,
+      6,
+      0xffcf3f,
+      1,
+    ).setOrigin(0, 0.5).setDepth(73).setVisible(false);
+    this.airtimeCoachControls = this.add.text(
+      panelX + panelW / 2,
+      panelY + panelH - 13,
+      '',
+      {
+        fontSize: '9px', color: '#b8b8c8', fontStyle: 'bold',
+        align: 'center', stroke: '#0a0a14', strokeThickness: 3,
+      },
+    ).setOrigin(0.5).setDepth(72);
+
+    this.airtimeCoachParts = [
+      this.airtimeCoachPanel,
+      this.airtimeCoachAccent,
+      this.airtimeCoachTitle,
+      this.airtimeCoachValue,
+      this.airtimeCoachDetail,
+      this.airtimeMeterBack,
+      this.airtimeMeterFill,
+      this.airtimeCoachControls,
+    ];
+    this.airtimeCoachParts.forEach((part) => part.setAlpha(0));
+    this.tweens.add({
+      targets: this.airtimeCoachParts,
+      alpha: 1,
+      delay: 180,
+      duration: 360,
+      ease: 'Quad.out',
+    });
+  }
+
+  updateAirtimeCoach(time, telemetry) {
+    if (!this.airtimeCoachPanel) return;
+    const device = this.gs.controls?.pad ? 'gamepad' : 'keyboard';
+    const view = airtimeCoachView(telemetry, device);
+    const color = Phaser.Display.Color.HexStringToColor(view.color).color;
+
+    this.airtimeCoachTitle.setText(view.title).setColor(view.color);
+    this.airtimeCoachValue.setText(view.value).setColor(view.color);
+    this.airtimeCoachDetail.setText(view.detail);
+    this.airtimeCoachControls.setText(view.controls);
+    this.airtimeCoachAccent.setFillStyle(color, 0.9);
+
+    const hasMeter = view.meter != null;
+    this.airtimeMeterBack.setVisible(hasMeter);
+    this.airtimeMeterFill
+      .setVisible(hasMeter)
+      .setDisplaySize((this.airtimeCoachLayout.panelW - 24) * (view.meter ?? 0), 6)
+      .setFillStyle(color, 1);
+    this.airtimeCoachDetail.y = this.airtimeCoachLayout.panelY + 28;
+
+    // Pulse the accent, never the instructions: success/readiness should be
+    // noticeable in peripheral vision without making the help hard to read.
+    this.airtimeCoachAccent.setAlpha(
+      view.pulse ? 0.7 + Math.sin(time / 105) * 0.3 : 0.9,
+    );
   }
 
   // Just-in-time rehearsal lives in unused sky at the upper right, leaving

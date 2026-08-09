@@ -413,8 +413,8 @@ test('Hazard Weave forces readable lane changes before a sustained center needle
   assert.ok(masterySprites.slice(1).every((sprite) => sprite.hit === false));
 });
 
-test('the staged airtime lesson preserves the shared loop geometry', () => {
-  assert.equal(trainingAirtime.status, 'placeholder', trainingAirtime.id);
+test('Air School preserves the shared loop and authors a safe speed-gated gap', () => {
+  assert.notEqual(trainingAirtime.status, 'placeholder', trainingAirtime.id);
   assert.deepEqual(trainingAirtime.pieces, trainingLoop.pieces, trainingAirtime.id);
 
   const model = new RoadModel(TUNING);
@@ -423,6 +423,31 @@ test('the staged airtime lesson preserves the shared loop geometry', () => {
     .filter((sprite) => sprite.key === 'ramp');
   assert.equal(ramps.length, 4);
   assert.ok(model.segments.some((segment) => segment.launchApproach));
+  const boosts = trainingAirtime.objects.filter((object) => object.kind === 'boost');
+  const gapRocks = trainingAirtime.objects.filter(
+    (object) => object.id.startsWith('air-gap-rock-'),
+  );
+  const gap = trainingAirtime.airtimeTraining.gap;
+  const finalRamp = model.segments[gap.rampSegment].sprites.find(
+    (sprite) => sprite.key === 'ramp',
+  );
+  assert.ok(finalRamp, 'the final lesson ramp must stay at the authored gap gate');
+  assert.equal(finalRamp.offset, -0.66);
+  assert.equal(boosts.length, 3, 'each advanced ramp gets a recoverable boost setup');
+  assert.equal(boosts.at(-1).offset, finalRamp.offset);
+  assert.equal(gapRocks.length, 21, 'three dense rows make the gap a real jump');
+  assert.equal(gapRocks.at(-1).at, gap.rockEndSegment);
+  assert.deepEqual(
+    [...new Set(gapRocks.map((rock) => rock.at))],
+    [1210, 1224, 1258],
+  );
+  for (const at of [1210, 1224, 1258]) {
+    assert.deepEqual(
+      gapRocks.filter((rock) => rock.at === at).map((rock) => rock.offset),
+      [-0.9, -0.6, -0.3, 0, 0.3, 0.6, 0.9],
+      `rock row ${at} should close the complete road`,
+    );
+  }
 });
 
 test('Redline preserves the shared loop geometry and is no longer a placeholder', () => {

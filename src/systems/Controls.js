@@ -1,6 +1,7 @@
 // Controls.js — one input signal, many devices. The rest of the game never
 // asks "keyboard or pad?"; it reads a normalized frame:
-//   { steer: -1..1, throttle: 0..1, brake: 0..1, airbrakeL, airbrakeR }
+//   { steer: -1..1, glide: -1..1, throttle: 0..1, brake: 0..1,
+//     airbrakeL, airbrakeR }
 //
 // Keyboard is digital (steer snaps to ±1); the stick is analog with a
 // deadzone and an expo curve — steerExpo > 1 softens the center so small
@@ -10,7 +11,9 @@
 // exactly backwards from what you paid for.
 //
 // Both XInput and a natively connected macOS DualSense use the browser's
-// standard layout: axis 0 = left stick X; buttons 6/7 = L2/R2; 4/5 = L1/R1.
+// standard layout: axes 0/1 = left stick X/Y; buttons 6/7 = L2/R2;
+// 4/5 = L1/R1. Flight uses its own W/S keyboard pair so holding the ordinary
+// Up-arrow throttle never accidentally noses the car down on every jump.
 
 import {
   axisValue,
@@ -28,6 +31,8 @@ export class Controls {
     this.keyZ = kb.addKey('Z'); // left airbrake
     this.keyX = kb.addKey('X'); // right airbrake
     this.keyC = kb.addKey('C'); // nitro
+    this.keyW = kb.addKey('W'); // airborne nose-down: shorter, quicker arc
+    this.keyS = kb.addKey('S'); // airborne nose-up: longer glide
   }
 
   get pad() {
@@ -35,7 +40,7 @@ export class Controls {
   }
 
   read(tuning) {
-    let steer = 0, throttle = 0, brake = 0;
+    let steer = 0, glide = 0, throttle = 0, brake = 0;
     let abL = false, abR = false, nitro = false;
 
     const pad = this.pad;
@@ -44,6 +49,11 @@ export class Controls {
       const dz = 0.12;
       const mag = Math.max(0, Math.abs(raw) - dz) / (1 - dz);
       steer = Math.sign(raw) * Math.pow(mag, tuning.steerExpo);
+      const rawY = axisValue(pad, 1);
+      const glideMag = Math.max(0, Math.abs(rawY) - dz) / (1 - dz);
+      // Browser Y grows downward: forward is negative (shorter), back is
+      // positive (longer), which is already the Player glide convention.
+      glide = Math.sign(rawY) * Math.pow(glideMag, tuning.steerExpo);
       throttle = buttonValue(pad, 7, 'R2');
       brake = buttonValue(pad, 6, 'L2');
       abL = buttonDown(pad, 4, 'L1');
@@ -62,7 +72,12 @@ export class Controls {
     if (this.keyZ.isDown) abL = true;
     if (this.keyX.isDown) abR = true;
     if (this.keyC.isDown) nitro = true;
+    if (this.keyW.isDown) glide = -1;
+    else if (this.keyS.isDown) glide = 1;
 
-    return { steer, throttle, brake, airbrakeL: abL, airbrakeR: abR, nitro, connected: !!pad };
+    return {
+      steer, glide, throttle, brake,
+      airbrakeL: abL, airbrakeR: abR, nitro, connected: !!pad,
+    };
   }
 }

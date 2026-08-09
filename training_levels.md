@@ -72,10 +72,13 @@ turning contact into money or a speed buff.
 
 At race start, an objective briefing animates onto the world view one row at a
 time. Movement and the race clock remain paused, and the briefing stays visible
-until the player presses A or Enter. It then dismisses into the persistent HUD
-panel. The HUD replaces the old Fame panel across Training and Story, shows live
-progress and points, checks off completed goals, and changes its header to
-`FINISH THIS LAP` when an objective race is armed.
+until the player presses A or Enter. Trophy thresholds and point accounting stay
+in this paused briefing and the result screen. During driving, a lesson without
+a dedicated coach may use one compact left-column goal list: completed goals
+turn into green checkmarks and remain checked. A dedicated coach replaces that
+list rather than stacking with it; Air School therefore uses its live airtime,
+arc, and speed-gap read plus short green completion confirmations. Story relies
+on contextual course feedback instead of a persistent training checklist.
 
 Training demonstrates a mechanic before explaining it at length, but it does
 not interrupt a player who has already demonstrated understanding. Cone Control
@@ -252,16 +255,48 @@ graphic. Internally this reuses Training's existing `count_event` +
 race (1/2/3), and the authored thresholds turn that into Bronze at tier 1,
 Silver at tier 2, Gold at tier 3 — no bespoke scoring code for this lesson.
 
-Training Track 4, **Air School**, introduces ramps and an airtime objective.
-Four gold/cyan ramp approaches are staged around the shared loop for the first
-playtest. Before enabling it, score measured airtime rather than ramp contact,
-tune landing feedback and trophy tiers, and verify that ordinary steering is
-enough for the introductory route before asking for airborne airbraking.
+Training Track 4, **Air School**, introduces measured airtime and active-aero
+glide control on the shared two-lap loop. Stick forward (or W) pitches the car
+down for a shorter, more precise arc; stick back (or S) stretches the glide.
+Both effects change the burn rate of a finite flight timer, so the car remains
+arcade-readable and can never hover indefinitely. Live boost at ramp contact
+adds lift as well as speed.
 
-`status: "placeholder"` keeps a staged track visible in the ordered curriculum
-data while preventing normal completion progression from selecting or launching
-it. Remove that status only when its gameplay event, HUD language, scoring, and
-result copy are implemented and playtested.
+Four gold/cyan ramps teach the mechanic as a sequence. The first is an open
+baseline jump. The second places a boost at the short-arc landing point, so a
+forward-pitch landing banks the tool for ramp three while a neutral glide flies
+past it. A recovery pickup after ramp three prevents one missed precision
+landing from spoiling the lesson. The final left runway has its own boost and
+leads to three dense, full-road rock rows. Cruise speed, a low-speed boost, and
+a 1.15x boosted nose-down jump all land short; a live boost at 1.15x plus a
+back-stick glide clears the complete bed. Training rock contact gives feedback
+without hull damage or momentum loss, and lap two is an explicit retry.
+
+The lesson tracks real elapsed airtime in integer tenths for stable scoring and
+displays it as seconds everywhere. Bronze requires 4.0 seconds, Silver 6.5, and
+Gold 9.0, so protecting speed matters while one competent lap still earns a
+trophy. Clearing the boosted gap is a separate visible objective. Finishing two
+laps always completes the lesson; trophies and the gap objective measure mastery
+without blocking curriculum progress.
+
+Air School's feedback is part of the mechanic. Ramp contact compresses the car
+before a dedicated suspension hit and compact launch sweep. In flight, exhaust
+trails, aero vanes, and HUD accent all change together:
+short arcs use compact upward shapes and magenta, neutral flight stays cyan, and
+long arcs open into gold downward vanes and longer ribbons. Their shape and text
+labels carry the distinction without relying on color.
+
+The apex fires once as a restrained weightless ring, while 0.50, 0.85, and
+1.15-second hangtime crossings add progressively brighter visual tier pulses.
+Landings resolve only after collision classification: controlled short landings
+receive their own compact chirp/shockwave, ordinary landings scale by duration
+and launch speed, a rock-gap miss gets a muted descending cue without a second
+camera hit, and a successful gap clear replaces the generic landing with the
+largest green/gold ring, contact hit, and resolving fanfare. There is no held
+flight sound or input/tier chirp: the short takeoff swoosh clears the mix so one
+landing response remains the dominant reward. A held boost still affects speed
+and lift, but its sustained audio yields from ramp contact until the car is
+grounded again.
 
 ## Cone semantics
 
@@ -291,6 +326,14 @@ A training course uses stable IDs so objective progress survives lap wraps:
       "label": "HIT ALL 60 CONES",
       "hudLabel": "HIT CONES",
       "pointsPerUnit": 100
+    },
+    {
+      "id": "finish",
+      "type": "complete_laps",
+      "value": 2,
+      "label": "FINISH 2 LAPS",
+      "hudLabel": "FINISH",
+      "points": 1000
     }
   ],
   "scoring": {
