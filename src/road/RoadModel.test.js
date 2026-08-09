@@ -311,6 +311,7 @@ test('Hazard Weave forces readable lane changes before a sustained center needle
   assert.deepEqual(trainingHazardWeave.pieces, trainingLoop.pieces);
   assert.equal(trainingHazardWeave.trainingDamage.maxHits, 4);
   assert.equal(trainingHazardWeave.scoring.objective, 'finish');
+  assert.equal(trainingHazardWeave.scoring.version, 7);
   assert.equal(trainingHazardWeave.trainingCones.scoreAcrossLaps, 'unique');
 
   const rocks = trainingHazardWeave.objects.filter((object) => object.kind === 'rock');
@@ -329,68 +330,74 @@ test('Hazard Weave forces readable lane changes before a sustained center needle
   assert.equal(thresholds.silver.maximumConesMissed, undefined);
   assert.equal(thresholds.bronze.maximumDamageHits, 3);
 
-  // Each compact rockfall closes two lanes over two rows. The open lane moves
-  // repeatedly across the road, while at least 58 segments of recovery follow
-  // one closure before the next begins.
+  // Each compact rockfall still closes two lanes, but all four rocks are
+  // longitudinally staggered and laterally varied instead of forming a neat
+  // 2x2 grid. The open lane remains unmistakable and recovery stays generous.
   const starts = [84, 150, 224, 306, 402, 500, 672, 742, 960, 1034, 1100, 1170];
   const safeSides = ['R', 'L', 'R', 'L', 'R', 'L', 'R', 'L', 'R', 'L', 'R', 'R'];
-  const safeR = [[-0.68, 0], [-0.62, -0.04]];
-  const safeL = [[0, 0.68], [0.04, 0.62]];
+  const closureEnds = [];
+  const staggerSignatures = new Set();
   for (let index = 0; index < starts.length; index += 1) {
     const prefix = `closure-${String(index + 1).padStart(2, '0')}-`;
     const closure = rocks.filter((rock) => rock.id.startsWith(prefix));
-    assert.equal(closure.length, 4, `${prefix} should be a dense two-row closure`);
-    const rows = [...new Set(closure.map((rock) => rock.at))].sort((a, b) => a - b);
-    assert.deepEqual(rows, [starts[index], starts[index] + 8]);
-    assert.deepEqual(
-      rows.map((at) => closure.filter((rock) => rock.at === at)
-        .map((rock) => rock.offset).sort((a, b) => a - b)),
-      safeSides[index] === 'R' ? safeR : safeL,
-    );
+    assert.equal(closure.length, 4, `${prefix} should remain a dense closure`);
+    const ats = closure.map((rock) => rock.at).sort((a, b) => a - b);
+    assert.equal(new Set(ats).size, 4, `${prefix} should stagger every rock`);
+    assert.equal(ats[0], starts[index]);
+    assert.ok(ats[3] - ats[0] <= 12, `${prefix} must remain one readable beat`);
+    closureEnds.push(ats[3]);
+    staggerSignatures.add(ats.map((at) => at - starts[index]).join(','));
+
+    const edgeRocks = closure.filter((rock) => Math.abs(rock.offset) >= 0.58);
+    const centerRocks = closure.filter((rock) => Math.abs(rock.offset) <= 0.08);
+    assert.equal(edgeRocks.length, 2, `${prefix} should block one outer lane twice`);
+    assert.equal(centerRocks.length, 2, `${prefix} should block the center twice`);
+    assert.ok(edgeRocks.every((rock) =>
+      safeSides[index] === 'R' ? rock.offset < 0 : rock.offset > 0
+    ));
   }
-  const startGaps = starts.slice(1).map((at, index) => at - starts[index]);
-  assert.ok(startGaps.every((gap) => gap >= 66));
+  const recoveryGaps = starts.slice(1).map((at, index) => at - closureEnds[index]);
+  assert.ok(recoveryGaps.every((gap) => gap >= 50));
+  assert.ok(staggerSignatures.size >= 4, 'debris should not repeat one stamped pattern');
   assert.equal(safeSides.slice(1).filter((side, index) => side !== safeSides[index]).length, 10);
 
-  // The +8 hold and apex stay clean. Its right-lane reward waits until the
-  // straight exit, where the learned airbrake line has settled.
-  assert.equal(rocks.filter((rock) => rock.at >= 858 && rock.at <= 953).length, 0);
+  // Four cones sit directly on ordinary lane-transfer arcs. Only the final
+  // two revisit the previously taught +8/-8 airbrake holds.
   assert.deepEqual(
-    trainingHazardWeave.objects
-      .filter((object) => object.at === 968)
-      .map((object) => [object.kind, object.offset]),
-    [['rock', -0.62], ['rock', -0.04], ['cone', 0.62]],
+    cones.map((cone) => [cone.at, cone.offset]),
+    [[122, 0], [266, 0], [458, 0], [712, 0], [951, 0.5], [1278, 0.46]],
   );
+  assert.equal(rocks.filter((rock) => rock.at >= 858 && rock.at <= 953).length, 0);
 
-  // Hitting a mastery cone can never overlap a rock's collision interval.
-  // The final centered cone is precise, but its gate retains real clearance.
-  const coneReach = TUNING.playerW + OBSTACLES.cone.w;
+  // Every cone is a single interstitial pickup, never part of a rock row.
   const rockReach = TUNING.playerW + OBSTACLES.rock.w;
   for (const cone of cones) {
-    const sameSegmentRocks = rocks.filter((rock) => rock.at === cone.at);
-    assert.ok(sameSegmentRocks.length > 0, `${cone.id} should mark a visible safe lane`);
-    for (const rock of sameSegmentRocks) {
-      assert.ok(
-        Math.abs(cone.offset - rock.offset) >= coneReach + rockReach,
-        `${cone.id} overlaps ${rock.id}`,
-      );
-    }
+    assert.ok(!rocks.some((rock) => rock.at === cone.at));
+    assert.ok(Math.min(...rocks.map((rock) => Math.abs(rock.at - cone.at))) >= 9);
   }
 
-  // Seven consecutive pairs taper, hold, and release a real center corridor.
-  // This is a sustained thread-the-needle finish, not another lane-choice gate.
+  // Seven recognizable pairs form a gently staggered right-to-center channel.
+  // Its center moves monotonically, never reverses, and needs ordinary input.
   const thread = rocks.filter((rock) => rock.id.startsWith('thread-'));
   assert.equal(thread.length, 14);
-  const threadSegments = [...new Set(thread.map((rock) => rock.at))].sort((a, b) => a - b);
-  assert.deepEqual(threadSegments, [1298, 1308, 1318, 1328, 1338, 1348, 1358]);
-  assert.ok(threadSegments.slice(1).every((at, index) => at - threadSegments[index] === 10));
   const safeWidths = [];
-  for (const at of threadSegments) {
-    const offsets = thread.filter((rock) => rock.at === at).map((rock) => rock.offset);
-    assert.equal(offsets.length, 2);
-    const [left, right] = [...offsets].sort((a, b) => a - b);
+  const centers = [];
+  const pairAts = [];
+  for (let index = 1; index <= 7; index += 1) {
+    const prefix = `thread-${String(index).padStart(2, '0')}-`;
+    const pair = thread.filter((rock) => rock.id.startsWith(prefix));
+    assert.equal(pair.length, 2);
+    const [left, right] = pair.map((rock) => rock.offset).sort((a, b) => a - b);
+    const ats = pair.map((rock) => rock.at).sort((a, b) => a - b);
+    assert.ok(ats[1] - ats[0] <= 2, `${prefix} should remain a recognizable pair`);
+    pairAts.push(ats[0]);
+    centers.push(Number(((left + right) / 2).toFixed(2)));
     safeWidths.push(Number((right - left - rockReach * 2).toFixed(2)));
   }
+  assert.deepEqual(pairAts, [1298, 1308, 1318, 1329, 1339, 1349, 1359]);
+  assert.ok(pairAts.slice(1).every((at, index) => at - pairAts[index] >= 9));
+  assert.deepEqual(centers, [0.36, 0.32, 0.27, 0.21, 0.14, 0.07, 0]);
+  assert.ok(centers.slice(1).every((center, index) => center <= centers[index]));
   assert.deepEqual(
     safeWidths,
     [0.78, 0.7, 0.62, 0.54, 0.5, 0.54, 0.62],

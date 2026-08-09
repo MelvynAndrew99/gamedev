@@ -151,27 +151,32 @@ and use both laps to finish the run.
 smooth line through the course while collecting optional mastery cones.
 
 Hazard Weave uses 62 rocks without returning to the original uninterrupted
-105-rock wall. Twelve compact rockfalls each occupy two lanes for two rows,
-forcing ten meaningful side changes instead of allowing the player to park on
-one shoulder. Their starts are at least 66 segments apart, leaving at least 58
-clean segments after each second row. The result keeps the “lots of rocks”
-spectacle while making every open lane readable early enough to drive smoothly.
+105-rock wall. Twelve compact rockfalls each occupy two lanes, forcing ten
+meaningful side changes instead of allowing the player to park on one shoulder.
+The four rocks in each formation are staggered across 11–12 segments with small
+lateral variation, so they read as debris instead of stamped 2x2 grids. At
+least 50 clean segments remain before the next formation. The result keeps the
+“lots of rocks” spectacle while making every open lane readable early enough
+to drive smoothly.
 
 The lane closures alternate across straights and bends, then leave the `+8`
 hold and apex clear as an F-Zero-style flow release. Its next closure waits on
 the straight exit, where the right-side mastery line proves the learned
 airbrake technique without hiding a rock in the apex. A final right-side setup
-prepares the `-8` hairpin. After the bend, seven consecutive paired rows taper
-to a 0.50-wide collision-safe center channel, hold it, and release it. That
-one-second corridor is the sustained thread-the-needle capstone, not another
-left-or-right slalom choice.
+prepares the `-8` hairpin. After the bend, seven lightly staggered pairs create
+a channel whose center moves monotonically from `+0.36` on the right to `0` at
+the road center. Its collision-safe width tapers to 0.50 and opens again. That
+one-second, single-direction corridor is the sustained thread-the-needle
+capstone, not another left-or-right slalom choice.
 
-Six cones sit in collision-safe openings beside the rocks. They are never the
-safe-route requirement: missing every cone still allows a clean finish and a
-Silver trophy. They instead say “this is the mastery line,” reusing Lesson 1's
-collectible language. Each cone can be claimed once anywhere in the complete
-two-lap attempt. A lap-one pickup counts, and a miss remains available on lap
-two; neither lap is disposable rehearsal or a separate perfect-lap exam.
+Six single cones sit between formations rather than sharing rows with rocks.
+The first four are ordinary steering breadcrumbs placed on a lane-transfer arc;
+the final two revisit the learned `+8` right-airbrake and `-8` left-airbrake
+lines. They are never the safe-route requirement: missing every cone still
+allows a clean finish and a Silver trophy. Each cone can be claimed once
+anywhere in the complete two-lap attempt. A lap-one pickup counts, and a miss
+remains available on lap two; neither lap is disposable rehearsal or a separate
+perfect-lap exam.
 
 Rock contact has four visual stages drawn as cracks on the camera glass. It does
 not reduce speed, campaign hull, money, objective score, or access to the finish,

@@ -110,13 +110,15 @@ a performance-gated airbrake assist, a cone-filled recovery/setup sector, and a
 fixed right-lane `-8` cone hairpin. Competent players are never paused. Missed
 cones persist for lap two and lower the trophy if they remain at finish.
 
-Hazard Weave is Training Level 2. Sixty-two rocks form twelve dense two-lane
+Hazard Weave is Training Level 2. Sixty-two rocks form twelve compact two-lane
 closures that force ten side changes while leaving readable recovery between
-formations. The `+8` hold and apex stay clear for course flow, its exit rewards
-the learned right-airbrake line, and the `-8` exit feeds a seven-pair tapered
-center corridor for a sustained thread-the-needle finish. Six persistent cones
-mark collision-safe mastery lines and can be collected once anywhere across the
-complete two-lap run. Gold requires all six and a clean windscreen; Silver
+formations. Individual rocks are staggered longitudinally and laterally so the
+closures read as debris rather than repeated grids. Four interstitial cones
+reward ordinary lane transfers; only two revisit the learned `+8` right-airbrake
+and `-8` left-airbrake lines. The final seven-pair corridor shifts gently from
+the right side to center for a sustained thread-the-needle finish. All six cones
+persist once claimed and can be collected anywhere across the complete two-lap
+run. Gold requires all six and a clean windscreen; Silver
 allows one crack and Bronze allows three. Four cracks forfeit the trophy but
 never completion or progression. Rock contact adds one of four persistent
 camera-glass crack stages without reducing training speed or hull. At three

@@ -1,8 +1,11 @@
 // ParallaxBackground.js — deterministic, code-native horizon scenery.
 //
-// The road renderer supplies a curve offset from the projected vanishing
-// point. Each scenery layer follows it by a different fraction, creating
-// depth without disconnecting the background from the course direction.
+// The road renderer supplies offsets from the projected vanishing point.
+// Each scenery layer follows them by a different fraction, creating depth
+// without disconnecting the background from the course direction. The
+// celestial layer moves least, but deliberately more than strict realism
+// would demand: the readable, slightly elastic response is part of the game's
+// arcade-cartoon presentation.
 // A very small travel drift keeps long straights alive without making the
 // landscape look like a sideways conveyor belt.
 
@@ -14,6 +17,7 @@ export class ParallaxBackground {
     this.segmentLength = segmentLength;
     this.sky = scene.add.graphics().setDepth(-6);
     this.atmosphere = scene.add.graphics().setDepth(-5);
+    this.stars = makeStars(environment, width, height);
     this.layers = environment.layers.map((config, index) => ({
       config,
       graphics: scene.add.graphics().setDepth(-4 + index),
@@ -21,6 +25,7 @@ export class ParallaxBackground {
     }));
 
     this.drawSky();
+    this.drawAtmosphere(0, 0);
   }
 
   drawSky() {
@@ -33,19 +38,28 @@ export class ParallaxBackground {
       this.sky.fillRect(0, index * bandH, this.w, height);
     });
 
-    const rng = seededRandom(this.environment.seed ^ 0x9e3779b9);
+  }
+
+  drawAtmosphere(curveOffset, horizonOffset) {
+    this.atmosphere.clear();
+    const orb = this.environment.celestial;
+    const shift = perspectiveOffset(curveOffset, horizonOffset, {
+      curveFactor: orb.curveFactor ?? 0.18,
+      pitchFactor: orb.pitchFactor ?? 0.32,
+    });
+
+    // Stars share the far-sky motion and wrap at the edges. This prevents the
+    // sun from feeling like a HUD sticker while the rest of the sky stays put.
     const starColor = 0xd9e8e5;
-    for (let i = 0; i < this.environment.stars; i++) {
-      const x = Math.floor(rng() * this.w);
-      const y = Math.floor(18 + rng() * this.h * 0.3);
-      const size = rng() > 0.82 ? 2 : 1;
-      this.atmosphere.fillStyle(starColor, 0.35 + rng() * 0.45);
-      this.atmosphere.fillRect(x, y, size, size);
+    for (const star of this.stars) {
+      const x = wrap(star.x + shift.x, -2, this.w + 2);
+      const y = star.y + shift.y;
+      this.atmosphere.fillStyle(starColor, star.alpha);
+      this.atmosphere.fillRect(x, y, star.size, star.size);
     }
 
-    const orb = this.environment.celestial;
-    const x = Math.round(this.w * orb.x);
-    const y = Math.round(this.h * orb.y);
+    const x = Math.round(this.w * orb.x + shift.x);
+    const y = Math.round(this.h * orb.y + shift.y);
     this.atmosphere.fillStyle(orb.glow, 0.1);
     this.atmosphere.fillCircle(x, y, orb.radius * 1.7);
     this.atmosphere.fillStyle(orb.glow, 0.18);
@@ -54,7 +68,8 @@ export class ParallaxBackground {
     this.atmosphere.fillCircle(x, y, orb.radius);
   }
 
-  render(distance, curveOffset) {
+  render(distance, curveOffset, horizonOffset = 0) {
+    this.drawAtmosphere(curveOffset, horizonOffset);
     for (const layer of this.layers) {
       const { graphics, config, shapes } = layer;
       graphics.clear();
@@ -64,17 +79,18 @@ export class ParallaxBackground {
         config,
         this.segmentLength,
       );
+      const pitch = perspectiveOffset(curveOffset, horizonOffset, config).y;
       const firstTile = Math.floor((-config.tileWidth - offset) / config.tileWidth);
       const lastTile = Math.ceil((this.w + config.tileWidth - offset) / config.tileWidth);
       for (let tile = firstTile; tile <= lastTile; tile++) {
         const tileX = tile * config.tileWidth + offset;
-        this.drawLayer(graphics, config, shapes, tileX);
+        this.drawLayer(graphics, config, shapes, tileX, pitch);
       }
     }
   }
 
-  drawLayer(g, config, shapes, tileX) {
-    const baseY = Math.round(this.h * config.baseY);
+  drawLayer(g, config, shapes, tileX, pitch = 0) {
+    const baseY = Math.round(this.h * config.baseY + pitch);
     if (config.kind === 'city' || config.kind === 'industrial') {
       drawCity(g, config, shapes, tileX, baseY, this.h);
     } else {
@@ -86,7 +102,41 @@ export class ParallaxBackground {
 
 export function parallaxOffset(distance, curveOffset, layer, segmentLength) {
   const traveledSegments = distance / segmentLength;
-  return curveOffset * layer.curveFactor - traveledSegments * layer.travelFactor;
+  // The road's vanishing point moves toward the turn; a fixed landscape
+  // sweeps the other way as the player's view yaws into it.
+  return -curveOffset * layer.curveFactor - traveledSegments * layer.travelFactor;
+}
+
+// Horizontal bend response is authored per environment. Vertical response is
+// inferred from that same depth: near silhouettes pitch more than distant
+// ones, with a bounded extra push so hill crests read immediately at speed.
+export function perspectiveOffset(curveOffset, horizonOffset, layer) {
+  const curveFactor = layer.curveFactor ?? 0;
+  const pitchFactor = layer.pitchFactor
+    ?? Math.min(0.92, Math.max(0.42, 0.36 + curveFactor * 0.84));
+  return {
+    x: -curveOffset * curveFactor,
+    y: horizonOffset * pitchFactor,
+  };
+}
+
+function makeStars(environment, width, height) {
+  const rng = seededRandom(environment.seed ^ 0x9e3779b9);
+  const stars = [];
+  for (let i = 0; i < environment.stars; i++) {
+    stars.push({
+      x: Math.floor(rng() * width),
+      y: Math.floor(18 + rng() * height * 0.3),
+      size: rng() > 0.82 ? 2 : 1,
+      alpha: 0.35 + rng() * 0.45,
+    });
+  }
+  return stars;
+}
+
+function wrap(value, min, max) {
+  const range = max - min;
+  return ((value - min) % range + range) % range + min;
 }
 
 function drawTerrain(g, config, shapes, tileX, baseY, screenHeight) {

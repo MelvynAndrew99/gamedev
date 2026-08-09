@@ -146,12 +146,29 @@ export class RoadRenderer {
       -this.w * 0.65,
       this.w * 0.65,
     );
+    // The farthest projection converges on screen center even on large hills,
+    // so it cannot communicate pitch. A weighted near-road grade acts like a
+    // cartoon camera tilt: crests and dips arrive early, move visibly, then
+    // settle without tying the background to absolute world elevation.
+    const rawHorizonOffset = backgroundPitchOffset(
+      model,
+      base,
+      t.segmentLength,
+      this.h,
+    );
     if (this.backgroundCurveOffset === undefined) {
       this.backgroundCurveOffset = rawCurveOffset;
+      this.backgroundHorizonOffset = rawHorizonOffset;
     } else {
       this.backgroundCurveOffset += (rawCurveOffset - this.backgroundCurveOffset) * 0.12;
+      this.backgroundHorizonOffset +=
+        (rawHorizonOffset - this.backgroundHorizonOffset) * 0.1;
     }
-    this.background.render(sceneryDistance, this.backgroundCurveOffset);
+    this.background.render(
+      sceneryDistance,
+      this.backgroundCurveOffset,
+      this.backgroundHorizonOffset,
+    );
 
     this.trackside.render(model, base);
     this.renderGates(model, base);
@@ -600,6 +617,32 @@ export class RoadRenderer {
     g.closePath();
     g.fillPath();
   }
+}
+
+// Sample the road players are actively reading rather than the mathematical
+// infinity point. Positive world grade means the camera looks uphill, so a
+// fixed panorama moves down the screen; downhill mirrors it upward.
+export function backgroundPitchOffset(model, base, segmentLength, screenHeight) {
+  const first = 4;
+  const last = 28;
+  const middle = (first + last) / 2;
+  let weightedGrade = 0;
+  let totalWeight = 0;
+
+  for (let n = first; n <= last; n++) {
+    const segment = model.segmentAt(base, n);
+    const grade = (segment.p2.world.y - segment.p1.world.y) / segmentLength;
+    const weight = 1 - Math.abs(n - middle) / (middle - first + 1);
+    weightedGrade += grade * weight;
+    totalWeight += weight;
+  }
+
+  const averageGrade = totalWeight > 0 ? weightedGrade / totalWeight : 0;
+  return clamp(
+    averageGrade * screenHeight * 0.9,
+    -screenHeight * 0.14,
+    screenHeight * 0.14,
+  );
 }
 
 // Exponential fog, 0 (near, clear) -> approaching 1 (far, soup).
