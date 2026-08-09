@@ -144,55 +144,56 @@ added line should create meaningful cleanup, not merely raise the count.
 
 ## Lesson 2: Hazard Weave
 
-**Player sentence:** Follow the open line through the weaving rocks and reach the
-finish with a clean windscreen.
+**Player sentence:** Rocks hurt. Cones don't. Change lanes, keep the flow,
+and use both laps to finish the run.
 
-**Skill:** read a bending line of hazards, steer continuously to stay on its open
-side, and recover after a clip.
+**Skill:** read an obstacle formation early, choose its open lane, and carry a
+smooth line through the course while collecting optional mastery cones.
 
-**Show, don't tell.** The intro is two clauses — *"Rocks cause damage. Avoid the
-rocks."* — and never explains the mechanic. Rocks are strung one behind another
-into long lines whose lateral offset marches back and forth across the lanes, so
-the open racing line keeps sliding and the player has to keep steering to trace
-it. Roughly a hundred rocks fill seven weaving runs across the whole loop
-(gentler, lower-amplitude bends through the two hairpins so the corner and the
-slalom don't fight), separated by short clear breathers, and they reset at the
-line so both laps rehearse the same weave. There are no gates to thread and no
-text telling the player which lane is open.
+Hazard Weave uses 62 rocks without returning to the original uninterrupted
+105-rock wall. Twelve compact rockfalls each occupy two lanes for two rows,
+forcing ten meaningful side changes instead of allowing the player to park on
+one shoulder. Their starts are at least 66 segments apart, leaving at least 58
+clean segments after each second row. The result keeps the “lots of rocks”
+spectacle while making every open lane readable early enough to drive smoothly.
 
-The mechanic is taught the way Lesson 1 rehearses the airbrake: only once the
-player proves they need it. The first time the car actually clips a rock, a
-one-time notification appears — *"Rocks crack your windscreen / Steer around them
-to stay clean / Finish with no cracks for Gold."* A player who reads the line and
-never touches a rock is never interrupted.
+The lane closures alternate across straights and bends, then leave the `+8`
+hold and apex clear as an F-Zero-style flow release. Its next closure waits on
+the straight exit, where the right-side mastery line proves the learned
+airbrake technique without hiding a rock in the apex. A final right-side setup
+prepares the `-8` hairpin. After the bend, seven consecutive paired rows taper
+to a 0.50-wide collision-safe center channel, hold it, and release it. That
+one-second corridor is the sustained thread-the-needle capstone, not another
+left-or-right slalom choice.
 
-Two smaller touches sit on top of the weave. At three pinch points — where a rock
-strand bulges out to one edge — a few cones are laid along the *open* edge to bait
-the fast line, reusing Lesson 1's "drive here" cue as a lure rather than a
-collectible (they carry no objective and no penalty). And the loop ends with a
-short, gentle thread-the-needle corridor: parallel rock rails on the final
-straight form a ~0.8-wide channel whose center drifts slightly, so the player
-follows a lane down the middle. It sits on the easiest geometry (a straight) and
-is deliberately roomy — a fun capstone that rewards a steady hand, not a
-precision gate that punishes.
+Six cones sit in collision-safe openings beside the rocks. They are never the
+safe-route requirement: missing every cone still allows a clean finish and a
+Silver trophy. They instead say “this is the mastery line,” reusing Lesson 1's
+collectible language. Each cone can be claimed once anywhere in the complete
+two-lap attempt. A lap-one pickup counts, and a miss remains available on lap
+two; neither lap is disposable rehearsal or a separate perfect-lap exam.
 
 Rock contact has four visual stages drawn as cracks on the camera glass. It does
 not reduce speed, campaign hull, money, objective score, or access to the finish,
-and it never wrecks the player. The tiers grade only steering and damage:
+and it never wrecks the player. At three cracks, a red glass outline and a
+right-edge windshield graphic warn that the next rock would shatter the glass.
+The panel fades toward the center so the driving line stays clear. At four, the
+graphic says training continues but the trophy is lost. Normal story and
+endless races use the same treatment at 25 hull and still wreck on the next
+25-damage rock.
 
-- **Gold** — zero cracks *and* every edge cone collected on the finishing lap.
-- **Silver** — zero cracks.
-- **Bronze** — fewer than four cracks.
+The tiers grade avoidance first and cones only at the top:
 
-Four cracks earns no trophy but still completes and unlocks the next lesson, so
-progression is never blocked. Cones only ever separate Silver from Gold — they
-prove mastery of movement and damage and never gate anything else. The rest of
-the track exists to teach one thing: rocks cause damage, so avoid them.
+- **Gold** — zero cracks and all six unique mastery cones across either lap.
+- **Silver** — no more than one crack; cones optional.
+- **Bronze** — no more than three cracks; cones optional.
+- **No trophy** — four cracks, while completion and the next lesson remain
+  unlocked.
 
 Cone contact now bursts and pops in every mode. The smash juice used to fire only
 when a cone belonged to a sweep objective (Lesson 1); it is now a property of the
 cone itself, so the loose warning cones in Endless and campaign — and Hazard
-Weave's edge lures — all react when struck.
+Weave's mastery cones — all react when struck.
 
 The finish result is the reward transition. It plays a short fanfare, bursts
 confetti, calls out a perfect clear when appropriate, and records the best
@@ -201,14 +202,50 @@ finished successor exists. The final available lesson offers `Retry` and
 `Title` while naming the next staged lesson as coming soon. Keyboard, controller,
 and pointer input must expose the same choices.
 
-## Staged lessons
+## Lesson 3: Redline
 
-Training Track 3, **Redline**, reuses the loop on clean asphalt and will teach
-the player to reach and recognize top speed. It is currently a locked data
-placeholder. Before enabling it, define how long maximum speed must be held,
-author speed-retention trophy tiers, connect the `top_speed` event, and verify
-that roadside motion, engine audio, and speed streaks communicate the state
-without needing hazards.
+**Player sentence:** Grab the green boosts, then tap or hold the boost button
+to see how fast you can go.
+
+**Skill:** spend a shared 3-slot boost bank deliberately — tap it repeatedly
+to stack a higher top-speed ceiling, or hold it to sustain the current one
+for longer, and read the result off the speed number itself.
+
+The lesson reuses the loop on clean asphalt — no cones, rocks, or hazards, so
+nothing competes with the one verb being taught. Collecting a boost has
+already been taught by nothing at all: the pickup is a green object, its
+color already means "speed" everywhere else in this game's language (zipper
+paint, speed streaks). Pressing the existing boost button (gamepad X/Square,
+keyboard C) is the only new input, and the car's own reaction teaches it —
+the intro is one sentence, no mechanic explanation.
+
+A tap burns one slot for an immediate punch and sustained thrust toward that
+tier's ceiling: 1.35x maxSpeed. A second tap landing shortly after, while the
+first boost is still active, spends another slot and raises the ceiling to
+1.5x; a third tap to 1.65x.
+Holding the button instead of tapping spends slots over time to extend the
+current tier's duration rather than raise it — the same bank, spent on
+height or on length, never both at full effect. When a boost's active window
+ends, its ceiling eases back down over about a second rather than cutting
+off, so the "wearing off" is visible in both the boost gauge and the speed
+number, not just declared.
+
+Three one-use boosts form a center-left-right skill line across lap one. The
+first sits on a clean recovery straight, the second asks for the inside of a
+medium bend, and the third revisits the learned airbrake line through the +8
+corner. They stay collected at the lap line, so the opening straight of lap
+two is visually clean: tap-tap-tap there for the short 1.65x redline payoff,
+or hold the same three-slot bank at tier one for a longer, safer burn. A
+missed pickup remains available on lap two as recovery, but costs the ideal
+runway setup.
+
+**Medals are read by speed, not by counting boosts** — the HUD never shows a
+tap count, only the live speed number and the boost gauge's own fill/afterburn
+graphic. Internally this reuses Training's existing `count_event` +
+`scoring.thresholds` machinery exactly like every other lesson: the
+`top_speed` event fires with the highest tap-stack tier ever reached this
+race (1/2/3), and the authored thresholds turn that into Bronze at tier 1,
+Silver at tier 2, Gold at tier 3 — no bespoke scoring code for this lesson.
 
 Training Track 4, **Air School**, introduces ramps and an airtime objective.
 Four gold/cyan ramp approaches are staged around the shared loop for the first
@@ -298,11 +335,11 @@ The initial Training mode track list is fixed in this order:
 
 1. Cone Control — steering and line acquisition; cones only, no damage.
 2. Hazard Weave — follow target cones through rocks and read camera damage.
-3. Redline — reach top speed and learn its handling/audio/visual state.
+3. Redline — spend the boost gauge deliberately: tap to stack, hold to sustain.
 4. Air School — acquire ramp approaches and build controlled airtime.
 
-Warning reads, zippers, stored nitro, surface changes, and combo lines remain
-future curriculum candidates. Proving Ground combines the completed curriculum
+Warning reads, zippers, surface changes, and combo lines remain future
+curriculum candidates. Proving Ground combines the completed curriculum
 as the first Story race; it is not a fifth Training track.
 
 Later lessons may add optional mastery targets, but their required objective

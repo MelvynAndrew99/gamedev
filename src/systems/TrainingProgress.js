@@ -54,6 +54,22 @@ export function trophyFor(scoring, progress, metrics = {}) {
     : null;
 }
 
+// Hazard-style mastery cones can grade the complete multi-lap run rather than
+// treating lap one as disposable rehearsal. Other lessons retain their
+// finishing-lap behavior unless the track opts into scoreAcrossLaps.
+export function trainingConeScore(track, { allHits = 0, lastLapHits = 0 } = {}) {
+  const conesPerLap = track.objects?.filter(
+    (object) => object?.kind === 'cone',
+  ).length ?? 0;
+  const scoringMode = track.trainingCones?.scoreAcrossLaps;
+  const acrossLaps = scoringMode === true || scoringMode === 'unique';
+  // Boolean true preserves the original every-lap contract. "unique" is for
+  // persistent authored cones: either lap can claim each cone once.
+  const target = conesPerLap * (scoringMode === true ? (track.laps ?? 1) : 1);
+  const hits = Math.min(target, acrossLaps ? allHits : lastLapHits);
+  return { hits, target, missed: Math.max(0, target - hits) };
+}
+
 export function getTrainingResult(trackId, version = null) {
   const result = load()[trackId] ?? null;
   if (version != null && result?.version !== version) return null;

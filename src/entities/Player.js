@@ -41,8 +41,15 @@ export class Player {
     this.speed = Math.min(this.speed + this.t.maxSpeed * this.t.zipperKick, this.t.maxSpeed * this.t.overspeedCap);
   }
 
-  boost() {
-    this.speed = Math.min(this.speed + this.t.boostKick, this.t.maxSpeed * this.t.overspeedCap);
+  // A spent boost slot gives an immediate punch, capped by the active tier.
+  // Sustained acceleration toward that ceiling happens in update(), so a
+  // boost feels forceful without teleporting a slow car straight to redline.
+  boost(multiplier) {
+    const target = this.t.maxSpeed * multiplier;
+    this.speed = Math.max(
+      this.speed,
+      Math.min(this.speed + this.t.boostKick, target),
+    );
   }
 
   // Hit a ramp. Faster launch = longer flight = more cleared road.
@@ -104,6 +111,14 @@ export class Player {
     else if (input.brake > 0) this.speed += t.braking * dt * input.brake;
     else if (input.throttle <= 0) this.speed += t.decel * dt;
 
+    // Burnout-style thrust: while the boost is burning it actively pulls the
+    // car toward the tier ceiling. Tapping raises that destination; holding
+    // keeps the same destination alive for another full slot duration.
+    const boostCeiling = Math.max(t.overspeedCap, input.boostCeiling ?? 0);
+    if (input.boostActive && this.speed < t.maxSpeed * boostCeiling) {
+      this.speed += t.boostAccel * dt;
+    }
+
     // Gravity along the road: uphill drains, downhill pays — and downhill
     // can pay PAST maxSpeed (see the clamp), where steering authority and
     // centrifugal force keep scaling. Free speed, expensive hands.
@@ -131,7 +146,9 @@ export class Player {
     }
     // Above maxSpeed, drag claws you back toward it — hold overspeed only
     // while gravity keeps winning the tug-of-war.
-    if (this.speed > t.maxSpeed) this.speed += t.overspeedDecay * dt;
+    if (this.speed > t.maxSpeed && !input.boostActive) {
+      this.speed += t.overspeedDecay * dt;
+    }
 
     // Dirt: the surface won't carry more than dirtSpeed of max.
     if (!this.airborne && seg.surface === 'dirt' && this.speed > t.maxSpeed * t.dirtSpeed) {
@@ -155,7 +172,11 @@ export class Player {
     }
 
     this.x = clamp(this.x, -2, 2);
-    this.speed = clamp(this.speed, 0, t.maxSpeed * t.overspeedCap);
+    // A live boost (see Boost.js) temporarily raises this ceiling above the
+    // normal overspeedCap; when it eases back down after the burn ends, this
+    // same clamp rides existing speed back down with it — that IS the boost
+    // decay, no separate deceleration needed.
+    this.speed = clamp(this.speed, 0, t.maxSpeed * boostCeiling);
 
     // Advance along the loop.
     this.position += this.speed * dt;

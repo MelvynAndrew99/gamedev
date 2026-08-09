@@ -10,13 +10,17 @@ import { RoadRenderer } from '../road/RoadRenderer.js';
 import { Player } from '../entities/Player.js';
 import { RaceState, fmtTime } from '../systems/RaceState.js';
 import { submitScore } from '../systems/HighScores.js';
-import { checkObstacleHit } from '../systems/Collision.js';
+import { checkObstacleHit, crossedRoadSegments } from '../systems/Collision.js';
 import { Controls } from '../systems/Controls.js';
 import { Popularity } from '../systems/Popularity.js';
 import { ObjectiveState } from '../systems/ObjectiveState.js';
 import { trainingCueDecision } from '../systems/TrainingCue.js';
-import { submitTrainingResult } from '../systems/TrainingProgress.js';
+import {
+  submitTrainingResult,
+  trainingConeScore,
+} from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
+import { Boost } from '../entities/Boost.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
 import { MUSIC } from '../audio/MusicEngine.js';
@@ -80,17 +84,18 @@ export class GameScene extends Phaser.Scene {
       this.race.prevPos = this.player.position; // don't misread the spawn as a wrap
     }
     this.pop = new Popularity(TUNING);
-    this.nitro = 0; // pocketed boosts (see TUNING.nitroMax)
+    this.boost = new Boost(TUNING); // tap-stacked/held boost gauge, see Boost.js
+    this.topSpeedTier = 0; // highest boost tier reached this race, feeds the top_speed objective
+    this.boostHoldHandle = null; // active sustained hold-drone SFX, if any
     this.speedLineBurst = 0; // ramp/boost streak-bloom, decays over speedLineBurstTime
     this.wasOnZipper = false;
-    this.prevNitroHeld = false;
     this.trainingDamageHits = 0;
     this.trainingDamageMax = this.trackData?.trainingDamage?.maxHits ?? 0;
     this.trainingDamageTaught = false; // one-time "rocks damage you" notice, shown on first hit
     this.coneHits = 0;        // running index for loose-cone smash variety
-    this.conesThisLap = 0;    // cones collected on the current lap (reset each lap)
-    // Cones reset at the line, so the finishing lap is the fair "did you get
-    // them" check. A track with no cones leaves this at zero and never gates.
+    this.conesThisLap = 0;     // fallback score for lessons that re-arm cones
+    this.trainingConeHits = 0; // cumulative score for full-run mastery tracks
+    // A track with no cones leaves this at zero and never gates a trophy.
     this.trainingConeTotal = (this.trackData?.objects ?? [])
       .filter((object) => object.kind === 'cone').length;
     this.trainingTutorial = null;
@@ -118,7 +123,6 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-R', () => this.retryTraining());
 
     this.iframes = 0; // post-hit invulnerability countdown
-    this.boostCooldown = 0; // one pad = one kick, even if we overlap for 2 frames
 
     // Center-screen banner: race intro, lap flash, results.
     this.banner = this.add
@@ -160,6 +164,10 @@ export class GameScene extends Phaser.Scene {
     const theme = this.trackData ? CAMPAIGN_THEMES[themeId] ?? HIGH_SPEED_THEME : HIGH_SPEED_THEME;
     MUSIC.start(theme);
     this.events.once('shutdown', () => MUSIC.stop());
+    // The sustained hold-drone schedules its own stop far in the future —
+    // MUSIC.stop() only halts the music scheduler, so a mid-hold scene exit
+    // needs its own explicit stop or the drone plays on regardless.
+    this.events.once('shutdown', () => this.boostHoldHandle?.stop());
   }
 
   update(_time, delta) {
@@ -207,15 +215,26 @@ export class GameScene extends Phaser.Scene {
 
     const dt = Math.min(delta, 50) / 1000;
     const input = this.controls.read(TUNING);
+    const previousPlayer = {
+      position: this.player.position,
+      x: this.player.x,
+    };
 
-    // Nitro: edge-detected — one burn per press, if there's one to burn.
-    if (input.nitro && !this.prevNitroHeld && this.nitro > 0) {
-      this.nitro--;
-      this.onBoost();
+    // Boost: tapping stacks the ceiling, holding extends its duration — the
+    // ceiling itself is enforced inside Player.update's own clamp (see
+    // Boost.js and Player.js). Feed it in BEFORE update so it's live this frame.
+    this.boost.update(dt, input.nitro);
+    if (this.boost.justActivated > 0) {
+      this.player.boost(TUNING.boostTierCeilings[this.boost.justActivated - 1]);
+    } else if (this.boost.justExtended) {
+      this.player.boost(TUNING.boostTierCeilings[this.boost.tier - 1]);
     }
-    this.prevNitroHeld = input.nitro;
+    input.boostCeiling = this.boost.ceilingMultiplier;
+    input.boostActive = this.boost.tier > 0;
 
     this.player.update(dt, input, this.model);
+    this.reactToBoost();
+    this.recordTopSpeed();
     this.sceneryDistance += this.player.speed * dt;
     this.maybeStartTrainingTutorial(input);
 
@@ -223,10 +242,15 @@ export class GameScene extends Phaser.Scene {
     // exit), never consumed — the paint is permanent, the skill is lining
     // up on it lap after lap. Airborne cars aren't touching the road.
     {
-      const seg = this.model.findSegment(this.player.position + TUNING.playerZ);
-      const z = seg.zipper;
-      const on = !!z && !this.player.airborne &&
-        Math.abs(this.player.x - z.offset) < z.w + TUNING.playerW * 0.5;
+      const on = !this.player.airborne && crossedRoadSegments(
+        this.player,
+        this.model,
+        TUNING,
+        previousPlayer,
+      ).some(({ segment, x }) => {
+        const z = segment.zipper;
+        return !!z && Math.abs(x - z.offset) < z.w + TUNING.playerW * 0.5;
+      });
       if (on && !this.wasOnZipper) {
         this.player.zip();
         if (this.mode === 'endless') this.pop.add(TUNING.zipPop);
@@ -240,7 +264,12 @@ export class GameScene extends Phaser.Scene {
     // flying. i-frames only gate hazards; candy always pays.
     this.pop.update(dt);
     if (!this.player.airborne) {
-      const s = checkObstacleHit(this.player, this.model, TUNING);
+      const s = checkObstacleHit(
+        this.player,
+        this.model,
+        TUNING,
+        previousPlayer,
+      );
       if (s) {
         if (s.def.kind === 'candy') this.onCandy(s);
         else if (s.def.kind === 'launch') this.onRamp(s.def);
@@ -250,7 +279,6 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.iframes = Math.max(0, this.iframes - dt);
-    this.boostCooldown = Math.max(0, this.boostCooldown - dt);
     this.speedLineBurst = Math.max(0, this.speedLineBurst - dt / TUNING.speedLineBurstTime);
     this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
 
@@ -263,7 +291,9 @@ export class GameScene extends Phaser.Scene {
       } else if (event === 'lap') {
         this.recordObjective('lap_complete');
         this.model.resetLapSprites();
-        this.conesThisLap = 0; // cones re-arm at the line; grade the finishing lap
+        // Ordinary cones re-arm at the line; objective-linked mastery cones
+        // persist and use trainingConeHits across the complete attempt.
+        this.conesThisLap = 0;
         if (this.mode === 'training') {
           const lessonMessage = this.trackData.lapMessages?.[this.race.lap];
           this.showBanner(
@@ -412,21 +442,55 @@ export class GameScene extends Phaser.Scene {
   }
 
   onPickup(sprite) {
-    if (this.nitro >= TUNING.nitroMax) {
+    if (this.boost.full) {
       sprite.hit = false; // pockets full — leave it for the next lap
       return;
     }
-    this.nitro++;
-    this.popup('+NITRO', '#2ee56b');
+    this.boost.collect();
+    MUSIC.playBoostPickup();
+    this.popup('+BOOST', '#2ee56b');
   }
 
-  onBoost() {
-    if (this.boostCooldown > 0) return;
-    this.boostCooldown = 0.5;
-    this.player.boost();
-    this.speedLineBurst = 1; // the pop reads as speed even from a standstill
-    this.popup('BOOST', '#2ee56b');
-    this.cameras.main.shake(50, 0.002);
+  // Reacts once per frame to what Boost.update() just reported. Physics was
+  // applied before Player.update so movement, contacts, and rendering all see
+  // the same speed; this method is presentation only.
+  reactToBoost() {
+    const boost = this.boost;
+    if (boost.justActivated > 0) {
+      const tier = boost.justActivated;
+      this.speedLineBurst = 1; // the pop reads as speed even from a standstill
+      MUSIC.playBoostApply(tier);
+      const label = tier === 3 ? 'BOOST!! x3' : tier === 2 ? 'BOOST! x2' : 'BOOST';
+      const color = tier === 3 ? '#ffcf3f' : tier === 2 ? '#00e5ff' : '#2ee56b';
+      this.popup(label, color);
+      this.cameras.main.shake(50 + tier * 30, 0.002 + tier * 0.0015);
+    } else if (boost.justExtended) {
+      this.speedLineBurst = Math.max(this.speedLineBurst, 0.5);
+      MUSIC.playBoostApply(boost.tier, { extend: true });
+    }
+
+    if (boost.holding && !this.boostHoldHandle) {
+      this.boostHoldHandle = MUSIC.startBoostHold();
+    } else if (!boost.holding && this.boostHoldHandle) {
+      this.boostHoldHandle.stop();
+      this.boostHoldHandle = null;
+    }
+  }
+
+  // Grade actual attained speed, not button presses. A player who burns the
+  // bank while crawling still gets the punch, but Redline's medals require
+  // carrying momentum and physically reaching each tier's redline.
+  recordTopSpeed() {
+    const speedMultiplier = this.player.speed / TUNING.maxSpeed;
+    let reached = 0;
+    for (let tier = 1; tier <= TUNING.boostTierCeilings.length; tier++) {
+      if (speedMultiplier + 1e-6 >= TUNING.boostTierCeilings[tier - 1]) {
+        reached = tier;
+      }
+    }
+    if (reached <= this.topSpeedTier) return;
+    this.recordObjective('top_speed', { amount: reached - this.topSpeedTier });
+    this.topSpeedTier = reached;
   }
 
   onCandy(sprite) {
@@ -436,11 +500,12 @@ export class GameScene extends Phaser.Scene {
     // Smashing a cone always looks and sounds like a hit — the juice is a
     // property of the object, not of an objective. When a cone belongs to a
     // sweep objective the burst also carries progress/milestone weight; when
-    // it's a loose warning or edge lure (Endless, campaign, Hazard Weave) it
+    // it's a loose warning or edge lure (Endless and campaign) it
     // still pops. `coneHits` gives loose cones the running index the burst
     // needs for variety.
     this.coneHits++;
     this.conesThisLap++;
+    if (this.mode === 'training') this.trainingConeHits++;
     this.juiceConeHit(sprite, {
       index: objective ? objective.progress : this.coneHits,
       milestone: objective ? (objective.complete || objective.progress % 10 === 0) : false,
@@ -495,7 +560,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.trainingDamageTaught) {
         this.trainingDamageTaught = true;
         this.showBanner(
-          'ROCKS CRACK YOUR WINDSCREEN\nSteer around them to stay clean\nFinish with no cracks for GOLD',
+          'ROCKS CRACK YOUR WINDSCREEN\nSteer around them to stay clean\nCones mark the mastery line\nCLEAN + ALL CONES FOR GOLD',
           3200,
         );
       }
@@ -555,16 +620,24 @@ export class GameScene extends Phaser.Scene {
       const coneGated = this.trackData.scoring?.thresholds?.some(
         (threshold) => threshold.maximumConesMissed != null,
       );
-      const conesMissed = coneGated
-        ? Math.max(0, this.trainingConeTotal - this.conesThisLap)
-        : 0;
+      const coneScore = trainingConeScore(this.trackData, {
+        allHits: this.trainingConeHits,
+        lastLapHits: this.conesThisLap,
+      });
+      const conesMissed = coneGated ? coneScore.missed : 0;
       const result = submitTrainingResult(this.trackData, target.progress, t, {
         damageHits: this.trainingDamageHits,
         conesMissed,
         total: target.total,
       });
       const firstTrophy = [...this.trackData.scoring.thresholds]
-        .sort((a, b) => a.minimum - b.minimum)[0];
+        .sort((a, b) =>
+          a.minimum - b.minimum ||
+          (b.maximumDamageHits ?? Infinity) -
+            (a.maximumDamageHits ?? Infinity) ||
+          (b.maximumConesMissed ?? Infinity) -
+            (a.maximumConesMissed ?? Infinity)
+        )[0];
       const trophyLine = result.trophy
         ? `${result.trophy.rank.toUpperCase()} TROPHY  ${'★'.repeat(result.trophy.stars)}`
         : `NO TROPHY  •  ${firstTrophy.rank.toUpperCase()} AT ${firstTrophy.minimum}` +
@@ -581,8 +654,8 @@ export class GameScene extends Phaser.Scene {
         : '';
       // Surface a cones tally only when cones gate the trophy (Hazard Weave);
       // when cones ARE the objective the objective row already reports them.
-      const coneLine = coneGated && this.trainingConeTotal > 0
-        ? `CONES ${this.conesThisLap} / ${this.trainingConeTotal}\n`
+      const coneLine = coneGated && coneScore.target > 0
+        ? `CONES ${coneScore.hits} / ${coneScore.target}\n`
         : '';
       const nextLine = this.trainingAdvanceTo == null
         ? (nextTrack

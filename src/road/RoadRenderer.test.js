@@ -156,3 +156,20 @@ test('gate stays stable while roadside speed markers keep their horizon wink', (
     'roadside pickets should retain their alternating speed cadence'
   );
 });
+
+test('every boost tier keeps perspective finite, positive, and below the lens cap', () => {
+  const model = new RoadModel(TUNING);
+  model.addStraight(TUNING.drawDistance + 10);
+  const renderer = new RoadRenderer(fakeScene(), TUNING);
+
+  for (const speedPercent of [...TUNING.boostTierCeilings, 10]) {
+    renderer.render(model, { position: 0, x: 0 }, speedPercent, 0);
+    assert.ok(Number.isFinite(renderer.frameDepth), `${speedPercent}x frame depth`);
+    assert.ok(renderer.frameDepth > 0, `${speedPercent}x must not invert perspective`);
+    for (const segment of model.segments.slice(1, TUNING.drawDistance)) {
+      assert.ok(Number.isFinite(segment.p1.screen.x), `${speedPercent}x projected x`);
+      assert.ok(Number.isFinite(segment.p1.screen.y), `${speedPercent}x projected y`);
+      assert.ok(segment.p1.screen.w >= 0, `${speedPercent}x projected road width`);
+    }
+  }
+});

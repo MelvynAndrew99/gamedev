@@ -27,12 +27,13 @@ export const OBSTACLES = {
   },
   boost: {
     key: 'boost',
-    kind: 'boost',  // speed impulse — placed on uphills, where gravity taxes
+    kind: 'pickup', // a consumable, banked and spent with the boost button —
+                    // see RoadModel.placeBoostPads and GameScene.onPickup
     pop: 0,
     damage: 0,
     slow: 1.0,
-    w: 0.12,
-    view: 0.26,
+    w: 0.1,
+    view: 0.15,
   },
   ramp: {
     key: 'ramp',

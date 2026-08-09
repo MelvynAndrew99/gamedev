@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { TUNING } from '../config/tuning.js';
+import { OBSTACLES } from '../config/obstacles.js';
 import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingTopSpeed from '../tracks/training-top-speed.json' with { type: 'json' };
@@ -306,99 +307,108 @@ test('training uses varied cone lines and preserves missed targets for lap two',
   );
 });
 
-test('Hazard Weave strings rocks into bending lines that force the player to steer', () => {
+test('Hazard Weave forces readable lane changes before a sustained center needle', () => {
   assert.deepEqual(trainingHazardWeave.pieces, trainingLoop.pieces);
   assert.equal(trainingHazardWeave.trainingDamage.maxHits, 4);
   assert.equal(trainingHazardWeave.scoring.objective, 'finish');
-  assert.ok(trainingHazardWeave.scoring.thresholds.every(
-    (threshold) => threshold.minimum === trainingHazardWeave.laps,
-  ));
-
-  // Show, don't tell: the intro must be short and never explain the mechanic.
-  assert.ok(trainingHazardWeave.intro.length <= 60, trainingHazardWeave.intro);
-  assert.ok(!/damage works|windscreen|crack/i.test(trainingHazardWeave.intro));
+  assert.equal(trainingHazardWeave.trainingCones.scoreAcrossLaps, 'unique');
 
   const rocks = trainingHazardWeave.objects.filter((object) => object.kind === 'rock');
   const cones = trainingHazardWeave.objects.filter((object) => object.kind === 'cone');
+  assert.equal(rocks.length, 62, 'the lesson should retain its dense rockfall spectacle');
+  assert.equal(cones.length, 6, 'selected open lanes should offer mastery rewards');
   assert.equal(trainingHazardWeave.objects.length, rocks.length + cones.length);
-  assert.ok(rocks.length >= 90, `expected a dense field, got ${rocks.length}`);
-  assert.ok(rocks.every((rock) => rock.objective == null));
+  assert.ok(cones.every((cone) => cone.objective === 'mastery-cones'));
 
-  // Weaving strands (weave-N / bend-N) sit one behind another — no two ever
-  // share a segment. The thread-the-needle corridor (thread-N) is separate.
-  const weaveRocks = rocks.filter((rock) => /^(weave|bend)-/.test(rock.id));
-  const threadRocks = rocks.filter((rock) => /^thread-/.test(rock.id));
-  assert.equal(weaveRocks.length + threadRocks.length, rocks.length);
+  const thresholds = Object.fromEntries(
+    trainingHazardWeave.scoring.thresholds.map((threshold) => [threshold.rank, threshold]),
+  );
+  assert.equal(thresholds.gold.maximumDamageHits, 0);
+  assert.equal(thresholds.gold.maximumConesMissed, 0);
+  assert.equal(thresholds.silver.maximumDamageHits, 1);
+  assert.equal(thresholds.silver.maximumConesMissed, undefined);
+  assert.equal(thresholds.bronze.maximumDamageHits, 3);
 
-  const weaveAts = weaveRocks.map((rock) => rock.at);
-  assert.equal(new Set(weaveAts).size, weaveAts.length);
-
-  const runs = new Map();
-  for (const rock of weaveRocks) {
-    const run = rock.id.match(/^([a-z]+-\d+)-/)[1];
-    if (!runs.has(run)) runs.set(run, []);
-    runs.get(run).push(rock);
+  // Each compact rockfall closes two lanes over two rows. The open lane moves
+  // repeatedly across the road, while at least 58 segments of recovery follow
+  // one closure before the next begins.
+  const starts = [84, 150, 224, 306, 402, 500, 672, 742, 960, 1034, 1100, 1170];
+  const safeSides = ['R', 'L', 'R', 'L', 'R', 'L', 'R', 'L', 'R', 'L', 'R', 'R'];
+  const safeR = [[-0.68, 0], [-0.62, -0.04]];
+  const safeL = [[0, 0.68], [0.04, 0.62]];
+  for (let index = 0; index < starts.length; index += 1) {
+    const prefix = `closure-${String(index + 1).padStart(2, '0')}-`;
+    const closure = rocks.filter((rock) => rock.id.startsWith(prefix));
+    assert.equal(closure.length, 4, `${prefix} should be a dense two-row closure`);
+    const rows = [...new Set(closure.map((rock) => rock.at))].sort((a, b) => a - b);
+    assert.deepEqual(rows, [starts[index], starts[index] + 8]);
+    assert.deepEqual(
+      rows.map((at) => closure.filter((rock) => rock.at === at)
+        .map((rock) => rock.offset).sort((a, b) => a - b)),
+      safeSides[index] === 'R' ? safeR : safeL,
+    );
   }
-  for (const [run, members] of runs) {
-    const runAts = members.map((rock) => rock.at);
-    assert.deepEqual(runAts, [...runAts].sort((a, b) => a - b), run);
+  const startGaps = starts.slice(1).map((at, index) => at - starts[index]);
+  assert.ok(startGaps.every((gap) => gap >= 66));
+  assert.equal(safeSides.slice(1).filter((side, index) => side !== safeSides[index]).length, 10);
 
-    const offsets = members.map((rock) => rock.offset);
-    // Always leaves an open racing line: a single strand never blocks the road.
-    assert.ok(offsets.every((offset) => Math.abs(offset) <= 0.6), run);
-    // The line bends across the lanes rather than holding one — that is what
-    // makes the player steer as they pass.
-    const span = Math.max(...offsets) - Math.min(...offsets);
-    assert.ok(span >= 0.4, `${run} must weave across lanes (span ${span})`);
-    // Each step is gentle enough to follow at speed (no teleporting wall).
-    for (let i = 1; i < offsets.length; i++) {
+  // The +8 hold and apex stay clean. Its right-lane reward waits until the
+  // straight exit, where the learned airbrake line has settled.
+  assert.equal(rocks.filter((rock) => rock.at >= 858 && rock.at <= 953).length, 0);
+  assert.deepEqual(
+    trainingHazardWeave.objects
+      .filter((object) => object.at === 968)
+      .map((object) => [object.kind, object.offset]),
+    [['rock', -0.62], ['rock', -0.04], ['cone', 0.62]],
+  );
+
+  // Hitting a mastery cone can never overlap a rock's collision interval.
+  // The final centered cone is precise, but its gate retains real clearance.
+  const coneReach = TUNING.playerW + OBSTACLES.cone.w;
+  const rockReach = TUNING.playerW + OBSTACLES.rock.w;
+  for (const cone of cones) {
+    const sameSegmentRocks = rocks.filter((rock) => rock.at === cone.at);
+    assert.ok(sameSegmentRocks.length > 0, `${cone.id} should mark a visible safe lane`);
+    for (const rock of sameSegmentRocks) {
       assert.ok(
-        Math.abs(offsets[i] - offsets[i - 1]) <= 0.16,
-        `${run} step too sharp between rocks ${i - 1} and ${i}`,
+        Math.abs(cone.offset - rock.offset) >= coneReach + rockReach,
+        `${cone.id} overlaps ${rock.id}`,
       );
     }
   }
 
-  // Thread-the-needle capstone: parallel rails you follow down a lane. It sits
-  // at the end (final straight) and is sized to be fun, not frustrating.
-  assert.ok(threadRocks.length >= 8, `expected a corridor, got ${threadRocks.length}`);
-  assert.ok(threadRocks.every((rock) => rock.at >= 1278), 'corridor is toward the end');
-  const pairs = new Map();
-  for (const rock of threadRocks) {
-    if (!pairs.has(rock.at)) pairs.set(rock.at, []);
-    pairs.get(rock.at).push(rock.offset);
+  // Seven consecutive pairs taper, hold, and release a real center corridor.
+  // This is a sustained thread-the-needle finish, not another lane-choice gate.
+  const thread = rocks.filter((rock) => rock.id.startsWith('thread-'));
+  assert.equal(thread.length, 14);
+  const threadSegments = [...new Set(thread.map((rock) => rock.at))].sort((a, b) => a - b);
+  assert.deepEqual(threadSegments, [1298, 1308, 1318, 1328, 1338, 1348, 1358]);
+  assert.ok(threadSegments.slice(1).every((at, index) => at - threadSegments[index] === 10));
+  const safeWidths = [];
+  for (const at of threadSegments) {
+    const offsets = thread.filter((rock) => rock.at === at).map((rock) => rock.offset);
+    assert.equal(offsets.length, 2);
+    const [left, right] = [...offsets].sort((a, b) => a - b);
+    safeWidths.push(Number((right - left - rockReach * 2).toFixed(2)));
   }
-  for (const [at, offsets] of pairs) {
-    assert.equal(offsets.length, 2, `corridor pair at ${at}`);
-    const [lo, hi] = [...offsets].sort((a, b) => a - b);
-    assert.ok(lo < 0 && hi > 0, `corridor straddles center at ${at}`);
-    assert.ok(Math.abs(lo) <= 0.55 && hi <= 0.55, `corridor rails on-road at ${at}`);
-    const gap = hi - lo;
-    // Wide enough that the car (2 * (playerW 0.14 + rockW 0.11) = 0.5) threads
-    // with real margin; not so wide it stops being a needle.
-    assert.ok(gap >= 0.72 && gap <= 0.88, `corridor gap ${gap} at ${at}`);
-  }
+  assert.deepEqual(
+    safeWidths,
+    [0.78, 0.7, 0.62, 0.54, 0.5, 0.54, 0.62],
+  );
 
-  // A few edge cones bait the open racing line exactly where a rock strand
-  // bulges to the far edge — Lesson 1's "drive here" cue reused as a lure.
-  assert.ok(cones.length >= 3 && cones.length <= 12, `a few cones, got ${cones.length}`);
-  assert.ok(cones.every((cone) => cone.objective == null));
-  for (const cone of cones) {
-    assert.ok(Math.abs(cone.offset) >= 0.6, `edge cone ${cone.id}`);
-    const bulge = weaveRocks.some(
-      (rock) => Math.abs(rock.at - cone.at) <= 40 &&
-        Math.sign(rock.offset) === -Math.sign(cone.offset) &&
-        Math.abs(rock.offset) >= 0.45,
-    );
-    assert.ok(bulge, `cone ${cone.id} should sit opposite a rock bulge`);
-  }
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingHazardWeave);
+  const masterySprites = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.objectiveId === 'mastery-cones');
+  masterySprites[0].hit = true;
+  model.resetLapSprites();
+  assert.equal(masterySprites[0].hit, true, 'claimed mastery cones persist across both laps');
+  assert.ok(masterySprites.slice(1).every((sprite) => sprite.hit === false));
 });
 
-test('staged speed and airtime lessons preserve the shared loop geometry', () => {
-  for (const track of [trainingTopSpeed, trainingAirtime]) {
-    assert.equal(track.status, 'placeholder', track.id);
-    assert.deepEqual(track.pieces, trainingLoop.pieces, track.id);
-  }
+test('the staged airtime lesson preserves the shared loop geometry', () => {
+  assert.equal(trainingAirtime.status, 'placeholder', trainingAirtime.id);
+  assert.deepEqual(trainingAirtime.pieces, trainingLoop.pieces, trainingAirtime.id);
 
   const model = new RoadModel(TUNING);
   model.buildFromData(trainingAirtime);
@@ -406,6 +416,33 @@ test('staged speed and airtime lessons preserve the shared loop geometry', () =>
     .filter((sprite) => sprite.key === 'ramp');
   assert.equal(ramps.length, 4);
   assert.ok(model.segments.some((segment) => segment.launchApproach));
+});
+
+test('Redline preserves the shared loop geometry and is no longer a placeholder', () => {
+  assert.notEqual(trainingTopSpeed.status, 'placeholder', trainingTopSpeed.id);
+  assert.deepEqual(trainingTopSpeed.pieces, trainingLoop.pieces, trainingTopSpeed.id);
+
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingTopSpeed);
+  const boosts = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.key === 'boost');
+  assert.equal(boosts.length, trainingTopSpeed.objects.length);
+  assert.equal(boosts.length, 3, 'lap one should bank exactly one full boost gauge');
+  assert.deepEqual(
+    trainingTopSpeed.objects.map(({ at, offset }) => [at, offset]),
+    [[260, 0], [540, -0.52], [920, 0.52]],
+    'the pickup line should revisit center, medium-bend, and airbrake skills',
+  );
+  assert.ok(trainingTopSpeed.objects.every((object) => object.once === true));
+
+  const collected = boosts[0];
+  collected.hit = true;
+  model.resetLapSprites();
+  assert.equal(collected.hit, true, 'banked lap-one boosts stay gone on lap two');
+  assert.ok(boosts.slice(1).every((boost) => boost.hit === false), 'missed boosts remain recoverable');
+
+  const ranks = trainingTopSpeed.scoring.thresholds.map((threshold) => threshold.rank).sort();
+  assert.deepEqual(ranks, ['bronze', 'gold', 'silver']);
 });
 
 function minimumPlacementGap(track) {
