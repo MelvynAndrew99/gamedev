@@ -20,8 +20,9 @@ is satisfied.
 
 Asset generation (regenerate pixel-art sprites into `public/assets/`):
 - `node tools/gen-car.js` — car sprite sheet, needs `pngjs`. Builds a small 3D
-  jeep mesh (boxes/discs) and rasterizes 5 steering frames from real camera
-  yaws with a z-buffer, then quantizes shading into flat bands so it still
+  hover-racer mesh (boxes/discs) and rasterizes 15 poses (five steering angles
+  across nose-down, neutral, and nose-up rows) from real model rotations with
+  a z-buffer, then quantizes shading into flat bands so it still
   reads as pixel art. Deliberately not a 2D pixel map sheared per frame —
   that technique (the old `tools/design.py` + `tools/CarRenderer.py`, since
   removed) can bank a single rear-view raster but can never reveal the front

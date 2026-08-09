@@ -13,8 +13,25 @@ import { submitScore } from '../systems/HighScores.js';
 import { checkObstacleHit, crossedRoadSegments } from '../systems/Collision.js';
 import { Controls } from '../systems/Controls.js';
 import { Popularity } from '../systems/Popularity.js';
-import { ObjectiveState } from '../systems/ObjectiveState.js';
+import { shouldPlayBoostHold } from '../audio/AirtimeAudio.js';
+import { ObjectiveState, formatObjectiveValue } from '../systems/ObjectiveState.js';
+import { objectiveFeedbackEvent } from '../systems/ObjectiveFeedback.js';
 import { trainingCueDecision } from '../systems/TrainingCue.js';
+import {
+  airtimeGapOutcome,
+  shouldAnnounceGapMiss,
+} from '../systems/AirtimeOutcome.js';
+import {
+  AIRTIME_COLORS,
+  airtimeFxFrame,
+  airtimeTier,
+  carSpriteFrame,
+  landingFxColor,
+  landingFxStrength,
+  nextAirtimePitch,
+  nextGlideMode,
+  shouldTriggerApex,
+} from '../systems/AirtimeFx.js';
 import {
   submitTrainingResult,
   trainingConeScore,
@@ -65,6 +82,8 @@ export class GameScene extends Phaser.Scene {
       });
     }
     this.objectives = new ObjectiveState(this.trackData?.objectives, this.model);
+    this.objectiveHudSequence = 0;
+    this.objectiveHudEvents = [];
     this.renderer = new RoadRenderer(
       this,
       TUNING,
@@ -87,6 +106,9 @@ export class GameScene extends Phaser.Scene {
     this.boost = new Boost(TUNING); // tap-stacked/held boost gauge, see Boost.js
     this.topSpeedTier = 0; // highest boost tier reached this race, feeds the top_speed objective
     this.boostHoldHandle = null; // active sustained hold-drone SFX, if any
+    this.airtimeAudioHandle = null;
+    this.pendingAirtimeLanding = null;
+    this.jumpLaunchedThisFrame = false;
     this.speedLineBurst = 0; // ramp/boost streak-bloom, decays over speedLineBurstTime
     this.wasOnZipper = false;
     this.trainingDamageHits = 0;
@@ -102,6 +124,16 @@ export class GameScene extends Phaser.Scene {
     this.trainingTutorialView = null;
     this.completedTrainingCues = new Set();
     this.failedTrainingCues = new Set();
+    // Air School telemetry is intentionally public/pull-based: HudScene reads
+    // one small view model without owning physics or training decisions.
+    this.airtimeTrainingConfig = this.trackData?.id === 'training-airtime'
+      ? this.trackData.airtimeTraining
+      : null;
+    this.airtimeGapAttempt = null;
+    this.airtimeFeedback = null;
+    this.airtimeTrainingView = this.airtimeTrainingConfig
+      ? this.buildAirtimeTrainingView()
+      : null;
     this.done = false;
 
     // Bottom-anchored (origin 0.5,1): the sprite's y IS its rear-bumper
@@ -112,10 +144,11 @@ export class GameScene extends Phaser.Scene {
     // car upward into the road, never off the bottom edge.
     this.carBaselineY = this.scale.height - 24;
     this.carSprite = this.add
-      .sprite(this.scale.width / 2, this.carBaselineY, 'car', 2)
+      .sprite(this.scale.width / 2, this.carBaselineY, 'car', carSpriteFrame(2, 0))
       .setOrigin(0.5, 1)
       .setScale(TUNING.carScale)
       .setDepth(10);
+    this.createAirtimeVisuals();
 
     this.controls = new Controls(this);
     this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
@@ -168,9 +201,10 @@ export class GameScene extends Phaser.Scene {
     // MUSIC.stop() only halts the music scheduler, so a mid-hold scene exit
     // needs its own explicit stop or the drone plays on regardless.
     this.events.once('shutdown', () => this.boostHoldHandle?.stop());
+    this.events.once('shutdown', () => this.airtimeAudioHandle?.stop());
   }
 
-  update(_time, delta) {
+  update(time, delta) {
     // Result banners answer the controller: cross advances, circle bails.
     // Edge-detected poll, same reasoning as the title menu.
     const pad = getPrimaryPad(this.input.gamepad);
@@ -215,6 +249,7 @@ export class GameScene extends Phaser.Scene {
 
     const dt = Math.min(delta, 50) / 1000;
     const input = this.controls.read(TUNING);
+    this.jumpLaunchedThisFrame = false;
     const previousPlayer = {
       position: this.player.position,
       x: this.player.x,
@@ -233,7 +268,8 @@ export class GameScene extends Phaser.Scene {
     input.boostActive = this.boost.tier > 0;
 
     this.player.update(dt, input, this.model);
-    this.reactToBoost();
+    this.updateAirtimeAudio();
+    this.updateAirtimeTraining(dt);
     this.recordTopSpeed();
     this.sceneryDistance += this.player.speed * dt;
     this.maybeStartTrainingTutorial(input);
@@ -272,12 +308,26 @@ export class GameScene extends Phaser.Scene {
       );
       if (s) {
         if (s.def.kind === 'candy') this.onCandy(s);
-        else if (s.def.kind === 'launch') this.onRamp(s.def);
+        else if (s.def.kind === 'launch') this.onRamp(s, input);
         else if (s.def.kind === 'pickup') this.onPickup(s);
-        else if (this.iframes <= 0) this.onHit(s.def);
+        else if (this.iframes <= 0) this.onHit(s.def, s);
         else s.hit = false; // i-frames: hazard not consumed, just ghosted
       }
     }
+
+    // Collision can turn an early gap landing into explicit safe-route
+    // feedback, so publish telemetry after contact handling too.
+    if (this.airtimeTrainingConfig) {
+      this.airtimeTrainingView = this.buildAirtimeTrainingView();
+    }
+    // Resolve landing audio only after collision has had the opportunity to
+    // turn a marginal rock-gap touchdown into a miss. A direct ramp chain
+    // uses the new ramp strike as its contact beat instead of double-hitting.
+    this.flushAirtimeLandingAudio();
+    // Landing visuals resolve here for the same reason: collision gets final
+    // say, so a short gap attempt cannot flash a clean-landing shockwave first.
+    this.updateAirtimeVisualState(dt);
+    this.reactToBoost();
     this.iframes = Math.max(0, this.iframes - dt);
     this.speedLineBurst = Math.max(0, this.speedLineBurst - dt / TUNING.speedLineBurstTime);
     this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
@@ -300,11 +350,9 @@ export class GameScene extends Phaser.Scene {
             lessonMessage ?? `LAP ${this.race.lap}`,
             lessonMessage ? 1800 : 1000,
           );
-        } else {
-          this.showBanner(`LAP ${this.race.lap} / ${this.race.laps}`, 1200);
         }
       } else if (event === 'finished') {
-        this.recordObjective('lap_complete', {}, false);
+        this.recordObjective('lap_complete');
         this.finishRace();
       }
     }
@@ -324,16 +372,278 @@ export class GameScene extends Phaser.Scene {
     // correction, and player.steer already blends stick + airbrake (see
     // Player.update), so one signal drives the whole 5-way read.
     const s = this.player.steer;
-    const frame = s < -0.6 ? 0 : s < -0.2 ? 1 : s <= 0.2 ? 2 : s <= 0.6 ? 3 : 4;
-    this.carSprite.setFrame(frame);
-    // Jump arc: the sprite swells and lifts through a sine, then lands.
-    const arc = this.player.airArc;
-    this.carSprite.setScale(TUNING.carScale * (1 + 0.45 * arc));
-    this.carSprite.y = this.carBaselineY - 46 * arc; // lift from the bumper line, not center
+    const steerFrame = s < -0.6 ? 0 : s < -0.2 ? 1 : s <= 0.2 ? 2 : s <= 0.6 ? 3 : 4;
+    this.carSprite.setFrame(carSpriteFrame(steerFrame, this.airVisual.pitch));
+    // Physics supplies the arc; the visual policy adds readable compression,
+    // pitch silhouette, and landing squash without rotating this rear-view
+    // sprite into a steering-bank pose.
+    const airFx = airtimeFxFrame({
+      airborne: this.player.airborne,
+      arc: this.player.airArc,
+      glideMode: this.airVisual.glideMode,
+      speedRatio: speedPercent,
+      boosted: this.player.boostedLaunch,
+      takeoff: this.airVisual.takeoffKick,
+      landing: this.airVisual.landingKick,
+      landingStrength: this.airVisual.landingStrength,
+    });
+    this.carSprite.setScale(
+      TUNING.carScale * airFx.scaleX,
+      TUNING.carScale * airFx.scaleY,
+    );
+    this.carSprite.y = this.carBaselineY - airFx.liftPx;
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
+    this.renderAirtimeVisuals(time, airFx);
+  }
 
+  createAirtimeVisuals() {
+    this.airVisual = {
+      wasAirborne: false,
+      takeoffKick: 0,
+      landingKick: 0,
+      landingStrength: 0,
+      apexPulse: 0,
+      apexLatched: false,
+      tierPulse: 0,
+      tierLevel: 0,
+      glideMode: 'neutral',
+      pitch: 0,
+      gapAttemptSeen: null,
+    };
+    // Persistent/pool-like graphics: flight never allocates trail particles.
+    // World streaks remain under these at depth 8, local thrust at depth 9,
+    // the car at 10, and active-aero vanes at 11.
+    this.airTrailGraphics = this.add.graphics().setDepth(9);
+    this.airAuraGraphics = this.add.graphics().setDepth(9);
+    this.airAeroGraphics = this.add.graphics().setDepth(11);
+  }
 
+  updateAirtimeVisualState(dt) {
+    const visual = this.airVisual;
+    const airborne = this.player.airborne;
+
+    if (airborne && !visual.wasAirborne) {
+      visual.takeoffKick = 1;
+      visual.apexLatched = false;
+      visual.apexPulse = 0;
+      visual.tierPulse = 0;
+      visual.tierLevel = 0;
+      visual.glideMode = 'neutral';
+    }
+
+    if (airborne) {
+      visual.glideMode = nextGlideMode(visual.glideMode, this.player.glide);
+      const tier = airtimeTier(this.player.jumpElapsed);
+      if (tier.level > visual.tierLevel) {
+        visual.tierLevel = tier.level;
+        visual.tierPulse = 1;
+      }
+      if (shouldTriggerApex({
+        airborne,
+        arc: this.player.airArc,
+        latched: visual.apexLatched,
+      })) {
+        visual.apexLatched = true;
+        visual.apexPulse = 1;
+        // A tiny chassis tremor makes the weightless beat tactile without
+        // disturbing the road line the player is still steering toward.
+        this.cameras.main.shake(32, 0.0008);
+      }
+    }
+
+    if (this.player.justLanded) {
+      const attempt = this.airtimeGapAttempt;
+      const freshGapResult = attempt?.resolved && attempt !== visual.gapAttemptSeen;
+      const mastery = freshGapResult && attempt.result === 'cleared';
+      const miss = freshGapResult && attempt.result === 'short';
+      if (freshGapResult) visual.gapAttemptSeen = attempt;
+      visual.landingStrength = landingFxStrength({
+        airtime: this.player.lastAirtime,
+        launchSpeed: this.player.launchSpeed,
+        maxSpeed: TUNING.maxSpeed,
+        mastery,
+      });
+      visual.landingKick = 1;
+      this.burstLandingFx(visual.landingStrength, {
+        mastery,
+        miss,
+        glideMode: visual.glideMode,
+      });
+      // Preserve the final flight choice through contact, then return the
+      // grounded silhouette to neutral on the next rendered frame.
+      visual.glideMode = 'neutral';
+    }
+
+    visual.takeoffKick = Math.max(0, visual.takeoffKick - dt / 0.22);
+    visual.landingKick = Math.max(0, visual.landingKick - dt / 0.28);
+    visual.apexPulse = Math.max(0, visual.apexPulse - dt / 0.3);
+    visual.tierPulse = Math.max(0, visual.tierPulse - dt / 0.24);
+    visual.pitch = nextAirtimePitch(visual.pitch, {
+      airborne,
+      glide: this.player.glide,
+      dt,
+    });
+    visual.wasAirborne = airborne;
+    if (this.airtimeTrainingView) {
+      this.airtimeTrainingView.glideMode = visual.glideMode;
+    }
+  }
+
+  renderAirtimeVisuals(time, frame) {
+    const trail = this.airTrailGraphics;
+    const aura = this.airAuraGraphics;
+    const aero = this.airAeroGraphics;
+    trail.clear();
+    aura.clear();
+    aero.clear();
+
+    if (this.done) {
+      this.carSprite.setFrame(carSpriteFrame(2, 0));
+      this.carSprite.setScale(TUNING.carScale);
+      this.carSprite.y = this.carBaselineY;
+      return;
+    }
+
+    const cx = this.carSprite.x;
+    const bottom = this.carSprite.y - 3;
+    const carW = Math.min(150, this.carSprite.displayWidth);
+    const carH = Math.min(105, this.carSprite.displayHeight);
+    const alpha = frame.trailIntensity;
+
+    if (this.player.airborne && alpha > 0.01) {
+      const lanes = this.player.boostedLaunch ? 4 : 3;
+      for (let index = 0; index < lanes; index++) {
+        const t = lanes === 1 ? 0 : index / (lanes - 1);
+        const side = t * 2 - 1;
+        const x = cx + side * carW * 0.3;
+        const wobble = Math.sin(time / 52 + index * 2.1) * (2 + alpha * 3);
+        const length = frame.trailLength * (0.82 + (index % 2) * 0.18);
+        trail.lineStyle(index === 1 || index === 2 ? 3 : 2, frame.color, 0.3 + alpha * 0.55);
+        trail.lineBetween(x, bottom, x + side * 7 + wobble, bottom + length);
+      }
+      if (this.player.boostedLaunch) {
+        trail.lineStyle(3, AIRTIME_COLORS.long, 0.62 + alpha * 0.28);
+        trail.lineBetween(cx, bottom - 2, cx, bottom + frame.trailLength * 1.08);
+      }
+
+      // Local air streaks fill the gap between world-speed lines and exhaust.
+      // Four fixed lanes keep the effect capped and allocation-free.
+      for (let index = 0; index < 4; index++) {
+        const side = index < 2 ? -1 : 1;
+        const row = index % 2;
+        const x = cx + side * (carW * (0.55 + row * 0.16));
+        const y = bottom - carH * (0.25 + row * 0.22) +
+          Math.sin(time / 80 + index) * 5;
+        trail.lineStyle(1 + Math.round(alpha), frame.color, 0.2 + alpha * 0.35);
+        trail.lineBetween(x, y, x + side * 5, y + 14 + frame.trailLength * 0.18);
+      }
+    }
+
+    const apex = Math.max(frame.apex, this.airVisual.apexPulse * 0.8);
+    const tier = this.airVisual.tierPulse;
+    if (apex > 0.01 || tier > 0.01) {
+      const glow = Math.max(apex, tier * 0.7);
+      aura.lineStyle(2 + Math.round(glow * 2), 0xffffff, glow * 0.65);
+      aura.strokeEllipse(cx, bottom - carH * 0.46, carW * (1.05 + glow * 0.12), carH * 0.82);
+      aura.lineStyle(1, frame.color, glow * 0.8);
+      aura.strokeEllipse(cx, bottom - carH * 0.46, carW * (1.18 + glow * 0.18), carH * 0.96);
+    }
+
+    if (!this.player.airborne || frame.aero === 'neutral') return;
+    const vaneY = bottom - carH * 0.38;
+    const spread = carW * 0.38;
+    if (frame.aero === 'short') {
+      // Magenta upward chevrons: compact body, nose down, quicker return.
+      aero.lineStyle(3, AIRTIME_COLORS.short, 0.92);
+      for (const side of [-1, 1]) {
+        const x = cx + side * spread;
+        aero.lineBetween(x, vaneY + 7, x, vaneY - 11);
+        aero.lineBetween(x, vaneY - 11, x - 5, vaneY - 4);
+        aero.lineBetween(x, vaneY - 11, x + 5, vaneY - 4);
+      }
+    } else {
+      // Gold downward chevrons and extended vanes: pull back, carry farther.
+      aero.lineStyle(3, AIRTIME_COLORS.long, 0.92);
+      aero.lineBetween(cx - spread, vaneY, cx - spread - 14, vaneY);
+      aero.lineBetween(cx + spread, vaneY, cx + spread + 14, vaneY);
+      for (const side of [-1, 1]) {
+        const x = cx + side * (spread + 9);
+        aero.lineBetween(x, vaneY - 8, x, vaneY + 10);
+        aero.lineBetween(x, vaneY + 10, x - 5, vaneY + 3);
+        aero.lineBetween(x, vaneY + 10, x + 5, vaneY + 3);
+      }
+    }
+  }
+
+  burstLandingFx(
+    strength,
+    { mastery = false, miss = false, glideMode = 'neutral' } = {},
+  ) {
+    const cx = this.carSprite.x;
+    const y = this.carBaselineY - 3;
+    const color = landingFxColor({ mastery, miss, glideMode });
+    const ring = this.add.ellipse(cx, y, 72, 14)
+      .setFillStyle(color, 0.08)
+      .setStrokeStyle(mastery ? 4 : 2, color, 0.95)
+      .setDepth(12);
+    this.tweens.add({
+      targets: ring,
+      scaleX: 1.8 + strength * 0.7,
+      scaleY: 1.25 + strength * 0.35,
+      alpha: 0,
+      duration: mastery ? 340 : 250,
+      ease: 'Cubic.out',
+      onComplete: () => ring.destroy(),
+    });
+
+    if (mastery) {
+      const crown = this.add.ellipse(cx, y - 3, 54, 10)
+        .setStrokeStyle(3, AIRTIME_COLORS.long, 1)
+        .setDepth(13);
+      this.tweens.add({
+        targets: crown,
+        scaleX: 3,
+        scaleY: 2,
+        alpha: 0,
+        duration: 430,
+        ease: 'Quad.out',
+        onComplete: () => crown.destroy(),
+      });
+      this.cameras.main.flash(90, 46, 229, 107);
+    }
+
+    const count = Math.min(14, Math.round(5 + strength * 5 + (mastery ? 3 : 0)));
+    for (let index = 0; index < count; index++) {
+      const side = index % 2 === 0 ? -1 : 1;
+      const lane = Math.floor(index / 2);
+      const spark = this.add.rectangle(
+        cx + side * (18 + lane * 2),
+        y - 5,
+        mastery ? 5 : 4,
+        mastery ? 5 : 3,
+        index % 3 === 0 && mastery ? AIRTIME_COLORS.long : color,
+      ).setDepth(13);
+      this.tweens.add({
+        targets: spark,
+        x: spark.x + side * (44 + lane * 13) * strength,
+        y: spark.y - (18 + (index % 4) * 9) * strength,
+        angle: side * (180 + lane * 35),
+        scale: 0.2,
+        alpha: 0,
+        duration: 230 + lane * 28,
+        ease: 'Quad.out',
+        onComplete: () => spark.destroy(),
+      });
+    }
+    // Gap-miss collision already owns its stronger impact shake. The deferred
+    // magenta ring/sparks add readability without stacking a second camera hit.
+    if (!miss) {
+      this.cameras.main.shake(
+        Math.round(45 + strength * 24),
+        0.0013 + strength * 0.0012,
+      );
+    }
   }
 
   distanceM() {
@@ -389,7 +699,7 @@ export class GameScene extends Phaser.Scene {
     // into the teaching corner. It is help, never an extra punishment beat.
     this.player.x = 0;
     this.player.speed = Math.max(this.player.speed, TUNING.maxSpeed * 0.8);
-    this.carSprite.setFrame(2);
+    this.carSprite.setFrame(carSpriteFrame(2, 0));
     this.syncTrainingTutorialView(false);
   }
 
@@ -404,7 +714,7 @@ export class GameScene extends Phaser.Scene {
         this.completedTrainingCues.add(tutorial.cue.id);
         this.trainingTutorial = null;
         this.trainingTutorialView = null;
-        this.carSprite.setFrame(2);
+        this.carSprite.setFrame(carSpriteFrame(2, 0));
       } else {
         this.syncTrainingTutorialView(false);
       }
@@ -416,10 +726,10 @@ export class GameScene extends Phaser.Scene {
     if (tutorial.waitingForRelease) {
       if (!anyHeld && this.time.now >= tutorial.acceptAt) {
         tutorial.waitingForRelease = false;
-        this.carSprite.setFrame(2);
+        this.carSprite.setFrame(carSpriteFrame(2, 0));
       }
     } else if (correctHeld) {
-      this.carSprite.setFrame(direction > 0 ? 4 : 0);
+      this.carSprite.setFrame(carSpriteFrame(direction > 0 ? 4 : 0, 0));
       tutorial.step++;
       tutorial.waitingForRelease = true;
       tutorial.acceptAt = this.time.now + 160;
@@ -451,6 +761,143 @@ export class GameScene extends Phaser.Scene {
     this.popup('+BOOST', '#2ee56b');
   }
 
+  setAirtimeFeedback(message, tone = 'success', seconds = 1.4) {
+    if (!this.airtimeTrainingConfig) return;
+    this.airtimeFeedback = { message, tone, remaining: seconds };
+  }
+
+  updateAirtimeTraining(dt) {
+    if (!this.airtimeTrainingConfig) return;
+    if (this.airtimeFeedback) {
+      this.airtimeFeedback.remaining -= dt;
+      if (this.airtimeFeedback.remaining <= 0) this.airtimeFeedback = null;
+    }
+
+    if (this.player.justLanded) {
+      const scale = this.airtimeTrainingConfig.objectiveUnitsPerSecond ?? 10;
+      this.recordObjective('airtime', {
+        amount: Math.max(1, Math.round(this.player.lastAirtime * scale)),
+      });
+
+      const gap = this.airtimeTrainingConfig.gap;
+      const segment = this.model.findSegment(
+        this.player.position + TUNING.playerZ,
+      ).index;
+      if (this.airtimeGapAttempt && !this.airtimeGapAttempt.resolved) {
+        const outcome = airtimeGapOutcome({
+          ready: this.airtimeGapAttempt.ready,
+          landingSegment: segment,
+          rockEndSegment: gap.rockEndSegment,
+        });
+        const cleared = outcome === 'cleared';
+        this.airtimeGapAttempt.resolved = true;
+        this.airtimeGapAttempt.result = outcome;
+        if (this.pendingAirtimeLanding) {
+          this.pendingAirtimeLanding.gapResult = this.airtimeGapAttempt.result;
+        }
+        this.setAirtimeFeedback(
+          cleared
+            ? `GAP CLEARED!  •  ${this.player.lastAirtime.toFixed(2)}s AIR`
+            : 'NEED MORE SPEED  •  NEXT LAP',
+          cleared ? 'success' : 'failure',
+          cleared ? 1.8 : 1.6,
+        );
+        if (cleared) this.recordObjective('speed_gap_clear');
+      } else {
+        this.setAirtimeFeedback(
+          `LANDED  •  ${this.player.lastAirtime.toFixed(2)}s AIR`,
+          'success',
+        );
+      }
+    }
+
+    this.airtimeTrainingView = this.buildAirtimeTrainingView();
+  }
+
+  buildAirtimeTrainingView() {
+    const config = this.airtimeTrainingConfig;
+    if (!config || !this.player) return null;
+    const gap = config.gap;
+    const segment = this.model.findSegment(
+      this.player.position + TUNING.playerZ,
+    ).index;
+    const requiredSpeed = TUNING.maxSpeed * gap.requiredSpeedMultiplier;
+    const onGapApproach = segment >= gap.approachStartSegment &&
+      segment <= gap.rockEndSegment;
+    const phase = this.player.airborne
+      ? 'airborne'
+      : onGapApproach
+        ? 'gap'
+        : this.airtimeFeedback
+          ? 'landed'
+          : 'approach';
+    return {
+      phase,
+      currentAirSeconds: this.player.airborne ? this.player.jumpElapsed : 0,
+      bestAirSeconds: this.player.bestAirtime,
+      glide: this.player.glide,
+      speed: this.player.speed,
+      requiredSpeed,
+      gapReady: (this.boost?.tier ?? 0) > 0 && this.player.speed >= requiredSpeed,
+      message: this.airtimeFeedback?.message ?? '',
+      messageTone: this.airtimeFeedback?.tone ?? 'info',
+    };
+  }
+
+  isAirtimeGapRock(sprite) {
+    return !!this.airtimeTrainingConfig &&
+      sprite?.trackObjectId?.startsWith('air-gap-rock-');
+  }
+
+  updateAirtimeAudio() {
+    if (this.player.airborne) {
+      this.airtimeAudioHandle?.update({
+        progress: this.player.airTotal > 0
+          ? 1 - this.player.air / this.player.airTotal
+          : 0,
+        glide: this.player.glide,
+        elapsed: this.player.jumpElapsed,
+        currentSpeedRatio: this.player.speed / TUNING.maxSpeed,
+      });
+      return;
+    }
+    if (!this.player.justLanded) return;
+
+    const control = this.airtimeAudioHandle?.getControl?.() ?? 'neutral';
+    this.airtimeAudioHandle?.stop();
+    this.airtimeAudioHandle = null;
+    this.pendingAirtimeLanding = {
+      seconds: this.player.lastAirtime,
+      boosted: this.player.boostedLaunch,
+      control,
+      gapResult: null,
+    };
+  }
+
+  flushAirtimeLandingAudio() {
+    const landing = this.pendingAirtimeLanding;
+    if (!landing) return;
+    this.pendingAirtimeLanding = null;
+    if (this.jumpLaunchedThisFrame) return;
+    if (landing.gapResult === 'cleared') {
+      MUSIC.playAirtimeMasteryClear();
+      return;
+    }
+    if (landing.gapResult === 'short') {
+      MUSIC.playAirtimeGapMiss();
+      return;
+    }
+    MUSIC.playAirtimeLanding(landing);
+  }
+
+  stopActiveFeedbackLoops() {
+    this.airtimeAudioHandle?.stop();
+    this.airtimeAudioHandle = null;
+    this.pendingAirtimeLanding = null;
+    this.boostHoldHandle?.stop();
+    this.boostHoldHandle = null;
+  }
+
   // Reacts once per frame to what Boost.update() just reported. Physics was
   // applied before Player.update so movement, contacts, and rendering all see
   // the same speed; this method is presentation only.
@@ -459,19 +906,29 @@ export class GameScene extends Phaser.Scene {
     if (boost.justActivated > 0) {
       const tier = boost.justActivated;
       this.speedLineBurst = 1; // the pop reads as speed even from a standstill
-      MUSIC.playBoostApply(tier);
+      // The ramp takeoff sweep carries the same-frame boost beat; playing
+      // both maximal risers together masks the contact and clips the mix.
+      if (!this.jumpLaunchedThisFrame) MUSIC.playBoostApply(tier);
       const label = tier === 3 ? 'BOOST!! x3' : tier === 2 ? 'BOOST! x2' : 'BOOST';
       const color = tier === 3 ? '#ffcf3f' : tier === 2 ? '#00e5ff' : '#2ee56b';
-      this.popup(label, color);
-      this.cameras.main.shake(50 + tier * 30, 0.002 + tier * 0.0015);
+      if (!this.jumpLaunchedThisFrame) {
+        this.popup(label, color);
+        this.cameras.main.shake(50 + tier * 30, 0.002 + tier * 0.0015);
+      }
     } else if (boost.justExtended) {
       this.speedLineBurst = Math.max(this.speedLineBurst, 0.5);
-      MUSIC.playBoostApply(boost.tier, { extend: true });
+      if (!this.jumpLaunchedThisFrame) {
+        MUSIC.playBoostApply(boost.tier, { extend: true });
+      }
     }
 
-    if (boost.holding && !this.boostHoldHandle) {
+    const boostHoldAudible = shouldPlayBoostHold({
+      holding: boost.holding,
+      airborne: this.player.airborne,
+    });
+    if (boostHoldAudible && !this.boostHoldHandle) {
       this.boostHoldHandle = MUSIC.startBoostHold();
-    } else if (!boost.holding && this.boostHoldHandle) {
+    } else if (!boostHoldAudible && this.boostHoldHandle) {
       this.boostHoldHandle.stop();
       this.boostHoldHandle = null;
     }
@@ -512,17 +969,12 @@ export class GameScene extends Phaser.Scene {
       complete: objective ? objective.complete : false,
     });
     if (objective) {
-      this.popup(`CONE  ${objective.progress} / ${objective.total}`, '#ffcf3f');
       if (
         result.allComplete &&
         this.trackData.finish === 'objectives' &&
         !this.race.finishArmed
       ) {
         this.race.armFinish();
-        this.showBanner(
-          `${objective.total} / ${objective.total} CONES\nOBJECTIVE COMPLETE\nFINISH THIS LAP`,
-          2200,
-        );
       }
     }
     if (def.pop <= 0) return; // no economy reward; objectives already gave feedback
@@ -532,16 +984,74 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  onRamp(def) {
+  onRamp(sprite, input = {}) {
+    const def = sprite.def ?? sprite;
     if (this.mode === 'endless') this.pop.add(def.pop);
     this.recordObjective('ramp_hit');
-    this.player.launch();
+    const boosted = !!input.boostActive;
+    // Boost remains physically active through the jump, but its held engine
+    // bed yields at ramp contact so flight never inherits the vacuum-like
+    // sustained tone. The grounded policy may resume it after landing.
+    this.boostHoldHandle?.stop();
+    this.boostHoldHandle = null;
+    this.player.launch({ boosted });
+    this.jumpLaunchedThisFrame = true;
+    this.airtimeAudioHandle?.stop();
+    const speedRatio = this.player.launchSpeed / TUNING.maxSpeed;
+    MUSIC.playRampTakeoff({ boosted, speedRatio });
+    this.airtimeAudioHandle = MUSIC.startAirtimeFlight({ boosted, speedRatio });
+    const rampSegment = this.model.segments.find(
+      (segment) => segment.sprites.includes(sprite),
+    )?.index;
+    const gap = this.airtimeTrainingConfig?.gap;
+    if (gap && rampSegment === gap.rampSegment) {
+      const requiredSpeed = TUNING.maxSpeed * gap.requiredSpeedMultiplier;
+      const ready = boosted && this.player.launchSpeed >= requiredSpeed;
+      this.airtimeGapAttempt = { ready, resolved: false };
+      this.setAirtimeFeedback(
+        ready ? 'SPEED READY  •  PULL ↓' :
+          'NEED MORE SPEED  •  NEXT LAP',
+        ready ? 'success' : 'warning',
+      );
+    }
     this.speedLineBurst = 1; // takeoff streaks: the ramp was the fast line
-    this.popup('AIR!', '#00e5ff');
     this.cameras.main.shake(60, 0.003); // takeoff kick
   }
 
-  onHit(def) {
+  onHit(def, sprite = null) {
+    if (this.isAirtimeGapRock(sprite)) {
+      // The collision sweep covers the entire landing frame. A successful
+      // flight may cross the last rock segment while airborne and touch down
+      // just beyond it in that same frame; do not retroactively turn that
+      // authoritative clear into a hit.
+      if (this.airtimeGapAttempt?.result === 'cleared') {
+        sprite.hit = false;
+        return;
+      }
+      // The final lesson asks for commitment without making a failed first
+      // read expensive. The rock visibly catches the short landing, but
+      // training preserves speed, hull, and the next-lap retry.
+      const announceMiss = shouldAnnounceGapMiss(this.airtimeGapAttempt, {
+        landingNow: this.player.justLanded,
+      });
+      if (announceMiss) {
+        this.airtimeGapAttempt = { ready: false, resolved: true, result: 'short' };
+        if (this.pendingAirtimeLanding) {
+          this.pendingAirtimeLanding.gapResult = 'short';
+        } else {
+          MUSIC.playAirtimeGapMiss();
+          this.burstLandingFx(0.65, { miss: true });
+        }
+        this.setAirtimeFeedback(
+          'NEED MORE SPEED  •  NEXT LAP',
+          'failure',
+        );
+      }
+      this.iframes = TUNING.iframes;
+      this.cameras.main.shake(90, 0.004);
+      if (announceMiss) this.popup('SHORT LANDING', '#ff6b6b');
+      return;
+    }
     if (this.mode === 'training' && this.trainingDamageMax > 0) {
       this.trainingDamageHits = Math.min(
         this.trainingDamageMax,
@@ -587,6 +1097,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   onWrecked() {
+    this.stopActiveFeedbackLoops();
     this.done = true;
     if (this.mode === 'endless') {
       const dist = this.distanceM();
@@ -607,6 +1118,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   finishRace() {
+    this.stopActiveFeedbackLoops();
     this.done = true;
     const t = this.race.time;
     if (this.mode === 'training') {
@@ -640,11 +1152,13 @@ export class GameScene extends Phaser.Scene {
         )[0];
       const trophyLine = result.trophy
         ? `${result.trophy.rank.toUpperCase()} TROPHY  ${'★'.repeat(result.trophy.stars)}`
-        : `NO TROPHY  •  ${firstTrophy.rank.toUpperCase()} AT ${firstTrophy.minimum}` +
+        : `NO TROPHY  •  ${firstTrophy.rank.toUpperCase()} AT ` +
+          `${formatObjectiveValue(firstTrophy.minimum, target.display)}` +
           (firstTrophy.maximumDamageHits == null
             ? ''
             : ` / ${firstTrophy.maximumDamageHits} HITS MAX`);
-      const perfect = target.complete && this.trainingDamageHits === 0 && conesMissed === 0;
+      const perfect = this.objectives.complete &&
+        this.trainingDamageHits === 0 && conesMissed === 0;
       const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
       this.trainingAdvanceTo = nextTrack && nextTrack.status !== 'placeholder'
         ? this.trackIndex + 1
@@ -665,7 +1179,7 @@ export class GameScene extends Phaser.Scene {
           `${TRAINING_TRACKS[this.trainingAdvanceTo].name}`;
       this.showBanner(
         `${perfect ? 'PERFECT CLEAR!' : 'TRAINING COMPLETE'}\n` +
-          `${target.hudLabel}  ${target.progress} / ${target.total}\n` +
+          `${target.hudLabel}  ${target.progressLabel} / ${target.totalLabel}\n` +
           damageLine +
           coneLine +
           `${trophyLine}\n${fmtTime(t)}  •  ${this.objectives.score} PTS` +
@@ -754,11 +1268,16 @@ export class GameScene extends Phaser.Scene {
     this.scene.start('TitleScene');
   }
 
-  recordObjective(event, payload = {}, announce = true) {
+  recordObjective(event, payload = {}) {
     const result = this.objectives.record(event, payload);
-    if (announce && result?.newlyCompleted.length) {
-      const objective = result.newlyCompleted[0];
-      this.showBanner(`OBJECTIVE COMPLETE\n${objective.label}\n+${objective.points} PTS`, 1400);
+    if (result?.newlyCompleted.length) {
+      result.newlyCompleted.forEach((objective) => {
+        this.objectiveHudSequence += 1;
+        this.objectiveHudEvents.push(objectiveFeedbackEvent(
+          this.objectiveHudSequence,
+          objective,
+        ));
+      });
     }
     return result;
   }
@@ -919,12 +1438,9 @@ export class GameScene extends Phaser.Scene {
       stroke: '#0a0a14', strokeThickness: 4,
     }).setOrigin(0.5).setAlpha(0).setDepth(41);
     const rows = this.objectives.views.map((objective, index) => {
-      const reward = objective.unitPoints
-        ? `${objective.unitPoints} PTS EACH`
-        : `+${objective.points} PTS`;
       return (
       this.add.text(centerX + 90, panelTop + 143 + index * 30,
-        `○  ${objective.label}   ${reward}`, {
+        `○  ${objective.label}`, {
           fontSize: '17px', color: '#ffffff', fontStyle: 'bold',
           stroke: '#0a0a14', strokeThickness: 4,
         })
@@ -953,7 +1469,12 @@ export class GameScene extends Phaser.Scene {
         .sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0))
         .map((threshold, index) => {
           const reqs = [];
-          if (!lapFinish) reqs.push(`${threshold.minimum}`);
+          if (!lapFinish) {
+            reqs.push(formatObjectiveValue(
+              threshold.minimum,
+              scoringObjective?.display,
+            ));
+          }
           if (threshold.maximumDamageHits != null) {
             reqs.push(threshold.maximumDamageHits === 0
               ? 'No damage'

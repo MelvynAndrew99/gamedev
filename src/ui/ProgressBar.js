@@ -20,8 +20,9 @@ const DIM = 0xb8b8c8;
 export class ProgressBar {
   constructor(scene, laps, y = 30) {
     this.laps = Math.max(1, laps);
-    // Width leaves clearance for the top-left lap chip and the top-right hull
-    // bar, which the banner sits between (see HudScene's corner layout).
+    // This is the circuit's sole persistent position/lap read. Corner space
+    // remains available for truly mode-specific feedback, not duplicate lap
+    // counters or a second health system.
     this.w = scene.scale.width * 0.42;
     this.x = (scene.scale.width - this.w) / 2;
     this.y = y; // centerline of the ribbon

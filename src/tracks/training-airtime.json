@@ -1,16 +1,15 @@
 {
   "id": "training-airtime",
   "name": "AIR SCHOOL",
-  "status": "placeholder",
   "seed": 1104,
   "laps": 2,
   "finish": "laps",
   "music": "training-loop",
   "environment": "training-loop",
-  "intro": "Commit to the gold runways, launch from the ramps, and stay airborne.",
+  "intro": "Hit the gold ramps. Push forward for a short arc, pull back to glide, and boost the final rock gap.",
   "design": {
-    "focus": "Teach ramp readability, takeoff commitment, airborne steering, and safe landings.",
-    "placeholderNotes": "Tune airtime measurement, landing feedback, and trophy thresholds before enabling this track. Ramp placements are staged on the shared loop for the first playtest."
+    "focus": "Teach measured airtime, speed-driven takeoff, nose-up glide control, and forgiving recovery before Story mode combines these skills.",
+    "pacing": "Ramp one is a clean read. A short nose-down landing after ramp two catches the first boost; ramp three spends it, then offers a forgiving recovery pickup. The final left runway asks for a 1.15x-speed, nose-up flight over three full-road rock rows."
   },
   "decoration": {
     "roadsidePosts": true,
@@ -21,11 +20,21 @@
     {
       "id": "airtime",
       "type": "count_event",
-      "event": "ramp_hit",
-      "value": 4,
-      "label": "HIT 4 RAMPS",
-      "hudLabel": "RAMPS",
-      "pointsPerUnit": 250
+      "event": "airtime",
+      "value": 90,
+      "label": "BANK 9.0s AIRTIME",
+      "hudLabel": "AIRTIME (SECONDS)",
+      "display": { "scale": 0.1, "precision": 1, "unit": "s" },
+      "pointsPerUnit": 15
+    },
+    {
+      "id": "speed-gap",
+      "type": "count_event",
+      "event": "speed_gap_clear",
+      "value": 1,
+      "label": "CLEAR THE BOOSTED ROCK GAP",
+      "hudLabel": "ROCK GAP",
+      "points": 600
     },
     {
       "id": "finish",
@@ -38,13 +47,25 @@
   ],
   "scoring": {
     "type": "trophy",
-    "version": 1,
+    "version": 2,
     "objective": "airtime",
     "thresholds": [
-      { "rank": "gold", "minimum": 4, "stars": 3 },
-      { "rank": "silver", "minimum": 3, "stars": 2 },
-      { "rank": "bronze", "minimum": 2, "stars": 1 }
+      { "rank": "gold", "minimum": 90, "stars": 3 },
+      { "rank": "silver", "minimum": 65, "stars": 2 },
+      { "rank": "bronze", "minimum": 40, "stars": 1 }
     ]
+  },
+  "airtimeTraining": {
+    "objectiveUnitsPerSecond": 10,
+    "gap": {
+      "approachStartSegment": 1040,
+      "rampSegment": 1140,
+      "rockEndSegment": 1258,
+      "requiredSpeedMultiplier": 1.15
+    }
+  },
+  "lapMessages": {
+    "2": "FINAL LAP  •  SHORTEN FOR BOOST  •  THEN BOOST + PULL BACK"
   },
   "patterns": {
     "startClear": 90,
@@ -56,7 +77,32 @@
       { "at": 1112, "kind": "ramp" }
     ]
   },
-  "objects": [],
+  "objects": [
+    { "id": "air-boost-1", "at": 480, "kind": "boost", "offset": -0.66 },
+    { "id": "air-boost-2", "at": 760, "kind": "boost", "offset": 0 },
+    { "id": "air-boost-gap", "at": 1080, "kind": "boost", "offset": -0.66 },
+    { "id": "air-gap-rock-01", "at": 1210, "kind": "rock", "offset": -0.9 },
+    { "id": "air-gap-rock-02", "at": 1210, "kind": "rock", "offset": -0.6 },
+    { "id": "air-gap-rock-03", "at": 1210, "kind": "rock", "offset": -0.3 },
+    { "id": "air-gap-rock-04", "at": 1210, "kind": "rock", "offset": 0 },
+    { "id": "air-gap-rock-05", "at": 1210, "kind": "rock", "offset": 0.3 },
+    { "id": "air-gap-rock-06", "at": 1210, "kind": "rock", "offset": 0.6 },
+    { "id": "air-gap-rock-07", "at": 1210, "kind": "rock", "offset": 0.9 },
+    { "id": "air-gap-rock-08", "at": 1224, "kind": "rock", "offset": -0.9 },
+    { "id": "air-gap-rock-09", "at": 1224, "kind": "rock", "offset": -0.6 },
+    { "id": "air-gap-rock-10", "at": 1224, "kind": "rock", "offset": -0.3 },
+    { "id": "air-gap-rock-11", "at": 1224, "kind": "rock", "offset": 0 },
+    { "id": "air-gap-rock-12", "at": 1224, "kind": "rock", "offset": 0.3 },
+    { "id": "air-gap-rock-13", "at": 1224, "kind": "rock", "offset": 0.6 },
+    { "id": "air-gap-rock-14", "at": 1224, "kind": "rock", "offset": 0.9 },
+    { "id": "air-gap-rock-15", "at": 1258, "kind": "rock", "offset": -0.9 },
+    { "id": "air-gap-rock-16", "at": 1258, "kind": "rock", "offset": -0.6 },
+    { "id": "air-gap-rock-17", "at": 1258, "kind": "rock", "offset": -0.3 },
+    { "id": "air-gap-rock-18", "at": 1258, "kind": "rock", "offset": 0 },
+    { "id": "air-gap-rock-19", "at": 1258, "kind": "rock", "offset": 0.3 },
+    { "id": "air-gap-rock-20", "at": 1258, "kind": "rock", "offset": 0.6 },
+    { "id": "air-gap-rock-21", "at": 1258, "kind": "rock", "offset": 0.9 }
+  ],
   "pieces": [
     ["straight", 40],
     ["curve", 32, -1],

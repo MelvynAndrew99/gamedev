@@ -132,9 +132,19 @@ Redline and Air School are Training Levels 3 and 4 on that same geometry.
 Redline teaches the boost gauge — tapping stacks the top-speed ceiling,
 holding sustains it — read by the speed number and graded Bronze/Silver/Gold
 on the highest tier reached; see [training_levels.md](./training_levels.md)
-for its full contract. Air School introduces ramps and measured airtime and
-remains a staged data placeholder, locked until its event, trophy balance,
-feedback, and result language are complete. Training result screens
+for its full contract. Air School introduces measured airtime, finite
+forward-short/back-long active-aero glide control, precision landings that bank
+the next boost, and a physically speed-gated full-road rock jump. Its live HUD
+shows airtime, glide direction, boost/speed readiness, and non-punitive retry
+feedback; its trophies reward carrying speed across the two-lap lesson. World
+feedback mirrors the control state through short/neutral/long aero silhouettes,
+finite trails, an apex pulse, visual hangtime tiers, and landing responses that
+defer to the final clear/miss outcome. Flight itself is deliberately silent:
+one compact ramp swoosh hands the audio mix to a single collision-resolved
+landing beat. Held-boost audio also yields at ramp contact while its physics
+continue through flight. Same-frame boost
+and ramp contact merge into one launch beat instead of stacking popups, shakes,
+or risers. Training result screens
 explicitly offer Retry and Next Track instead of treating completion as an
 automatic return to the title.
 
@@ -251,9 +261,12 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
 - `tools/gen-car.js` is the source of truth for `public/assets/car.png`.
   Regenerate the sheet from the low-poly model instead of painting individual
   frames, so every steering pose remains one coherent vehicle.
-- The sheet contains five `64x56` frames in gameplay order: hard left, slight
-  left, straight, slight right, hard right. Opposite steering silhouettes must
-  remain mirrored.
+- The sheet contains three rows of five `64x56` frames: nose-down, neutral,
+  and nose-up. Every row retains gameplay steering order—hard left, slight
+  left, straight, slight right, hard right—and opposite steering silhouettes
+  must remain mirrored. Airtime pitch eases toward the analog glide input and
+  returns through neutral after contact; it never reuses screen-space roll as
+  pitch because that would conflict with the steering read.
 - The car uses the game's low, directly-behind chase-camera perspective
   (`CAM_PITCH = 0`), not the overhead Mode-7 angle used by the F-Zero reference
   art. Every frame should remain substantially wider than it is tall, and the
@@ -450,13 +463,51 @@ future pickup, hazard, speed, and finish goals should extend that event language
 rather than becoming track-ID branches.
 
 Objectives animate into an acknowledged pre-race briefing. Movement and race
-time remain paused until A or Enter dismisses it; the same goals then settle into
-the bottom-left HUD panel. That panel is the global race-purpose display and
-replaces the old Fame readout. It shows each goal, live progress, completion
-checkmarks, and objective points. Time-based race cash remains separate from
-objective score until the economy has enough playtest evidence to price goals.
-Briefings state purpose; contextual animation teaches execution. If a briefing
-needs several sentences to explain an input, the level is missing a demonstration.
+time remain paused until A or Enter dismisses it. The paused briefing may show
+the complete goal and trophy requirements; those details do not remain on the
+driving view. Time-based race cash remains separate from objective score until
+the economy has enough playtest evidence to price goals. Briefings state
+purpose; contextual animation teaches execution. If a briefing needs several
+sentences to explain an input, the level is missing a demonstration.
+
+Objective completion has one shared visual contract. Training lessons without
+a dedicated live coach use white open markers; the completed row alone changes
+to a green check and receives one restrained pulse. Air School and Story replace
+the list with a short green edge confirmation so a checklist never competes
+with live maneuver feedback. The checkmark carries the state without depending
+on color alone. Scene restarts and reconstructed training HUDs derive checked
+state from `ObjectiveState`, not from whether a one-time animation previously
+ran. Any new training course must be audited against this contract.
+
+### Driving HUD hierarchy
+
+The active HUD follows a modern arcade hierarchy while retaining the game's
+cyan/magenta/gold pixel language:
+
+- Circuit races show one numbered START-to-FINISH ribbon. There is no duplicate
+  persistent `LAP x/y` chip; authored Training lap-two instruction may appear
+  briefly when the lesson changes.
+- Endless shows distance and best distance instead of a finite-course ribbon or
+  a static `DRIVE AS FAR AS YOU CAN` mission card.
+- Speed stays bottom-right. The boost bank appears only where the track supports
+  boost and communicates its live tier through shape, fill, color, sound, and
+  vehicle response.
+- No mode displays a hull bar. Windshield crack stages, collision response, and
+  the conditional critical warning are the driving-view health language; exact
+  hull and repair values belong in the Garage.
+- Story objectives remain authoritative but are shown through course objects,
+  maneuver feedback, and a short edge completion toast. They return in paused
+  briefing and results views.
+- Training may show one compact checklist only when no dedicated live lesson
+  coach exists. Air School's timer/control/speed coach replaces its checklist.
+- Trophy thresholds and objective point accounting never persist during active
+  control. They belong in the paused briefing and result screen.
+
+At the logical 800x600 resolution, persistent teaching UI stays inside the left
+column `x=10..240`; the player/road corridor `x=250..550, y=170..600` is clear.
+The course ribbon ends at `y=52`. Contextual completion lasts about one second,
+and normal driving never places a panel over the car. Layout, font, scale, or
+camera changes require this clearance contract to be rechecked.
 
 ## Playtest questions
 

@@ -10,6 +10,13 @@
 // onto the audio clock, which is sample-accurate. Driving oscillator
 // start times off setInterval directly would drift and jitter.
 
+import {
+  AIRTIME_TAKEOFF_SWEEP_SECONDS,
+  airtimeLandingKind,
+  nextAirtimeControl,
+  repeatedTakeoffGain,
+} from './AirtimeAudio.js';
+
 const LOOKAHEAD_MS = 25;      // how often the scheduler timer fires
 const SCHEDULE_AHEAD = 0.12;  // seconds of audio queued per timer tick
 
@@ -65,6 +72,7 @@ class MusicEngine {
     this.lastConeVariation = -1;
     this.lastBoostPickupVariation = -1;
     this.lastBoostApplyVariation = -1;
+    this.lastTakeoffTime = -Infinity;
   }
 
   ensureContext() {
@@ -203,6 +211,7 @@ class MusicEngine {
 
     this.stop();
     this.track = track;
+    this.lastTakeoffTime = -Infinity; // every run's first ramp gets full weight
     this.stepIndex = 0;
     this.nextStepTime = this.ctx.currentTime + 0.05;
     this.secondsPerStep = 60 / track.bpm / 4; // 16th notes
@@ -1004,6 +1013,187 @@ class MusicEngine {
         noise.stop(stopTime + 0.14);
       },
     };
+  }
+
+  // Ramp contact and launch are one gesture: a restrained chassis tap gives
+  // the ramp weight, immediately answered by a short filtered-air sweep.
+  // There is deliberately no held jet tone here; the landing owns the weight.
+  playRampTakeoff({ boosted = false, speedRatio = 0 } = {}) {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const repeatGain = repeatedTakeoffGain(time - this.lastTakeoffTime);
+    this.lastTakeoffTime = time;
+    const speed = Math.max(0, Math.min(1.35, speedRatio));
+
+    const body = ctx.createOscillator();
+    body.type = 'sine';
+    body.frequency.setValueAtTime(122 + speed * 24, time);
+    body.frequency.exponentialRampToValueAtTime(62, time + 0.11);
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0.078 * repeatGain, time);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, time + 0.13);
+    body.connect(bodyGain).connect(this.sfxBus);
+    body.start(time);
+    body.stop(time + 0.14);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = boosted ? 0.7 : 1;
+    filter.frequency.setValueAtTime(520 + speed * 260, time);
+    filter.frequency.exponentialRampToValueAtTime(
+      boosted ? 3900 : 2800,
+      time + AIRTIME_TAKEOFF_SWEEP_SECONDS,
+    );
+    const rush = ctx.createGain();
+    rush.gain.setValueAtTime(0.0001, time);
+    rush.gain.exponentialRampToValueAtTime((boosted ? 0.075 : 0.055) * repeatGain, time + 0.035);
+    rush.gain.exponentialRampToValueAtTime(
+      0.001,
+      time + AIRTIME_TAKEOFF_SWEEP_SECONDS - 0.01,
+    );
+    noise.connect(filter).connect(rush).connect(this.sfxBus);
+    noise.start(time);
+    noise.stop(time + AIRTIME_TAKEOFF_SWEEP_SECONDS);
+  }
+
+  // The flight handle is intentionally state-only. Earlier versions held a
+  // filtered-noise loop and then replaced it with input/apex/tier accents;
+  // both competed with the contact beat in these sub-second arcade jumps.
+  // The car, trails, and HUD show live control. Audio stays landing-led while
+  // this handle remembers the final arc choice for the landing timbre.
+  startAirtimeFlight() {
+    let stopped = false;
+    let previousControl = 'neutral';
+    return {
+      update({
+        glide = 0,
+      } = {}) {
+        if (stopped) return;
+        previousControl = nextAirtimeControl(previousControl, glide);
+      },
+      getControl() { return previousControl; },
+      stop() {
+        if (stopped) return;
+        stopped = true;
+      },
+    };
+  }
+
+  playAirtimeLanding({ seconds = 0, boosted = false, control = 'neutral' } = {}) {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const kind = airtimeLandingKind(seconds, boosted, control);
+    const level = kind === 'heavy' ? 1 : kind === 'medium' ? 0.78 : 0.58;
+
+    const body = ctx.createOscillator();
+    body.type = 'sine';
+    body.frequency.setValueAtTime(kind === 'heavy' ? 108 : 132, time);
+    body.frequency.exponentialRampToValueAtTime(kind === 'heavy' ? 48 : 66, time + 0.15);
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0.13 * level, time);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+    body.connect(bodyGain).connect(this.sfxBus);
+    body.start(time);
+    body.stop(time + 0.19);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = kind === 'heavy' ? 720 : 1050;
+    filter.Q.value = 0.8;
+    const skid = ctx.createGain();
+    skid.gain.setValueAtTime(0.07 * level, time);
+    skid.gain.exponentialRampToValueAtTime(0.001, time + (kind === 'heavy' ? 0.2 : 0.11));
+    noise.connect(filter).connect(skid).connect(this.sfxBus);
+    noise.start(time);
+    noise.stop(time + 0.21);
+
+    // A deliberate nose-down placement gets a short, descending tire chirp;
+    // clean/neutral landings keep only the chassis contact and road hiss.
+    if (control === 'short') {
+      const chirp = ctx.createOscillator();
+      chirp.type = 'triangle';
+      chirp.frequency.setValueAtTime(510, time + 0.018);
+      chirp.frequency.exponentialRampToValueAtTime(260, time + 0.12);
+      const chirpGain = ctx.createGain();
+      chirpGain.gain.setValueAtTime(0.03, time + 0.018);
+      chirpGain.gain.exponentialRampToValueAtTime(0.001, time + 0.13);
+      chirp.connect(chirpGain).connect(this.sfxBus);
+      chirp.start(time + 0.018);
+      chirp.stop(time + 0.14);
+    }
+  }
+
+  // A forgiving failure cue: low, brief, and downward. It communicates that
+  // the rocks caught the trajectory without borrowing the glass/damage crack
+  // or the triumphant weight of a committed clean landing.
+  playAirtimeGapMiss() {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const tone = ctx.createOscillator();
+    tone.type = 'triangle';
+    tone.frequency.setValueAtTime(310, time);
+    tone.frequency.exponentialRampToValueAtTime(145, time + 0.17);
+    const toneGain = ctx.createGain();
+    toneGain.gain.setValueAtTime(0.048, time);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, time + 0.19);
+    tone.connect(toneGain).connect(this.sfxBus);
+    tone.start(time);
+    tone.stop(time + 0.2);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1050, time);
+    filter.frequency.exponentialRampToValueAtTime(420, time + 0.14);
+    const scrape = ctx.createGain();
+    scrape.gain.setValueAtTime(0.038, time);
+    scrape.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
+    noise.connect(filter).connect(scrape).connect(this.sfxBus);
+    noise.start(time);
+    noise.stop(time + 0.17);
+  }
+
+  // Kept separate from the generic training-complete fanfare: this cue is
+  // immediate confirmation that speed + boost + glide cleared the rock gap.
+  playAirtimeMasteryClear() {
+    if (!this.ctx || !this.sfxBus) return;
+    const ctx = this.ctx;
+    const contactTime = ctx.currentTime;
+    const body = ctx.createOscillator();
+    body.type = 'sine';
+    body.frequency.setValueAtTime(112, contactTime);
+    body.frequency.exponentialRampToValueAtTime(52, contactTime + 0.13);
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0.11, contactTime);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, contactTime + 0.15);
+    body.connect(bodyGain).connect(this.sfxBus);
+    body.start(contactTime);
+    body.stop(contactTime + 0.16);
+
+    const time = contactTime + 0.1; // let the folded-in landing transient read
+    [523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
+      const start = time + index * 0.055;
+      const osc = ctx.createOscillator();
+      osc.type = index < 2 ? 'triangle' : 'sine';
+      osc.frequency.value = frequency;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.052, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.23);
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = -0.3 + index * 0.2;
+      osc.connect(gain).connect(pan).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.24);
+    });
   }
 
   playTrainingComplete({ perfect = false, stars = 0 } = {}) {

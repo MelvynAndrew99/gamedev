@@ -13,13 +13,13 @@
 //   patterns.placements: exact campaign event kind/segment pairs
 //   patterns weights/gap: procedural fallback used by generated layouts
 
-import trainingLoop from './training-loop.json';
-import trainingHazardWeave from './training-hazard-weave.json';
-import trainingTopSpeed from './training-top-speed.json';
-import trainingAirtime from './training-airtime.json';
-import trainingValidation from './training-validation.json';
-import neonGulch from './neon-gulch.json';
-import syndicateRun from './syndicate-run.json';
+import trainingLoop from './training-loop.json' with { type: 'json' };
+import trainingHazardWeave from './training-hazard-weave.json' with { type: 'json' };
+import trainingTopSpeed from './training-top-speed.json' with { type: 'json' };
+import trainingAirtime from './training-airtime.json' with { type: 'json' };
+import trainingValidation from './training-validation.json' with { type: 'json' };
+import neonGulch from './neon-gulch.json' with { type: 'json' };
+import syndicateRun from './syndicate-run.json' with { type: 'json' };
 
 export const TRAINING_TRACKS = [
   trainingLoop,

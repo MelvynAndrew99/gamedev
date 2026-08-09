@@ -11,6 +11,7 @@ import {
 } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
 import { axisValue, buttonDown, dpadDown, getPrimaryPad } from '../systems/Gamepad.js';
+import { carSpriteFrame } from '../systems/AirtimeFx.js';
 import { TRAINING_TRACKS } from '../tracks/index.js';
 
 const ITEMS = [
@@ -70,7 +71,7 @@ export class TitleScene extends Phaser.Scene {
     // The machine, hovering. Use the same measured scale as the in-race car
     // so a sprite-sheet revision cannot leave the title presentation behind.
     const car = this.add
-      .sprite(w / 2, 300, 'car', 2)
+      .sprite(w / 2, 300, 'car', carSpriteFrame(2, 0))
       .setScale(TUNING.carScale);
     this.tweens.add({
       targets: car,

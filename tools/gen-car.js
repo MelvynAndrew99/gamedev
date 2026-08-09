@@ -9,7 +9,8 @@
 // glued flat to the screen — the perspective doesn't transfer. So instead of
 // tracing the sheet's pixels, this ports its *aesthetic* (blue hull, warm
 // racing stripe, glass canopy, glowing twin engines) onto the existing v5
-// technique: build a real low-poly 3D mesh and rasterize actual camera yaws,
+// technique: build a real low-poly 3D mesh and rasterize actual camera yaws
+// and jump pitches,
 // so turning frames genuinely reveal the nose/fenders instead of faking it
 // with a 2D shear. See the v5 header (removed) and tools/CarRenderer.py
 // (also removed) for why that shear approach was abandoned.
@@ -198,7 +199,7 @@ function buildRacer() {
 
 // ---------------- rasterizer ----------------
 const FRAME_W = 64, FRAME_H = 56;
-const FRAMES = 5; // hard-left, left, straight, right, hard-right
+const STEER_FRAME_COUNT = 5; // hard-left, left, straight, right, hard-right
 const ORTHO_SCALE = 1.75;
 // Match the game's Outrun-style chase camera: directly behind the car rather
 // than above it. The teardrop canopy geometry supplies the glass read without
@@ -230,18 +231,23 @@ const EMISSIVE_KEYS = new Set(
   Object.values(MATERIALS).filter((m) => m.emissive).map((m) => m.color.join(','))
 );
 
-// Renders one steering frame: rotate (bank, then yaw) -> pitch the
-// camera -> orthographic-project -> barycentric-rasterize with a
+// Renders one car frame: pitch the chassis around its local left/right axis,
+// then rotate (bank, then yaw) -> pitch the camera -> orthographic-project ->
+// barycentric-rasterize with a
 // z-buffer -> quantize shading into pixel-art bands -> outline.
-function renderFrame(tris, yawDeg, rollDeg) {
-  const yaw = (yawDeg * Math.PI) / 180, roll = (rollDeg * Math.PI) / 180;
+function renderFrame(tris, yawDeg, rollDeg, pitchDeg = 0) {
+  const yaw = (yawDeg * Math.PI) / 180;
+  const roll = (rollDeg * Math.PI) / 180;
+  const pitch = (pitchDeg * Math.PI) / 180;
   const w = FRAME_W, h = FRAME_H;
   const px = new Float64Array(w * h * 4);
   const alpha = new Uint8Array(w * h);
   const zbuf = new Float64Array(w * h).fill(-1e9);
 
   const prepared = tris.map(([tri, mat]) => {
-    const pts = tri.map((p) => rotX(rotY(rotZ(p, roll), yaw), CAM_PITCH));
+    const pts = tri.map((p) =>
+      rotX(rotY(rotZ(rotX(p, pitch), roll), yaw), CAM_PITCH)
+    );
     const ax = [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1], pts[1][2] - pts[0][2]];
     const bx = [pts[2][0] - pts[0][0], pts[2][1] - pts[0][1], pts[2][2] - pts[0][2]];
     const n = normalize([
@@ -314,21 +320,39 @@ const tris = buildRacer();
 // Real camera yaws with a bank into the turn — a bit more roll than the old
 // jeep since a hover racer leans harder than a ground vehicle.
 const STEER_FRAMES = [[-28, 7], [-14, 3.5], [0, 0], [14, -3.5], [28, -7]];
-const sheet = new PNG({ width: FRAME_W * FRAMES, height: FRAME_H });
-STEER_FRAMES.forEach(([yaw, roll], i) => {
-  const { data, alpha } = renderFrame(tris, yaw, roll);
-  for (let y = 0; y < FRAME_H; y++) {
-    for (let x = 0; x < FRAME_W; x++) {
-      if (!alpha[y * FRAME_W + x]) continue;
-      const si = (y * FRAME_W + x) * 4;
-      const di = (y * sheet.width + i * FRAME_W + x) * 4;
-      sheet.data[di] = data[si]; sheet.data[di + 1] = data[si + 1];
-      sheet.data[di + 2] = data[si + 2]; sheet.data[di + 3] = 255;
+// Rows are deliberately ordered nose-down, neutral, nose-up. Phaser numbers
+// spritesheet frames left-to-right, top-to-bottom, so gameplay can combine a
+// pitch row with the existing five steering buckets using one integer.
+const PITCH_ROWS = [
+  { id: 'down', degrees: 12 },
+  { id: 'neutral', degrees: 0 },
+  { id: 'up', degrees: -12 },
+];
+const sheet = new PNG({
+  width: FRAME_W * STEER_FRAME_COUNT,
+  height: FRAME_H * PITCH_ROWS.length,
+});
+PITCH_ROWS.forEach(({ degrees: pitch }, pitchRow) => {
+  STEER_FRAMES.forEach(([yaw, roll], steerFrame) => {
+    const { data, alpha } = renderFrame(tris, yaw, roll, pitch);
+    for (let y = 0; y < FRAME_H; y++) {
+      for (let x = 0; x < FRAME_W; x++) {
+        if (!alpha[y * FRAME_W + x]) continue;
+        const si = (y * FRAME_W + x) * 4;
+        const sheetX = steerFrame * FRAME_W + x;
+        const sheetY = pitchRow * FRAME_H + y;
+        const di = (sheetY * sheet.width + sheetX) * 4;
+        sheet.data[di] = data[si]; sheet.data[di + 1] = data[si + 1];
+        sheet.data[di + 2] = data[si + 2]; sheet.data[di + 3] = 255;
+      }
     }
-  }
+  });
 });
 
 const out = path.join(process.cwd(), 'public', 'assets', 'car.png');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, PNG.sync.write(sheet));
-console.log(`wrote ${out} (${sheet.width}x${sheet.height}, ${FRAMES} frames of ${FRAME_W}x${FRAME_H})`);
+console.log(
+  `wrote ${out} (${sheet.width}x${sheet.height}, ` +
+  `${STEER_FRAME_COUNT * PITCH_ROWS.length} frames of ${FRAME_W}x${FRAME_H})`
+);
