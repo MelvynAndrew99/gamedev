@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ENVIRONMENT_IDS, getEnvironment } from '../config/environments.js';
-import { parallaxOffset } from './ParallaxBackground.js';
+import { parallaxOffset, perspectiveOffset } from './ParallaxBackground.js';
 
 test('every game mode has a complete two-layer environment', () => {
   const semanticColors = [
@@ -54,6 +54,49 @@ test('near scenery produces stronger parallax than far scenery', () => {
   const nearOffset = parallaxOffset(distance, curveOffset, near, segmentLength);
 
   assert.ok(Math.abs(nearOffset) > Math.abs(farOffset));
+});
+
+test('bends and hills move every depth layer with exaggerated perspective', () => {
+  const environment = getEnvironment('neon-gulch');
+  const [far, near] = environment.layers;
+  const farShift = perspectiveOffset(180, -70, far);
+  const nearShift = perspectiveOffset(180, -70, near);
+  const sunShift = perspectiveOffset(180, -70, {
+    curveFactor: environment.celestial.curveFactor ?? 0.18,
+    pitchFactor: environment.celestial.pitchFactor ?? 0.32,
+  });
+
+  assert.ok(sunShift.x < 0, 'a right bend should sweep the fixed sun left');
+  assert.ok(sunShift.y < 0, 'a negative pitch signal should lift the sun');
+  assert.ok(Math.abs(farShift.x) > Math.abs(sunShift.x));
+  assert.ok(Math.abs(nearShift.x) > Math.abs(farShift.x));
+  assert.ok(Math.abs(farShift.y) > Math.abs(sunShift.y));
+  assert.ok(Math.abs(nearShift.y) > Math.abs(farShift.y));
+});
+
+test('explicit perspective factors support environment art direction', () => {
+  assert.deepEqual(
+    perspectiveOffset(-120, 50, { curveFactor: 0.25, pitchFactor: 0.5 }),
+    { x: 30, y: 25 },
+  );
+});
+
+test('left and right bends mirror every fixed-world layer', () => {
+  const environment = getEnvironment('training-loop');
+  for (const layer of [
+    { curveFactor: environment.celestial.curveFactor ?? 0.18 },
+    ...environment.layers,
+  ]) {
+    const right = perspectiveOffset(180, 0, layer).x;
+    const left = perspectiveOffset(-180, 0, layer).x;
+    assert.ok(right < 0);
+    assert.ok(left > 0);
+    assert.equal(left, -right);
+  }
+  for (const layer of environment.layers) {
+    assert.ok(parallaxOffset(0, 180, layer, 200) < 0);
+    assert.ok(parallaxOffset(0, -180, layer, 200) > 0);
+  }
 });
 
 test('unknown environment IDs use the Endless Mode world', () => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { TUNING } from '../config/tuning.js';
 import { RoadModel } from './RoadModel.js';
-import { RoadRenderer } from './RoadRenderer.js';
+import { backgroundPitchOffset, RoadRenderer } from './RoadRenderer.js';
 
 function chainable(base = {}) {
   let proxy;
@@ -155,4 +155,91 @@ test('gate stays stable while roadside speed markers keep their horizon wink', (
     new Set([true, false]),
     'roadside pickets should retain their alternating speed cadence'
   );
+});
+
+test('every boost tier keeps perspective finite, positive, and below the lens cap', () => {
+  const model = new RoadModel(TUNING);
+  model.addStraight(TUNING.drawDistance + 10);
+  const renderer = new RoadRenderer(fakeScene(), TUNING);
+
+  for (const speedPercent of [...TUNING.boostTierCeilings, 10]) {
+    renderer.render(model, { position: 0, x: 0 }, speedPercent, 0);
+    assert.ok(Number.isFinite(renderer.frameDepth), `${speedPercent}x frame depth`);
+    assert.ok(renderer.frameDepth > 0, `${speedPercent}x must not invert perspective`);
+    for (const segment of model.segments.slice(1, TUNING.drawDistance)) {
+      assert.ok(Number.isFinite(segment.p1.screen.x), `${speedPercent}x projected x`);
+      assert.ok(Number.isFinite(segment.p1.screen.y), `${speedPercent}x projected y`);
+      assert.ok(segment.p1.screen.w >= 0, `${speedPercent}x projected road width`);
+    }
+  }
+});
+
+test('projected bends and hills drive the background view offsets', () => {
+  const model = new RoadModel(TUNING);
+  model.addStraight(30);
+  model.addCurve(100, 4, 10);
+
+  const renderer = new RoadRenderer(fakeScene(), TUNING);
+  let view;
+  renderer.background.render = (...args) => { view = args; };
+  renderer.render(model, {
+    position: 80 * TUNING.segmentLength,
+    x: 0,
+  }, 0.8, 0);
+
+  assert.equal(view.length, 3);
+  assert.equal(view[0], 80 * TUNING.segmentLength);
+  assert.ok(Number.isFinite(view[1]));
+  assert.ok(Number.isFinite(view[2]));
+  assert.notEqual(view[1], 0, 'the bend should move the background heading');
+  assert.notEqual(view[2], 0, 'the hill should move the background horizon');
+  assert.ok(Math.abs(view[1]) <= renderer.w * 0.65);
+  assert.ok(Math.abs(view[2]) <= renderer.h * 0.14);
+});
+
+test('authored bend direction sweeps the fixed panorama opposite the turn', () => {
+  const panoramaShift = (curve) => {
+    const model = new RoadModel(TUNING);
+    model.addStraight(30);
+    model.addCurve(100, curve);
+    const renderer = new RoadRenderer(fakeScene(), TUNING);
+    let view;
+    renderer.background.render = (...args) => { view = args; };
+    renderer.render(model, { position: 80 * TUNING.segmentLength, x: 0 }, 1, 0);
+    return view[1];
+  };
+
+  const rightHeading = panoramaShift(8);
+  const leftHeading = panoramaShift(-8);
+  assert.ok(rightHeading > 0, 'the +8 road should point right on screen');
+  assert.ok(leftHeading < 0, 'the -8 road should point left on screen');
+  assert.ok(Math.abs(rightHeading + leftHeading) <= 1, 'turn response should mirror');
+});
+
+test('weighted road grade gives hills a visible and bounded panorama pitch', () => {
+  const model = new RoadModel(TUNING);
+  model.addStraight(30);
+  model.addHill(18, 6);
+  model.addStraight(40);
+
+  const uphill = backgroundPitchOffset(
+    model,
+    model.segments[86],
+    TUNING.segmentLength,
+    600,
+  );
+  assert.ok(uphill >= 20, `uphill pitch should be visible, got ${uphill}`);
+  assert.ok(uphill <= 600 * 0.14);
+
+  const downhillModel = new RoadModel(TUNING);
+  downhillModel.addStraight(30);
+  downhillModel.addHill(18, -6);
+  downhillModel.addStraight(40);
+  const downhill = backgroundPitchOffset(
+    downhillModel,
+    downhillModel.segments[86],
+    TUNING.segmentLength,
+    600,
+  );
+  assert.equal(downhill, -uphill);
 });

@@ -24,6 +24,7 @@ function save(progress) {
 
 export function trophyFor(scoring, progress, metrics = {}) {
   const damageHits = metrics.damageHits ?? 0;
+  const conesMissed = metrics.conesMissed ?? 0;
   const thresholds = [...(scoring?.thresholds ?? [])]
     .filter((threshold) => Number.isFinite(threshold.minimum))
     .sort((a, b) => b.minimum - a.minimum);
@@ -32,6 +33,10 @@ export function trophyFor(scoring, progress, metrics = {}) {
     (
       threshold.maximumDamageHits == null ||
       damageHits <= threshold.maximumDamageHits
+    ) &&
+    (
+      threshold.maximumConesMissed == null ||
+      conesMissed <= threshold.maximumConesMissed
     )
   );
   return earned
@@ -42,8 +47,27 @@ export function trophyFor(scoring, progress, metrics = {}) {
       ...(earned.maximumDamageHits == null
         ? {}
         : { maximumDamageHits: earned.maximumDamageHits }),
+      ...(earned.maximumConesMissed == null
+        ? {}
+        : { maximumConesMissed: earned.maximumConesMissed }),
     }
     : null;
+}
+
+// Hazard-style mastery cones can grade the complete multi-lap run rather than
+// treating lap one as disposable rehearsal. Other lessons retain their
+// finishing-lap behavior unless the track opts into scoreAcrossLaps.
+export function trainingConeScore(track, { allHits = 0, lastLapHits = 0 } = {}) {
+  const conesPerLap = track.objects?.filter(
+    (object) => object?.kind === 'cone',
+  ).length ?? 0;
+  const scoringMode = track.trainingCones?.scoreAcrossLaps;
+  const acrossLaps = scoringMode === true || scoringMode === 'unique';
+  // Boolean true preserves the original every-lap contract. "unique" is for
+  // persistent authored cones: either lap can claim each cone once.
+  const target = conesPerLap * (scoringMode === true ? (track.laps ?? 1) : 1);
+  const hits = Math.min(target, acrossLaps ? allHits : lastLapHits);
+  return { hits, target, missed: Math.max(0, target - hits) };
 }
 
 export function getTrainingResult(trackId, version = null) {
@@ -65,13 +89,14 @@ export function submitTrainingResult(track, progress, time, metrics = {}) {
   const stored = results[track.id] ?? null;
   const previous = stored?.version === version ? stored : null;
   const damageHits = metrics.damageHits ?? 0;
+  const conesMissed = metrics.conesMissed ?? 0;
   const objectiveTargetCount = track.objects?.filter(
     (object) => object?.objective === track.scoring?.objective,
   ).length ?? 0;
   const total = metrics.total ?? (
     objectiveTargetCount || track.objects?.length || progress
   );
-  const trophy = trophyFor(track.scoring, progress, { damageHits });
+  const trophy = trophyFor(track.scoring, progress, { damageHits, conesMissed });
   const stars = trophy?.stars ?? 0;
   const newBest = previous == null ||
     stars > (previous.stars ?? 0) ||
@@ -100,6 +125,7 @@ export function submitTrainingResult(track, progress, time, metrics = {}) {
       total,
       bestTime: time,
       damageHits,
+      conesMissed,
       trophy: trophy?.rank ?? null,
       stars,
     };

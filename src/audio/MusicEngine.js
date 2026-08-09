@@ -31,6 +31,26 @@ const CONE_HIT_VARIATIONS = [
   { body: 98, noiseFreq: 1180, q: 1.35, tone: 329.63, wave: 'square', sweep: 0.96, pan: 0.02, level: 0.88 },
 ];
 
+// A bright, friendly confirmation chime for collecting a green boost pickup
+// — never a crack/impact layer, it's a reward not a hit.
+const BOOST_PICKUP_VARIATIONS = [
+  { tone: 587.33, sweep: 1.5, wave: 'triangle', pan: -0.14, level: 0.95 },
+  { tone: 659.25, sweep: 1.42, wave: 'sine', pan: 0.1, level: 1 },
+  { tone: 698.46, sweep: 1.58, wave: 'triangle', pan: -0.04, level: 0.92 },
+  { tone: 783.99, sweep: 1.48, wave: 'sine', pan: 0.18, level: 0.98 },
+  { tone: 880, sweep: 1.55, wave: 'triangle', pan: 0.0, level: 0.9 },
+];
+
+// The moment a boost tap/hold-drain spends a slot: a rising sweep + noise
+// whoosh, its own variation pool so repeats never sound identical, scaled
+// further by tier the same way playGlassCrack scales by stage.
+const BOOST_APPLY_VARIATIONS = [
+  { base: 130, noiseFreq: 700, q: 0.8, pan: -0.18 },
+  { base: 146, noiseFreq: 820, q: 1.0, pan: 0.14 },
+  { base: 116, noiseFreq: 640, q: 0.9, pan: 0.02 },
+  { base: 156, noiseFreq: 900, q: 1.1, pan: -0.06 },
+];
+
 class MusicEngine {
   constructor() {
     this.ctx = null;
@@ -43,6 +63,8 @@ class MusicEngine {
     this.volume = 0.16;
     this.sfxVolume = 1.0;
     this.lastConeVariation = -1;
+    this.lastBoostPickupVariation = -1;
+    this.lastBoostApplyVariation = -1;
   }
 
   ensureContext() {
@@ -846,6 +868,142 @@ class MusicEngine {
       osc.start(start);
       osc.stop(start + 0.1);
     }
+  }
+
+  // A bright, friendly confirmation for collecting a green boost pickup —
+  // two quick ascending notes, no impact/crack layer, it's a reward not a
+  // hit. Variation pool keeps a dense pickup run from sounding identical.
+  playBoostPickup() {
+    if (!this.ctx || !this.sfxBus) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const variationIndex = nonRepeatingIndex(
+      this.lastBoostPickupVariation,
+      BOOST_PICKUP_VARIATIONS.length,
+    );
+    this.lastBoostPickupVariation = variationIndex;
+    const v = BOOST_PICKUP_VARIATIONS[variationIndex];
+
+    [1, v.sweep].forEach((ratio, i) => {
+      const start = time + i * 0.05;
+      const osc = ctx.createOscillator();
+      osc.type = v.wave;
+      osc.frequency.setValueAtTime(v.tone * ratio, start);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.07 * v.level, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = v.pan;
+      osc.connect(gain).connect(pan).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.18);
+    });
+  }
+
+  // The moment a tap or hold-drain tick spends a slot: a rising pitch-swept
+  // sweep plus a noise whoosh, scaled by `tier` exactly like playGlassCrack
+  // scales by stage (linear freq/gain bump, more layers at higher tiers).
+  // `extend: true` is the lighter hold-drain cue — same voice, less juice.
+  playBoostApply(tier = 1, { extend = false } = {}) {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const variationIndex = nonRepeatingIndex(
+      this.lastBoostApplyVariation,
+      BOOST_APPLY_VARIATIONS.length,
+    );
+    this.lastBoostApplyVariation = variationIndex;
+    const v = BOOST_APPLY_VARIATIONS[variationIndex];
+    const levelMul = extend ? 0.55 : 1;
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    const noiseFreq = v.noiseFreq + tier * 180;
+    filter.frequency.setValueAtTime(noiseFreq, time);
+    filter.frequency.exponentialRampToValueAtTime(noiseFreq * 1.8, time + 0.22);
+    filter.Q.value = v.q;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime((0.05 + tier * 0.02) * levelMul, time);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = v.pan;
+    noise.connect(filter).connect(noiseGain).connect(pan).connect(this.sfxBus);
+    noise.start(time);
+    noise.stop(time + 0.3);
+
+    for (let i = 0; i < Math.min(3, tier); i++) {
+      const start = time + i * 0.03;
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      const freq = v.base + tier * 55 + i * 40;
+      osc.frequency.setValueAtTime(freq, start);
+      osc.frequency.exponentialRampToValueAtTime(freq * (2.2 + tier * 0.35), start + 0.22);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime((0.05 + tier * 0.018) * levelMul, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.24);
+      osc.connect(gain).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.26);
+    }
+  }
+
+  // Genuinely new idiom for this file: every other SFX method is
+  // fire-and-forget with a fixed stop time. A held boost has no natural end
+  // until the player releases (or runs out of slots), so this builds a
+  // sustained drone with a soft attack and returns a handle whose stop()
+  // ramps the gain down and schedules the real node stop. GameScene holds
+  // the handle for as long as Boost.holding stays true.
+  startBoostHold() {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return { stop() {} };
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(94, time);
+    const detune = ctx.createOscillator();
+    detune.type = 'sawtooth';
+    detune.frequency.setValueAtTime(96.8, time); // slight beat against `osc` for a fat drone
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    noise.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2200, time);
+    filter.Q.value = 0.7;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(0.05, time + 0.12);
+
+    osc.connect(gain);
+    detune.connect(gain);
+    noise.connect(filter).connect(gain);
+    gain.connect(this.sfxBus);
+
+    osc.start(time);
+    detune.start(time);
+    noise.start(time);
+
+    let stopped = false;
+    return {
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        const stopTime = ctx.currentTime;
+        gain.gain.cancelScheduledValues(stopTime);
+        gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), stopTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, stopTime + 0.12);
+        osc.stop(stopTime + 0.14);
+        detune.stop(stopTime + 0.14);
+        noise.stop(stopTime + 0.14);
+      },
+    };
   }
 
   playTrainingComplete({ perfect = false, stars = 0 } = {}) {

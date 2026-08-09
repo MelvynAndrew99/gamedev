@@ -226,7 +226,14 @@ export class RoadModel {
   placeAuthoredObjects(objects = []) {
     const seen = new Set();
     for (const object of objects) {
-      const { id, at, kind, offset = 0, objective = null } = object;
+      const {
+        id,
+        at,
+        kind,
+        offset = 0,
+        objective = null,
+        once = false,
+      } = object;
       if (!id || seen.has(id)) throw new Error(`Authored track object needs a unique id: ${id}`);
       if (!Number.isInteger(at) || !this.segments[at]) {
         throw new Error(`${kind} object ${id} is outside the track at segment ${at}`);
@@ -242,7 +249,7 @@ export class RoadModel {
         hit: false,
         trackObjectId: id,
         objectiveId: objective,
-        persistentHit: objective != null,
+        persistentHit: objective != null || once,
       });
     }
   }
@@ -259,8 +266,8 @@ export class RoadModel {
       const seg = this.segments[i];
       if (!seg) return;
       seg.sprites.push({
-        def: { key: 'boost', kind: 'pickup', pop: 0, damage: 0, slow: 1, w: 0.1, view: 0.15 },
-        key: 'boost', view: 0.15,
+        def: OBSTACLES.boost,
+        key: OBSTACLES.boost.key, view: OBSTACLES.boost.view,
         offset: lanes[Math.floor(this.rng() * lanes.length)], hit: false,
       });
     };

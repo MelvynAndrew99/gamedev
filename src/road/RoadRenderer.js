@@ -72,7 +72,13 @@ export class RoadRenderer {
     // Dynamic FOV: widen with speed. VISUAL only — TUNING.cameraDepth and
     // playerZ (used by game logic) stay pinned to the base fov, so handling
     // doesn't change when the lens does.
-    const fov = t.fov + t.fovSpeedBoost * speedPercent;
+    // Keep lens distortion bounded independently of gameplay speed. A FOV at
+    // or above 180 degrees makes tan(fov / 2) negative and inverts every road
+    // projection; the speed lines carry the extra overspeed drama instead.
+    const fov = Math.min(
+      t.maxDynamicFov,
+      t.fov + t.fovSpeedBoost * Math.max(0, speedPercent),
+    );
     this.frameDepth = 1 / Math.tan(((fov / 2) * Math.PI) / 180);
     this.speedPercent = speedPercent;
     this.speedBurst = speedBurst;
@@ -140,12 +146,29 @@ export class RoadRenderer {
       -this.w * 0.65,
       this.w * 0.65,
     );
+    // The farthest projection converges on screen center even on large hills,
+    // so it cannot communicate pitch. A weighted near-road grade acts like a
+    // cartoon camera tilt: crests and dips arrive early, move visibly, then
+    // settle without tying the background to absolute world elevation.
+    const rawHorizonOffset = backgroundPitchOffset(
+      model,
+      base,
+      t.segmentLength,
+      this.h,
+    );
     if (this.backgroundCurveOffset === undefined) {
       this.backgroundCurveOffset = rawCurveOffset;
+      this.backgroundHorizonOffset = rawHorizonOffset;
     } else {
       this.backgroundCurveOffset += (rawCurveOffset - this.backgroundCurveOffset) * 0.12;
+      this.backgroundHorizonOffset +=
+        (rawHorizonOffset - this.backgroundHorizonOffset) * 0.1;
     }
-    this.background.render(sceneryDistance, this.backgroundCurveOffset);
+    this.background.render(
+      sceneryDistance,
+      this.backgroundCurveOffset,
+      this.backgroundHorizonOffset,
+    );
 
     this.trackside.render(model, base);
     this.renderGates(model, base);
@@ -406,14 +429,19 @@ export class RoadRenderer {
     const sp = this.speedPercent;
     const burst = this.speedBurst;
     // Ramp 0->1 from the floor up to maxSpeed; the burst floors it independently.
-    const passive = (sp - t.speedLineFloor) / (1 - t.speedLineFloor);
+    const passive = clamp(
+      (sp - t.speedLineFloor) / (1 - t.speedLineFloor),
+      0,
+      1,
+    );
     const intensity = Math.max(passive, burst);
     if (intensity <= 0) return;
 
     const cx = this.w / 2;
     const cy = this.h * 0.46; // vanishing point, just under the horizon
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
-    const over = Math.max(0, sp - 1) + burst * 0.7; // overspeed AND the burst add reach + glow
+    const maxBoost = t.boostTierCeilings.at(-1);
+    const over = Math.min(maxBoost - 1, Math.max(0, sp - 1)) + burst * 0.7;
     const count = 16;
 
     s.lineStyle(2, t.speedLineColor, Math.min(0.65, 0.15 + intensity * 0.35 + over * 0.6));
@@ -589,6 +617,32 @@ export class RoadRenderer {
     g.closePath();
     g.fillPath();
   }
+}
+
+// Sample the road players are actively reading rather than the mathematical
+// infinity point. Positive world grade means the camera looks uphill, so a
+// fixed panorama moves down the screen; downhill mirrors it upward.
+export function backgroundPitchOffset(model, base, segmentLength, screenHeight) {
+  const first = 4;
+  const last = 28;
+  const middle = (first + last) / 2;
+  let weightedGrade = 0;
+  let totalWeight = 0;
+
+  for (let n = first; n <= last; n++) {
+    const segment = model.segmentAt(base, n);
+    const grade = (segment.p2.world.y - segment.p1.world.y) / segmentLength;
+    const weight = 1 - Math.abs(n - middle) / (middle - first + 1);
+    weightedGrade += grade * weight;
+    totalWeight += weight;
+  }
+
+  const averageGrade = totalWeight > 0 ? weightedGrade / totalWeight : 0;
+  return clamp(
+    averageGrade * screenHeight * 0.9,
+    -screenHeight * 0.14,
+    screenHeight * 0.14,
+  );
 }
 
 // Exponential fog, 0 (near, clear) -> approaching 1 (far, soup).

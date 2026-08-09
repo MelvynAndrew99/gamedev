@@ -6,6 +6,7 @@ import {
   highestUnlockedTrainingIndex,
   submitTrainingResult,
   totalTrainingStars,
+  trainingConeScore,
   trophyFor,
 } from './TrainingProgress.js';
 
@@ -27,16 +28,110 @@ test('training trophies reward cone mastery at authored thresholds', () => {
 test('damage-limited trophies use cracks as mastery criteria without failing the run', () => {
   const damageScoring = {
     thresholds: [
-      { rank: 'gold', minimum: 24, maximumDamageHits: 0, stars: 3 },
-      { rank: 'silver', minimum: 20, maximumDamageHits: 1, stars: 2 },
-      { rank: 'bronze', minimum: 16, maximumDamageHits: 3, stars: 1 },
+      { rank: 'gold', minimum: 2, maximumDamageHits: 0, stars: 3 },
+      { rank: 'silver', minimum: 2, maximumDamageHits: 1, stars: 2 },
+      { rank: 'bronze', minimum: 2, maximumDamageHits: 3, stars: 1 },
     ],
   };
 
-  assert.equal(trophyFor(damageScoring, 24, { damageHits: 4 }), null);
-  assert.equal(trophyFor(damageScoring, 24, { damageHits: 2 }).rank, 'bronze');
-  assert.equal(trophyFor(damageScoring, 24, { damageHits: 1 }).rank, 'silver');
-  assert.equal(trophyFor(damageScoring, 24, { damageHits: 0 }).rank, 'gold');
+  assert.equal(trophyFor(damageScoring, 1, { damageHits: 0 }), null);
+  assert.equal(trophyFor(damageScoring, 2, { damageHits: 4 }), null);
+  assert.equal(trophyFor(damageScoring, 2, { damageHits: 2 }).rank, 'bronze');
+  assert.equal(trophyFor(damageScoring, 2, { damageHits: 1 }).rank, 'silver');
+  assert.equal(trophyFor(damageScoring, 2, { damageHits: 0 }).rank, 'gold');
+});
+
+test('gold can require a full cone sweep while lower trophies do not', () => {
+  const coneGatedScoring = {
+    thresholds: [
+      { rank: 'gold', minimum: 2, maximumDamageHits: 0, maximumConesMissed: 0, stars: 3 },
+      { rank: 'silver', minimum: 2, maximumDamageHits: 1, stars: 2 },
+      { rank: 'bronze', minimum: 2, maximumDamageHits: 3, stars: 1 },
+    ],
+  };
+
+  // A clean run that misses a cone drops from gold to silver, never to nothing.
+  const missed = trophyFor(coneGatedScoring, 2, { damageHits: 0, conesMissed: 1 });
+  assert.equal(missed.rank, 'silver');
+  // The full sweep with no cracks earns gold and echoes the requirement back.
+  const swept = trophyFor(coneGatedScoring, 2, { damageHits: 0, conesMissed: 0 });
+  assert.equal(swept.rank, 'gold');
+  assert.equal(swept.maximumConesMissed, 0);
+  // Silver/bronze ignore cones entirely.
+  assert.equal(trophyFor(coneGatedScoring, 2, { damageHits: 1, conesMissed: 5 }).rank, 'silver');
+});
+
+test('all-lap mastery cones score both laps as one continuous course', () => {
+  const track = {
+    laps: 2,
+    trainingCones: { scoreAcrossLaps: true },
+    objects: [
+      { kind: 'cone' },
+      { kind: 'rock' },
+      { kind: 'cone' },
+    ],
+  };
+
+  assert.deepEqual(
+    trainingConeScore(track, { allHits: 3, lastLapHits: 2 }),
+    { hits: 3, target: 4, missed: 1 },
+  );
+  assert.deepEqual(
+    trainingConeScore(track, { allHits: 4, lastLapHits: 2 }),
+    { hits: 4, target: 4, missed: 0 },
+  );
+});
+
+test('persistent mastery cones can be recovered across either lap', () => {
+  const track = {
+    laps: 2,
+    trainingCones: { scoreAcrossLaps: 'unique' },
+    objects: [
+      { kind: 'cone' },
+      { kind: 'rock' },
+      { kind: 'cone' },
+    ],
+  };
+
+  assert.deepEqual(
+    trainingConeScore(track, { allHits: 1, lastLapHits: 0 }),
+    { hits: 1, target: 2, missed: 1 },
+  );
+  assert.deepEqual(
+    trainingConeScore(track, { allHits: 2, lastLapHits: 0 }),
+    { hits: 2, target: 2, missed: 0 },
+  );
+});
+
+test('destroyed training glass loses the trophy but still completes and unlocks progression', () => {
+  const values = new Map();
+  const originalStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const track = {
+    id: 'hazard-training-test',
+    scoring: {
+      version: 1,
+      thresholds: [
+        { rank: 'gold', minimum: 2, maximumDamageHits: 0, stars: 3 },
+        { rank: 'silver', minimum: 2, maximumDamageHits: 1, stars: 2 },
+        { rank: 'bronze', minimum: 2, maximumDamageHits: 3, stars: 1 },
+      ],
+    },
+  };
+
+  try {
+    const result = submitTrainingResult(track, 2, 100, { damageHits: 4 });
+    assert.equal(result.trophy, null);
+    assert.equal(result.best.completed, true);
+    assert.equal(result.best.stars, 0);
+    assert.equal(highestUnlockedTrainingIndex([track, { id: 'next' }]), 1);
+  } finally {
+    if (originalStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = originalStorage;
+  }
 });
 
 test('training persistence keeps only the best lesson result and does not farm stars', () => {
@@ -61,6 +156,7 @@ test('training persistence keeps only the best lesson result and does not farm s
       total: 30,
       bestTime: 90,
       damageHits: 0,
+      conesMissed: 0,
       trophy: 'silver',
       stars: 2,
     });

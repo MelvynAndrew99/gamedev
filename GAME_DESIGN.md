@@ -72,7 +72,14 @@ release. Do it once; repetition should come from driving, not recurring panels.
   yellow ramp-approach paint never overlap in the same lane; combo lines
   separate them with a short clean-asphalt beat.
 - **Nitro is stored agency.** Place it before a climb or demanding section,
-  but let the player choose when to spend it.
+  but let the player choose when to spend it. Spending is not a single flat
+  kick: tapping the boost button repeatedly stacks a higher top-speed
+  ceiling (up to 1.65x maxSpeed at a full 3-slot stack), while holding it
+  instead sustains the current ceiling for longer. Both spend the same bank,
+  so the choice between a bigger burst and a longer cruise is the player's.
+  A live boost's ceiling is a temporary, self-decaying override — see
+  `src/entities/Boost.js` — never a change to the shared `overspeedCap` that
+  zippers and downhill grades still clamp to.
 - **Dirt is a deliberate tempo change.** Use it for a short handling test or
   alternate route feeling, followed by clean pavement where speed can rebuild.
 
@@ -103,17 +110,33 @@ a performance-gated airbrake assist, a cone-filled recovery/setup sector, and a
 fixed right-lane `-8` cone hairpin. Competent players are never paused. Missed
 cones persist for lap two and lower the trophy if they remain at finish.
 
-Hazard Weave is Training Level 2. Cone breadcrumbs thread six open lanes between
-rock pairs. Rock contact adds one of four persistent camera-glass crack stages
-but never reduces speed, hull, money, or access to completion. Cone count and
-crack count combine only at the finish to determine the trophy.
+Hazard Weave is Training Level 2. Sixty-two rocks form twelve compact two-lane
+closures that force ten side changes while leaving readable recovery between
+formations. Individual rocks are staggered longitudinally and laterally so the
+closures read as debris rather than repeated grids. Four interstitial cones
+reward ordinary lane transfers; only two revisit the learned `+8` right-airbrake
+and `-8` left-airbrake lines. The final seven-pair corridor shifts gently from
+the right side to center for a sustained thread-the-needle finish. All six cones
+persist once claimed and can be collected anywhere across the complete two-lap
+run. Gold requires all six and a clean windscreen; Silver
+allows one crack and Bronze allows three. Four cracks forfeit the trophy but
+never completion or progression. Rock contact adds one of four persistent
+camera-glass crack stages without reducing training speed or hull. At three
+cracks, the red perimeter supports a larger windshield warning graphic whose
+backdrop fades toward the center to preserve the road view. At four, the graphic
+explicitly says training continues and the trophy is lost. Story and Endless
+show the corresponding hull warning at 25 health and still wreck on the next
+rock.
 
 Redline and Air School are Training Levels 3 and 4 on that same geometry.
-Redline introduces reaching and retaining top speed; Air School introduces
-ramps and measured airtime. Both are currently staged data placeholders and
-must remain locked until their events, trophy balance, feedback, and result
-language are complete. Training result screens explicitly offer Retry and Next
-Track instead of treating completion as an automatic return to the title.
+Redline teaches the boost gauge — tapping stacks the top-speed ceiling,
+holding sustains it — read by the speed number and graded Bronze/Silver/Gold
+on the highest tier reached; see [training_levels.md](./training_levels.md)
+for its full contract. Air School introduces ramps and measured airtime and
+remains a staged data placeholder, locked until its event, trophy balance,
+feedback, and result language are complete. Training result screens
+explicitly offer Retry and Next Track instead of treating completion as an
+automatic return to the title.
 
 Proving Ground is the first Story race. It uses the same geometry with campaign
 warnings, hazards, route offers, rewards, normal three-lap finish rules, and the

@@ -6,15 +6,22 @@
   "finish": "laps",
   "music": "training-loop",
   "environment": "training-loop",
-  "intro": "Smash the cone line between the rocks. Rock hits crack the windscreen but never end training.",
+  "intro": "Two laps. Change lanes, miss the rocks, and hit the cones.",
+  "lapMessages": {
+    "2": "FINAL LAP — SAME RUN, KEEP THE FLOW"
+  },
   "design": {
-    "focus": "Read a safe lane early, collect its cone breadcrumbs, and avoid the rock payload.",
-    "damageMeaning": "Four crack stages teach damage without slowing, wrecking, or restarting the player. Damage affects trophies only."
+    "focus": "Twelve compact, irregular two-lane debris closures force a readable right-left rhythm across the full two-lap run. Single cones reward the transfer between selected rockfalls, and the final tapered corridor drifts gently from the right side to center.",
+    "damageMeaning": "Training rocks add persistent windshield cracks without slowing or wrecking the car. Damage accumulates across both laps. Three cracks trigger the critical warning; four destroy the glass and forfeit the trophy, but training safety keeps the lesson and progression running.",
+    "goldMeaning": "Six persistent cones mark mastery lines across the complete attempt. Gold means all six plus a clean windscreen anywhere across the two laps; Silver allows one crack, Bronze allows three, and four cracks still complete the lesson without a trophy."
   },
   "trainingDamage": {
     "maxHits": 4,
     "display": "camera-cracks",
     "penalty": "trophy-only"
+  },
+  "trainingCones": {
+    "scoreAcrossLaps": "unique"
   },
   "decoration": {
     "roadsidePosts": true,
@@ -23,12 +30,12 @@
   },
   "objectives": [
     {
-      "id": "safe-line",
+      "id": "mastery-cones",
       "type": "hit_all",
       "target": "cone",
-      "label": "SMASH ALL 24 CONES",
-      "hudLabel": "SMASH CONES",
-      "pointsPerUnit": 100
+      "label": "HIT 6 MASTERY CONES",
+      "hudLabel": "MASTERY CONES",
+      "pointsPerUnit": 150
     },
     {
       "id": "finish",
@@ -41,56 +48,95 @@
   ],
   "scoring": {
     "type": "trophy",
-    "version": 1,
-    "objective": "safe-line",
+    "version": 7,
+    "objective": "finish",
     "thresholds": [
-      { "rank": "gold", "minimum": 24, "maximumDamageHits": 0, "stars": 3 },
-      { "rank": "silver", "minimum": 20, "maximumDamageHits": 1, "stars": 2 },
-      { "rank": "bronze", "minimum": 16, "maximumDamageHits": 3, "stars": 1 }
+      { "rank": "gold", "minimum": 2, "maximumDamageHits": 0, "maximumConesMissed": 0, "stars": 3 },
+      { "rank": "silver", "minimum": 2, "maximumDamageHits": 1, "stars": 2 },
+      { "rank": "bronze", "minimum": 2, "maximumDamageHits": 3, "stars": 1 }
     ]
   },
   "objects": [
-    { "id": "line-01-a", "at": 135, "kind": "cone", "offset": 0.18, "objective": "safe-line" },
-    { "id": "line-01-b", "at": 147, "kind": "cone", "offset": 0.08, "objective": "safe-line" },
-    { "id": "line-01-c", "at": 159, "kind": "cone", "offset": 0, "objective": "safe-line" },
-    { "id": "rocks-01-left", "at": 180, "kind": "rock", "offset": -0.68 },
-    { "id": "line-01-gate", "at": 180, "kind": "cone", "offset": 0, "objective": "safe-line" },
-    { "id": "rocks-01-right", "at": 180, "kind": "rock", "offset": 0.68 },
+    { "id": "closure-01-a-left", "at": 84, "kind": "rock", "offset": -0.71 },
+    { "id": "closure-01-a-center", "at": 86, "kind": "rock", "offset": 0.03 },
+    { "id": "closure-01-b-left", "at": 92, "kind": "rock", "offset": -0.59 },
+    { "id": "closure-01-b-center", "at": 95, "kind": "rock", "offset": -0.06 },
+    { "id": "mastery-01", "at": 122, "kind": "cone", "offset": 0, "objective": "mastery-cones" },
 
-    { "id": "line-02-a", "at": 295, "kind": "cone", "offset": 0.2, "objective": "safe-line" },
-    { "id": "line-02-b", "at": 307, "kind": "cone", "offset": 0.35, "objective": "safe-line" },
-    { "id": "line-02-c", "at": 319, "kind": "cone", "offset": 0.5, "objective": "safe-line" },
-    { "id": "rocks-02-left", "at": 340, "kind": "rock", "offset": -0.68 },
-    { "id": "rocks-02-center", "at": 340, "kind": "rock", "offset": 0 },
-    { "id": "line-02-gate", "at": 340, "kind": "cone", "offset": 0.58, "objective": "safe-line" },
+    { "id": "closure-02-a-center", "at": 150, "kind": "rock", "offset": 0.02 },
+    { "id": "closure-02-a-right", "at": 153, "kind": "rock", "offset": 0.72 },
+    { "id": "closure-02-b-center", "at": 159, "kind": "rock", "offset": 0.08 },
+    { "id": "closure-02-b-right", "at": 161, "kind": "rock", "offset": 0.6 },
 
-    { "id": "line-03-a", "at": 455, "kind": "cone", "offset": -0.2, "objective": "safe-line" },
-    { "id": "line-03-b", "at": 467, "kind": "cone", "offset": -0.35, "objective": "safe-line" },
-    { "id": "line-03-c", "at": 479, "kind": "cone", "offset": -0.5, "objective": "safe-line" },
-    { "id": "line-03-gate", "at": 500, "kind": "cone", "offset": -0.58, "objective": "safe-line" },
-    { "id": "rocks-03-center", "at": 500, "kind": "rock", "offset": 0 },
-    { "id": "rocks-03-right", "at": 500, "kind": "rock", "offset": 0.68 },
+    { "id": "closure-03-a-left", "at": 224, "kind": "rock", "offset": -0.66 },
+    { "id": "closure-03-a-center", "at": 227, "kind": "rock", "offset": -0.03 },
+    { "id": "closure-03-b-left", "at": 233, "kind": "rock", "offset": -0.73 },
+    { "id": "closure-03-b-center", "at": 235, "kind": "rock", "offset": 0.05 },
+    { "id": "mastery-02", "at": 266, "kind": "cone", "offset": 0, "objective": "mastery-cones" },
 
-    { "id": "line-04-a", "at": 615, "kind": "cone", "offset": -0.16, "objective": "safe-line" },
-    { "id": "line-04-b", "at": 627, "kind": "cone", "offset": -0.06, "objective": "safe-line" },
-    { "id": "line-04-c", "at": 639, "kind": "cone", "offset": 0, "objective": "safe-line" },
-    { "id": "rocks-04-left", "at": 660, "kind": "rock", "offset": -0.68 },
-    { "id": "line-04-gate", "at": 660, "kind": "cone", "offset": 0, "objective": "safe-line" },
-    { "id": "rocks-04-right", "at": 660, "kind": "rock", "offset": 0.68 },
+    { "id": "closure-04-a-center", "at": 306, "kind": "rock", "offset": 0.05 },
+    { "id": "closure-04-a-right", "at": 308, "kind": "rock", "offset": 0.66 },
+    { "id": "closure-04-b-center", "at": 315, "kind": "rock", "offset": -0.03 },
+    { "id": "closure-04-b-right", "at": 318, "kind": "rock", "offset": 0.74 },
 
-    { "id": "line-05-a", "at": 775, "kind": "cone", "offset": 0.2, "objective": "safe-line" },
-    { "id": "line-05-b", "at": 787, "kind": "cone", "offset": 0.35, "objective": "safe-line" },
-    { "id": "line-05-c", "at": 799, "kind": "cone", "offset": 0.5, "objective": "safe-line" },
-    { "id": "rocks-05-left", "at": 820, "kind": "rock", "offset": -0.68 },
-    { "id": "rocks-05-center", "at": 820, "kind": "rock", "offset": 0 },
-    { "id": "line-05-gate", "at": 820, "kind": "cone", "offset": 0.58, "objective": "safe-line" },
+    { "id": "closure-05-a-left", "at": 402, "kind": "rock", "offset": -0.74 },
+    { "id": "closure-05-a-center", "at": 405, "kind": "rock", "offset": 0.05 },
+    { "id": "closure-05-b-left", "at": 411, "kind": "rock", "offset": -0.63 },
+    { "id": "closure-05-b-center", "at": 413, "kind": "rock", "offset": -0.07 },
+    { "id": "mastery-03", "at": 458, "kind": "cone", "offset": 0, "objective": "mastery-cones" },
 
-    { "id": "line-06-a", "at": 1107, "kind": "cone", "offset": -0.2, "objective": "safe-line" },
-    { "id": "line-06-b", "at": 1119, "kind": "cone", "offset": -0.35, "objective": "safe-line" },
-    { "id": "line-06-c", "at": 1131, "kind": "cone", "offset": -0.5, "objective": "safe-line" },
-    { "id": "line-06-gate", "at": 1160, "kind": "cone", "offset": -0.58, "objective": "safe-line" },
-    { "id": "rocks-06-center", "at": 1160, "kind": "rock", "offset": 0 },
-    { "id": "rocks-06-right", "at": 1160, "kind": "rock", "offset": 0.68 }
+    { "id": "closure-06-a-center", "at": 500, "kind": "rock", "offset": -0.05 },
+    { "id": "closure-06-a-right", "at": 503, "kind": "rock", "offset": 0.71 },
+    { "id": "closure-06-b-center", "at": 509, "kind": "rock", "offset": 0.07 },
+    { "id": "closure-06-b-right", "at": 512, "kind": "rock", "offset": 0.61 },
+
+    { "id": "closure-07-a-left", "at": 672, "kind": "rock", "offset": -0.69 },
+    { "id": "closure-07-a-center", "at": 675, "kind": "rock", "offset": 0.06 },
+    { "id": "closure-07-b-left", "at": 681, "kind": "rock", "offset": -0.6 },
+    { "id": "closure-07-b-center", "at": 683, "kind": "rock", "offset": -0.04 },
+    { "id": "mastery-04", "at": 712, "kind": "cone", "offset": 0, "objective": "mastery-cones" },
+
+    { "id": "closure-08-a-center", "at": 742, "kind": "rock", "offset": 0.01 },
+    { "id": "closure-08-a-right", "at": 745, "kind": "rock", "offset": 0.73 },
+    { "id": "closure-08-b-center", "at": 751, "kind": "rock", "offset": 0.08 },
+    { "id": "closure-08-b-right", "at": 754, "kind": "rock", "offset": 0.63 },
+
+    { "id": "mastery-05", "at": 951, "kind": "cone", "offset": 0.5, "objective": "mastery-cones" },
+    { "id": "closure-09-a-left", "at": 960, "kind": "rock", "offset": -0.72 },
+    { "id": "closure-09-a-center", "at": 963, "kind": "rock", "offset": 0.05 },
+    { "id": "closure-09-b-left", "at": 969, "kind": "rock", "offset": -0.61 },
+    { "id": "closure-09-b-center", "at": 972, "kind": "rock", "offset": -0.06 },
+
+    { "id": "closure-10-a-center", "at": 1034, "kind": "rock", "offset": -0.04 },
+    { "id": "closure-10-a-right", "at": 1036, "kind": "rock", "offset": 0.68 },
+    { "id": "closure-10-b-center", "at": 1043, "kind": "rock", "offset": 0.06 },
+    { "id": "closure-10-b-right", "at": 1046, "kind": "rock", "offset": 0.75 },
+
+    { "id": "closure-11-a-left", "at": 1100, "kind": "rock", "offset": -0.67 },
+    { "id": "closure-11-a-center", "at": 1103, "kind": "rock", "offset": 0.04 },
+    { "id": "closure-11-b-left", "at": 1109, "kind": "rock", "offset": -0.74 },
+    { "id": "closure-11-b-center", "at": 1112, "kind": "rock", "offset": -0.05 },
+
+    { "id": "closure-12-a-left", "at": 1170, "kind": "rock", "offset": -0.73 },
+    { "id": "closure-12-a-center", "at": 1172, "kind": "rock", "offset": -0.03 },
+    { "id": "closure-12-b-left", "at": 1179, "kind": "rock", "offset": -0.62 },
+    { "id": "closure-12-b-center", "at": 1182, "kind": "rock", "offset": 0.06 },
+
+    { "id": "mastery-06", "at": 1278, "kind": "cone", "offset": 0.46, "objective": "mastery-cones" },
+    { "id": "thread-01-left", "at": 1298, "kind": "rock", "offset": -0.28 },
+    { "id": "thread-01-right", "at": 1299, "kind": "rock", "offset": 1 },
+    { "id": "thread-02-right", "at": 1308, "kind": "rock", "offset": 0.92 },
+    { "id": "thread-02-left", "at": 1309, "kind": "rock", "offset": -0.28 },
+    { "id": "thread-03-left", "at": 1318, "kind": "rock", "offset": -0.29 },
+    { "id": "thread-03-right", "at": 1320, "kind": "rock", "offset": 0.83 },
+    { "id": "thread-04-right", "at": 1329, "kind": "rock", "offset": 0.73 },
+    { "id": "thread-04-left", "at": 1330, "kind": "rock", "offset": -0.31 },
+    { "id": "thread-05-left", "at": 1339, "kind": "rock", "offset": -0.36 },
+    { "id": "thread-05-right", "at": 1341, "kind": "rock", "offset": 0.64 },
+    { "id": "thread-06-right", "at": 1349, "kind": "rock", "offset": 0.59 },
+    { "id": "thread-06-left", "at": 1350, "kind": "rock", "offset": -0.45 },
+    { "id": "thread-07-left", "at": 1359, "kind": "rock", "offset": -0.56 },
+    { "id": "thread-07-right", "at": 1360, "kind": "rock", "offset": 0.56 }
   ],
   "pieces": [
     ["straight", 40],

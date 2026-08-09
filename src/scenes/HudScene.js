@@ -14,6 +14,9 @@ import { getScore } from '../systems/HighScores.js';
 import { fmtTime } from '../systems/RaceState.js';
 import { HealthBar } from '../ui/HealthBar.js';
 import { ProgressBar } from '../ui/ProgressBar.js';
+import { BoostGauge } from '../ui/BoostGauge.js';
+import { OBSTACLES } from '../config/obstacles.js';
+import { damageFeedbackState } from '../systems/DamageFeedback.js';
 
 const CAMERA_CRACKS = [
   [
@@ -98,7 +101,10 @@ export class HudScene extends Phaser.Scene {
             `${threshold.rank[0].toUpperCase()} ${threshold.minimum}` +
             (threshold.maximumDamageHits == null
               ? ''
-              : `/H≤${threshold.maximumDamageHits}`)
+              : `/H≤${threshold.maximumDamageHits}`) +
+            (threshold.maximumConesMissed == null
+              ? ''
+              : '/CONES')
           )
           .join('  •  ');
         this.trophyGuide = this.add.text(
@@ -139,14 +145,15 @@ export class HudScene extends Phaser.Scene {
       .text(w - 26, h - 28, 'SPEED', { fontSize: '11px', color: '#00e5ff' })
       .setOrigin(1, 0);
 
-    // Nitro remains a driving resource, but no longer shares a fame panel.
-    if (!this.training) {
-      this.nitroText = this.add
-        .text(w - 18, h - 88, '', {
-          fontSize: '13px', fontStyle: 'bold', color: '#2ee56b',
-          stroke: '#0a0a14', strokeThickness: 3,
-        })
-        .setOrigin(1, 0);
+    // Boost gauge: shown on any track that actually places pickups, not just
+    // non-training modes — Redline (Training 3) is the first training track
+    // that needs it, while Cone Control/Hazard Weave keep decoration.nitro
+    // off and stay clutter-free.
+    const hasAuthoredBoosts = this.gs.trackData?.objects?.some(
+      (object) => object.kind === 'boost',
+    );
+    if (hasAuthoredBoosts || this.gs.trackData?.decoration?.nitro !== false) {
+      this.boostGauge = new BoostGauge(this, w - 126, h - 92, 108, 14);
     }
 
     // Off-track flasher: its own element, impossible to miss, gone when moot.
@@ -161,14 +168,15 @@ export class HudScene extends Phaser.Scene {
       this.createAirbrakeRehearsal();
     }
 
-    // Training damage lives on the camera glass, not in a conventional hull
-    // bar. Four authored crack clusters accumulate and never obscure the road
-    // center completely; they communicate mistakes without ending the lesson.
+    // Windshield damage is the in-world condition read: training uses its
+    // authored safe hit count, while normal modes mirror persistent hull.
+    // Four crack clusters accumulate without obscuring the road center.
     this.crackStage = -1;
-    if (this.gs.trainingDamageMax > 0) {
+    if (this.gs.trainingDamageMax > 0 || !this.training) {
       this.crackGraphics = this.add.graphics().setDepth(100);
       this.drawCameraCracks(0);
     }
+    this.createCriticalDamageWarning();
   }
 
   update(time) {
@@ -190,9 +198,18 @@ export class HudScene extends Phaser.Scene {
 
     if (this.healthBar) this.healthBar.draw(RACER.healthFrac);
 
-    if (this.crackGraphics && this.crackStage !== gs.trainingDamageHits) {
-      this.drawCameraCracks(gs.trainingDamageHits);
+    const damageFeedback = damageFeedbackState({
+      training: this.training,
+      trainingHits: gs.trainingDamageHits,
+      trainingMax: gs.trainingDamageMax,
+      health: RACER.health,
+      maxHealth: RACER.maxHealth,
+      fatalDamage: OBSTACLES.rock.damage,
+    });
+    if (this.crackGraphics && this.crackStage !== damageFeedback.stage) {
+      this.drawCameraCracks(damageFeedback.stage);
     }
+    this.updateCriticalDamageWarning(time, damageFeedback);
 
     if (this.objectiveRows) {
       this.objectiveHeader.setText(gs.race?.finishArmed
@@ -217,13 +234,25 @@ export class HudScene extends Phaser.Scene {
         }
       });
     }
-    if (this.nitroText) {
-      this.nitroText.setText(gs.nitro > 0 ? '◆'.repeat(gs.nitro) + ' NITRO' : 'NITRO —');
+    if (this.boostGauge) {
+      const maxCeiling = TUNING.boostTierCeilings[TUNING.boostTierCeilings.length - 1];
+      this.boostGauge.draw({
+        slots: gs.boost.slots,
+        tier: gs.boost.tier,
+        ceilingMultiplier: gs.boost.ceilingMultiplier,
+        overspeedCap: TUNING.overspeedCap,
+        maxCeiling,
+      });
     }
 
-    // Cyan speedo = you are past the engine's ceiling: gravity's money.
+    // The medal-relevant read IS the speed number: an active boost tiers its
+    // color (green/cyan/gold) over the plain "past the engine's ceiling" cyan.
     this.speedText.setText(`${Math.round(gs.player.speed / 100)}`);
-    this.speedText.setColor(gs.player.speed > TUNING.maxSpeed ? '#00e5ff' : '#ffffff');
+    const tier = gs.boost?.tier ?? 0;
+    const tierColor = tier === 3 ? '#ffcf3f' : tier === 2 ? '#00e5ff' : tier === 1 ? '#2ee56b' : null;
+    this.speedText.setColor(
+      tierColor ?? (gs.player.speed > TUNING.maxSpeed ? '#00e5ff' : '#ffffff'),
+    );
 
     const off = !gs.player.airborne && Math.abs(gs.player.x) > 1;
     this.offTrack.setVisible(off && Math.floor(time / 250) % 2 === 0);
@@ -302,6 +331,113 @@ export class HudScene extends Phaser.Scene {
         .setColor(complete ? '#ffffff' : current ? '#0a0a14' : '#63758a')
         .setScale(current ? pulse : 1);
     });
+  }
+
+  createCriticalDamageWarning() {
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const panelX = w - 330;
+    const panelY = 58;
+    const panelH = 104;
+    const stripW = 330 / 8;
+    const blackAlpha = [0, 0.02, 0.05, 0.1, 0.18, 0.3, 0.48, 0.72];
+
+    // Canvas-safe stepped gradient: transparent at the center edge, dense at
+    // the outer glass. The warning reads as part of the windshield while the
+    // road/horizon remain unobscured.
+    this.criticalDamageBackdrop = this.add.graphics().setDepth(98);
+    blackAlpha.forEach((alpha, index) => {
+      const x = panelX + index * stripW;
+      this.criticalDamageBackdrop.fillStyle(0x05050a, alpha);
+      this.criticalDamageBackdrop.fillRect(x, panelY, Math.ceil(stripW), panelH);
+      this.criticalDamageBackdrop.fillStyle(0xff2d55, alpha * 0.2);
+      this.criticalDamageBackdrop.fillRect(x, panelY, Math.ceil(stripW), panelH);
+    });
+
+    // Only the warning chrome pulses. Text stays fully opaque so the player
+    // can read it in one glance instead of chasing a flashing label.
+    this.criticalDamagePulse = this.add.graphics().setDepth(101);
+    this.criticalDamagePulse.fillStyle(0xff2d55, 0.22);
+    this.criticalDamagePulse.fillRect(0, 0, w, 8);
+    this.criticalDamagePulse.fillRect(0, h - 8, w, 8);
+    this.criticalDamagePulse.fillRect(0, 0, 8, h);
+    this.criticalDamagePulse.fillRect(w - 8, 0, 8, h);
+    this.criticalDamagePulse.fillStyle(0xff2d55, 0.95);
+    this.criticalDamagePulse.fillRect(w - 5, panelY, 5, panelH);
+    this.criticalDamagePulse.fillTriangle(
+      panelX + 20, panelY + 69,
+      panelX + 47, panelY + 19,
+      panelX + 74, panelY + 69,
+    );
+    this.criticalDamagePulse.fillStyle(0x0a0a14, 1);
+    this.criticalDamagePulse.fillRect(panelX + 44, panelY + 36, 6, 19);
+    this.criticalDamagePulse.fillCircle(panelX + 47, panelY + 62, 3);
+
+    this.criticalDamageTitle = this.add.text(
+      panelX + 78,
+      panelY + 20,
+      'CRITICAL DAMAGE',
+      {
+        fontSize: '24px',
+        fontStyle: 'bold',
+        color: '#ff6b6b',
+        stroke: '#0a0a14',
+        strokeThickness: 4,
+      },
+    ).setDepth(102);
+    this.criticalDamageDetail = this.add.text(
+      panelX + 80,
+      panelY + 57,
+      '',
+      {
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        stroke: '#0a0a14',
+        strokeThickness: 3,
+      },
+    ).setDepth(102);
+    this.criticalDamageParts = [
+      this.criticalDamageBackdrop,
+      this.criticalDamagePulse,
+      this.criticalDamageTitle,
+      this.criticalDamageDetail,
+    ];
+    this.criticalDamageParts.forEach((part) => part.setVisible(false));
+    this.criticalDamageVisible = false;
+  }
+
+  updateCriticalDamageWarning(time, state) {
+    const visible = state.critical;
+    if (visible !== this.criticalDamageVisible) {
+      this.criticalDamageVisible = visible;
+      this.criticalDamageParts.forEach((part) => part.setVisible(visible));
+      if (visible) {
+        this.criticalDamageParts.forEach((part) => { part.x = 20; });
+        this.tweens.add({
+          targets: this.criticalDamageParts,
+          x: 0,
+          duration: 180,
+          ease: 'Quad.out',
+        });
+      }
+    }
+    if (!visible) return;
+    this.criticalDamagePulse.setAlpha(0.86 + Math.sin(time / 120) * 0.14);
+    this.criticalDamageBackdrop.setAlpha(1);
+    this.criticalDamageTitle.setAlpha(1);
+    this.criticalDamageDetail.setAlpha(1);
+
+    if (state.destroyed && this.training) {
+      this.criticalDamageTitle.setText('GLASS SHATTERED');
+      this.criticalDamageDetail.setText('TRAINING CONTINUES  •  NO TROPHY');
+    } else if (this.training) {
+      this.criticalDamageTitle.setText('GLASS CRITICAL');
+      this.criticalDamageDetail.setText('NEXT ROCK SHATTERS IT');
+    } else {
+      this.criticalDamageTitle.setText('HULL CRITICAL');
+      this.criticalDamageDetail.setText('NEXT ROCK WRECKS');
+    }
   }
 
   drawCameraCracks(hits) {

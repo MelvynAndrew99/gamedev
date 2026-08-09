@@ -5,6 +5,7 @@
 export const TUNING = {
   // ---- Projection (the "camera") -------------------------------------
   fov: 100,            // (derived-input) degrees. Wider = more speed sensation, more distortion at edges
+  maxDynamicFov: 135,  // hard lens limit: perspective flips inside-out at 180 degrees
   cameraHeight: 1000,  // world units above the road. Higher = more top-down, lower = more bumper-cam
   drawDistance: 200,   // segments rendered per frame. Your frame budget knob.
   fogDensity: 5,       // exponential fog falloff. Hides the draw-distance cutoff pop-in.
@@ -41,6 +42,15 @@ export const TUNING = {
   torqueHigh: 0.6,     // engine multiplier near maxSpeed (top end pulls like a loaded truck)
   climbFloor: 0.28,    // under throttle, grades can't drag you below this fraction of max
   nitroMax: 3,         // pocket size for boost pickups
+  boostTierCeilings: [1.35, 1.5, 1.65], // overspeed ceiling multiplier per tap-stack tier
+                       // (bronze/silver/gold) — a temporary ceiling that only
+                       // applies while a boost is actively burning; see Boost.js
+                       // and Player.js's per-frame clamp. Never touches overspeedCap.
+  boostChainWindow: 0.6,       // seconds after release a follow-up tap still stacks tier
+  boostHoldThreshold: 0.22,    // press duration before "tap" becomes continuous "hold"
+  boostBurnDuration: 1.3,      // seconds one spent slot keeps its tier's ceiling active
+  boostHoldDrainInterval: 1.3, // seconds between hold-drain slot spends (one full burn per slot)
+  boostDecayTail: 1.1,         // seconds the ceiling eases back to overspeedCap once boost ends
   hitRecoveryTime: 2.0,   // seconds of grace after a hit — mistakes cost the moment, not the minute
   hitRecoveryAccel: 1.9,  // engine multiplier during recovery
   hitRecoveryShield: 0.35,// gravity multiplier during recovery — the real fix: authored hills peak
@@ -140,7 +150,8 @@ export const TUNING = {
     this.airbrakeDrag  = -this.maxSpeed / 8; // airbrakes trade a little speed for the turn
     this.slopeAccel    =  this.maxSpeed * 4;  // gravity along the road: beats the engine on steep grades — that's the boost-pad economy
     this.overspeedDecay= -this.maxSpeed / 6;  // above maxSpeed, drag pulls you back (unless gravity wins)
-    this.boostKick     =  this.maxSpeed * 0.35; // one pad's worth of shove
+    this.boostKick      =  this.maxSpeed * 0.08; // immediate Burnout-style punch per spent slot
+    this.boostAccel     =  this.maxSpeed * 0.9;  // sustained thrust toward the active tier ceiling
     this.dirtDrag      = -this.maxSpeed / 3;  // drain on dirt above the dirt speed ceiling
   },
 };

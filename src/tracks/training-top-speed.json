@@ -1,16 +1,17 @@
 {
   "id": "training-top-speed",
   "name": "REDLINE",
-  "status": "placeholder",
   "seed": 1103,
   "laps": 2,
   "finish": "laps",
   "music": "training-loop",
   "environment": "training-loop",
-  "intro": "Build to top speed and learn how the car feels at the redline.",
+  "intro": "Lap 1: bank three green boosts. Lap 2: tap three to redline.",
+  "lapMessages": {
+    "2": "LAP 2 — TAP TAP TAP ON THE RUNWAY"
+  },
   "design": {
-    "focus": "Teach acceleration, speed retention, and the visual and audio language of maximum velocity.",
-    "placeholderNotes": "Choose a readable top-speed hold duration and trophy thresholds before enabling this track. Do not add hazards until the speed lesson works on clean road."
+    "focus": "Bank a center-left-right pickup line using learned steering and airbrakes, then stack all three boosts on the next lap's opening runway. Holding remains the safer, longer tier-one alternative."
   },
   "decoration": {
     "roadsidePosts": true,
@@ -22,7 +23,7 @@
       "id": "top-speed",
       "type": "count_event",
       "event": "top_speed",
-      "value": 1,
+      "value": 3,
       "label": "REACH TOP SPEED",
       "hudLabel": "TOP SPEED",
       "points": 1000
@@ -38,13 +39,19 @@
   ],
   "scoring": {
     "type": "trophy",
-    "version": 1,
+    "version": 2,
     "objective": "top-speed",
     "thresholds": [
-      { "rank": "gold", "minimum": 1, "stars": 3 }
+      { "rank": "gold", "minimum": 3, "stars": 3 },
+      { "rank": "silver", "minimum": 2, "stars": 2 },
+      { "rank": "bronze", "minimum": 1, "stars": 1 }
     ]
   },
-  "objects": [],
+  "objects": [
+    { "id": "boost-bank-center", "at": 260, "kind": "boost", "offset": 0, "once": true },
+    { "id": "boost-bank-left", "at": 540, "kind": "boost", "offset": -0.52, "once": true },
+    { "id": "boost-bank-right", "at": 920, "kind": "boost", "offset": 0.52, "once": true }
+  ],
   "pieces": [
     ["straight", 40],
     ["curve", 32, -1],

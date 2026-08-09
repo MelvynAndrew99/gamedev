@@ -144,24 +144,61 @@ added line should create meaningful cleanup, not merely raise the count.
 
 ## Lesson 2: Hazard Weave
 
-**Player sentence:** Follow the smashable cone breadcrumbs through the rocks
-and protect the windscreen until the finish.
+**Player sentence:** Rocks hurt. Cones don't. Change lanes, keep the flow,
+and use both laps to finish the run.
 
-**Skill:** distinguish a collectible target from a momentum hazard, acquire the
-safe lane before the formation arrives, and recover after a bad read.
+**Skill:** read an obstacle formation early, choose its open lane, and carry a
+smooth line through the course while collecting optional mastery cones.
 
-Hazard Weave reuses the Training Loop geometry and Open Circuit music identity.
-Six formations lead with three target cones, then place one final target cone in
-the open lane between two rocks. The safe lane moves center, right, left, then
-repeats. Twenty-four cones remain persistent across two laps; twelve rocks reset
-normally at the line.
+Hazard Weave uses 62 rocks without returning to the original uninterrupted
+105-rock wall. Twelve compact rockfalls each occupy two lanes, forcing ten
+meaningful side changes instead of allowing the player to park on one shoulder.
+The four rocks in each formation are staggered across 11–12 segments with small
+lateral variation, so they read as debris instead of stamped 2x2 grids. At
+least 50 clean segments remain before the next formation. The result keeps the
+“lots of rocks” spectacle while making every open lane readable early enough
+to drive smoothly.
+
+The lane closures alternate across straights and bends, then leave the `+8`
+hold and apex clear as an F-Zero-style flow release. Its next closure waits on
+the straight exit, where the right-side mastery line proves the learned
+airbrake technique without hiding a rock in the apex. A final right-side setup
+prepares the `-8` hairpin. After the bend, seven lightly staggered pairs create
+a channel whose center moves monotonically from `+0.36` on the right to `0` at
+the road center. Its collision-safe width tapers to 0.50 and opens again. That
+one-second, single-direction corridor is the sustained thread-the-needle
+capstone, not another left-or-right slalom choice.
+
+Six single cones sit between formations rather than sharing rows with rocks.
+The first four are ordinary steering breadcrumbs placed on a lane-transfer arc;
+the final two revisit the learned `+8` right-airbrake and `-8` left-airbrake
+lines. They are never the safe-route requirement: missing every cone still
+allows a clean finish and a Silver trophy. Each cone can be claimed once
+anywhere in the complete two-lap attempt. A lap-one pickup counts, and a miss
+remains available on lap two; neither lap is disposable rehearsal or a separate
+perfect-lap exam.
 
 Rock contact has four visual stages drawn as cracks on the camera glass. It does
 not reduce speed, campaign hull, money, objective score, or access to the finish,
-and it never wrecks the player. The cracks are mastery feedback: Gold requires
-24 cones and zero hits, Silver requires 20 cones and at most one hit, Bronze
-requires 16 cones and at most three hits. Four hits means no trophy, but the
-lesson still completes and progression continues.
+and it never wrecks the player. At three cracks, a red glass outline and a
+right-edge windshield graphic warn that the next rock would shatter the glass.
+The panel fades toward the center so the driving line stays clear. At four, the
+graphic says training continues but the trophy is lost. Normal story and
+endless races use the same treatment at 25 hull and still wreck on the next
+25-damage rock.
+
+The tiers grade avoidance first and cones only at the top:
+
+- **Gold** — zero cracks and all six unique mastery cones across either lap.
+- **Silver** — no more than one crack; cones optional.
+- **Bronze** — no more than three cracks; cones optional.
+- **No trophy** — four cracks, while completion and the next lesson remain
+  unlocked.
+
+Cone contact now bursts and pops in every mode. The smash juice used to fire only
+when a cone belonged to a sweep objective (Lesson 1); it is now a property of the
+cone itself, so the loose warning cones in Endless and campaign — and Hazard
+Weave's mastery cones — all react when struck.
 
 The finish result is the reward transition. It plays a short fanfare, bursts
 confetti, calls out a perfect clear when appropriate, and records the best
@@ -170,14 +207,50 @@ finished successor exists. The final available lesson offers `Retry` and
 `Title` while naming the next staged lesson as coming soon. Keyboard, controller,
 and pointer input must expose the same choices.
 
-## Staged lessons
+## Lesson 3: Redline
 
-Training Track 3, **Redline**, reuses the loop on clean asphalt and will teach
-the player to reach and recognize top speed. It is currently a locked data
-placeholder. Before enabling it, define how long maximum speed must be held,
-author speed-retention trophy tiers, connect the `top_speed` event, and verify
-that roadside motion, engine audio, and speed streaks communicate the state
-without needing hazards.
+**Player sentence:** Grab the green boosts, then tap or hold the boost button
+to see how fast you can go.
+
+**Skill:** spend a shared 3-slot boost bank deliberately — tap it repeatedly
+to stack a higher top-speed ceiling, or hold it to sustain the current one
+for longer, and read the result off the speed number itself.
+
+The lesson reuses the loop on clean asphalt — no cones, rocks, or hazards, so
+nothing competes with the one verb being taught. Collecting a boost has
+already been taught by nothing at all: the pickup is a green object, its
+color already means "speed" everywhere else in this game's language (zipper
+paint, speed streaks). Pressing the existing boost button (gamepad X/Square,
+keyboard C) is the only new input, and the car's own reaction teaches it —
+the intro is one sentence, no mechanic explanation.
+
+A tap burns one slot for an immediate punch and sustained thrust toward that
+tier's ceiling: 1.35x maxSpeed. A second tap landing shortly after, while the
+first boost is still active, spends another slot and raises the ceiling to
+1.5x; a third tap to 1.65x.
+Holding the button instead of tapping spends slots over time to extend the
+current tier's duration rather than raise it — the same bank, spent on
+height or on length, never both at full effect. When a boost's active window
+ends, its ceiling eases back down over about a second rather than cutting
+off, so the "wearing off" is visible in both the boost gauge and the speed
+number, not just declared.
+
+Three one-use boosts form a center-left-right skill line across lap one. The
+first sits on a clean recovery straight, the second asks for the inside of a
+medium bend, and the third revisits the learned airbrake line through the +8
+corner. They stay collected at the lap line, so the opening straight of lap
+two is visually clean: tap-tap-tap there for the short 1.65x redline payoff,
+or hold the same three-slot bank at tier one for a longer, safer burn. A
+missed pickup remains available on lap two as recovery, but costs the ideal
+runway setup.
+
+**Medals are read by speed, not by counting boosts** — the HUD never shows a
+tap count, only the live speed number and the boost gauge's own fill/afterburn
+graphic. Internally this reuses Training's existing `count_event` +
+`scoring.thresholds` machinery exactly like every other lesson: the
+`top_speed` event fires with the highest tap-stack tier ever reached this
+race (1/2/3), and the authored thresholds turn that into Bronze at tier 1,
+Silver at tier 2, Gold at tier 3 — no bespoke scoring code for this lesson.
 
 Training Track 4, **Air School**, introduces ramps and an airtime objective.
 Four gold/cyan ramp approaches are staged around the shared loop for the first
@@ -267,11 +340,11 @@ The initial Training mode track list is fixed in this order:
 
 1. Cone Control — steering and line acquisition; cones only, no damage.
 2. Hazard Weave — follow target cones through rocks and read camera damage.
-3. Redline — reach top speed and learn its handling/audio/visual state.
+3. Redline — spend the boost gauge deliberately: tap to stack, hold to sustain.
 4. Air School — acquire ramp approaches and build controlled airtime.
 
-Warning reads, zippers, stored nitro, surface changes, and combo lines remain
-future curriculum candidates. Proving Ground combines the completed curriculum
+Warning reads, zippers, surface changes, and combo lines remain future
+curriculum candidates. Proving Ground combines the completed curriculum
 as the first Story race; it is not a fifth Training track.
 
 Later lessons may add optional mastery targets, but their required objective
