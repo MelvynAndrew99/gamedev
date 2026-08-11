@@ -154,10 +154,12 @@ base wreck score attack, not a boss or a lap-limited race. Exactly three
 collision-capable rivals stay in circulation so the road retains passing space
 and the encounter reads like a Burnout-style pack rather than a moving wall.
 Players use familiar racing inputs: bank boost, line up a rival, and ram it
-while boost is live. No special attack-button timing is required. Ordinary
-contact produces a small physical ricochet but never accumulates hidden damage
-or earns credit; this keeps the takedown rule visible and consistent. Each
-boosted takedown awards one bounded boost slot.
+while boost is live for an instant wreck. As a lower-power alternative, two
+committed non-boost side shunts against the same rival generation also wreck
+it. The first side hit visibly staggers the car and announces that one hit
+remains. No special attack-button timing is required. Ordinary rear contact
+and passive rubbing produce a small physical ricochet but never accumulate
+damage or earn credit. Each takedown awards one bounded boost slot.
 
 Six one-shot green clock cones add two seconds each, up to 12 bonus seconds;
 laps and checkpoints never add time. Five evenly distributed boost packs,

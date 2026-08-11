@@ -133,6 +133,11 @@ export class RivalPack {
       contactCooldown: 0,
       targetLane: x,
       steer: 0,
+      // Render-only pose. Physics and contact always read position/x above;
+      // these fields advance through the unused fraction of the fixed step so
+      // 120/144Hz displays do not show a 60Hz rival hopping over a smooth road.
+      renderPosition: wrap(position, this.trackLength),
+      renderX: x,
       attackSide: 0,
       telegraph: 0,
       airborne: false,
@@ -246,6 +251,24 @@ export class RivalPack {
   // The renderer/integration layer gets stable object identities. It should
   // treat these as read-only; setCount merely hides and restores pool members.
   get views() {
+    return this.activeViews;
+  }
+
+  get renderViews() {
+    this.refreshRenderPoses();
+    return this.activeViews;
+  }
+
+  refreshRenderPoses() {
+    const residual = clamp(this.accumulator, 0, RIVAL_FIXED_STEP);
+    for (const rival of this.activeViews) {
+      updateRivalRenderPose(
+        rival,
+        residual,
+        this.trackLength,
+        this.t.laneRate,
+      );
+    }
     return this.activeViews;
   }
 
@@ -742,6 +765,31 @@ export function distantPaceCorrection(signedPlayerDistance, segmentLength, tunin
   return distanceSegments > 0
     ? amount * t.catchUpLimit
     : -amount * t.slowDownLimit;
+}
+
+// Extrapolate only across the unspent portion of one fixed simulation step.
+// This is deliberately presentation-only: collision, AI, timers, and scoring
+// continue to consume position/x. Respawns and circulation set their physical
+// position directly, so there is no interpolation path across a teleport.
+export function updateRivalRenderPose(
+  rival,
+  residualSeconds,
+  trackLength,
+  laneRate = DEFAULT_RIVAL_TUNING.laneRate,
+) {
+  const residual = clamp(finite(residualSeconds, 0), 0, RIVAL_FIXED_STEP);
+  rival.renderPosition = wrap(
+    finite(rival.position, 0) + Math.max(0, finite(rival.speed, 0)) * residual,
+    positive(trackLength, DEFAULT_RIVAL_TUNING.segmentLength * 100),
+  );
+  rival.renderX = clamp(
+    finite(rival.x, 0) +
+      clamp(finite(rival.steer, 0), -1, 1) *
+      positive(laneRate, DEFAULT_RIVAL_TUNING.laneRate) * residual,
+    -1.75,
+    1.75,
+  );
+  return rival;
 }
 
 export function wrappedDelta(from, to, length) {

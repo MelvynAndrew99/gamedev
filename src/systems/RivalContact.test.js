@@ -5,6 +5,7 @@ import {
   attackIntent,
   classifyRivalContact,
   qualifiesRivalTakedown,
+  rivalHitResolution,
   rivalContactTraceEligible,
   rivalDamagePolicy,
   resolveRivalContact,
@@ -104,6 +105,35 @@ test('only a boosted deliberate hit qualifies as a Rival School takedown', () =>
   assert.equal(qualifiesRivalTakedown(ram, true), true);
   assert.equal(qualifiesRivalTakedown({ deliberate: false, takedownForce: true }, true), false);
   assert.equal(qualifiesRivalTakedown(null, true), false);
+});
+
+test('two committed non-boost side hits defeat a rival while rear bumps do not stack', () => {
+  const sidePush = {
+    kind: 'side_push', deliberate: true, takedownForce: true,
+  };
+  assert.deepEqual(rivalHitResolution(sidePush, false, 2), {
+    takedown: false,
+    stabilityDamage: 1,
+    sideDamage: true,
+    boostedTakedown: false,
+  });
+  assert.deepEqual(rivalHitResolution(sidePush, false, 1), {
+    takedown: true,
+    stabilityDamage: 1,
+    sideDamage: true,
+    boostedTakedown: false,
+  });
+
+  const rearRam = {
+    kind: 'rear_ram', deliberate: true, takedownForce: true,
+  };
+  assert.deepEqual(rivalHitResolution(rearRam, false, 1), {
+    takedown: false,
+    stabilityDamage: 0,
+    sideDamage: false,
+    boostedTakedown: false,
+  });
+  assert.equal(rivalHitResolution(rearRam, true, 2).takedown, true);
 });
 
 test('a later stored trace cannot contact a rival wrecked earlier in the render frame', () => {

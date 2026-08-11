@@ -243,7 +243,7 @@ test('one rival ID occupies exactly one pooled sprite', () => {
   renderer.rivalPool = Array.from({ length: 6 }, () => ({
     visible: false,
     setFrame() { return this; },
-    setPosition() { return this; },
+    setPosition(x, y) { this.x = x; this.y = y; return this; },
     setDisplaySize() { return this; },
     setTint() { return this; },
     setAlpha() { return this; },
@@ -253,7 +253,8 @@ test('one rival ID occupies exactly one pooled sprite', () => {
   renderer.rivalShadows = chainable();
   const rival = {
     id: 'rival-cyan', active: true, state: 'cruise', position: 0,
-    x: 0, steer: 0, color: 0x00e5ff,
+    renderPosition: 0, x: -0.8, renderX: 0.25,
+    steer: 0, color: 0x00e5ff,
     screen: { x: 0, y: 0, width: 0, visible: false },
   };
 
@@ -262,6 +263,11 @@ test('one rival ID occupies exactly one pooled sprite', () => {
     renderer.rivalPool.map((sprite, index) => sprite.visible ? index : null)
       .filter((index) => index !== null),
     [0],
+  );
+  assert.equal(
+    renderer.rivalPool[0].x,
+    535,
+    'world projection consumes the smooth render lane, not the fixed physics lane',
   );
 });
 

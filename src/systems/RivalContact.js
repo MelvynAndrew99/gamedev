@@ -171,13 +171,30 @@ export function classifyRivalContact(contact, options = {}) {
   };
 }
 
-// Rival School's current lesson rule is intentionally binary and visible:
-// contact can create a ricochet, but only contact made during live boost can
-// remove a car. Keeping the gate pure prevents hidden stability damage from
-// quietly turning ordinary bumps into later takedowns.
+// Boost remains the one-hit takedown rule. The separate resolution policy
+// below may also author a visible two-hit side-shunt route without weakening
+// this instant-wreck gate.
 export function qualifiesRivalTakedown(classification, boostActive = false) {
   return !!boostActive && !!classification?.deliberate &&
     !!classification?.takedownForce;
+}
+
+export function rivalHitResolution(
+  classification,
+  boostActive = false,
+  stability = 2,
+) {
+  const boostedTakedown = qualifiesRivalTakedown(classification, boostActive);
+  const sideDamage = !boostActive &&
+    classification?.kind === 'side_push' &&
+    classification?.deliberate === true;
+  const remaining = Math.max(0, Math.floor(Number(stability) || 0));
+  return Object.freeze({
+    takedown: boostedTakedown || (sideDamage && remaining <= 1),
+    stabilityDamage: sideDamage ? 1 : 0,
+    sideDamage,
+    boostedTakedown,
+  });
 }
 
 // Stored fixed-step traces describe what existed during that step, but an

@@ -152,6 +152,84 @@ test('moving-player context is interpolated identically at 30, 60, and 120Hz', (
   assert.deepEqual(simulate(60), simulate(120));
 });
 
+test('render-only poses remove rival cadence judder at 60, 120, and 144Hz', () => {
+  const simulate = (hz) => {
+    const pack = new RivalPack({
+      count: 1,
+      maxCount: 1,
+      aggression: 0,
+      spawns: [{ id: 'pace-car', segmentsAhead: 14, offset: 0, pace: 1 }],
+    }, tuning, model);
+    const dt = 1 / hz;
+    let player = { position: 0, x: 0, speed: 12000, airborne: false };
+    const relativeDistances = [];
+    for (let frame = 0; frame < hz; frame += 1) {
+      const previousPlayer = { ...player };
+      player = {
+        ...player,
+        position: (player.position + player.speed * dt) % model.trackLength,
+      };
+      pack.update(dt, { previousPlayer, player });
+      const rival = pack.renderViews[0];
+      relativeDistances.push(
+        wrappedDelta(player.position, rival.renderPosition, model.trackLength),
+      );
+    }
+    return Math.max(...relativeDistances) - Math.min(...relativeDistances);
+  };
+
+  assert.ok(simulate(60) < 1e-6);
+  assert.ok(simulate(120) < 1e-6);
+  assert.ok(simulate(144) < 1e-6);
+});
+
+test('reading high-refresh render poses cannot change deterministic rival mechanics', () => {
+  const simulate = (readRenderPose) => {
+    const pack = new RivalPack({ ...config, aggression: 0 }, tuning, model);
+    const dt = 1 / 144;
+    let player = { position: 2500, x: -0.2, speed: 12000, airborne: false };
+    for (let frame = 0; frame < 144 * 12; frame += 1) {
+      const previousPlayer = { ...player };
+      player = {
+        ...player,
+        position: (player.position + player.speed * dt) % model.trackLength,
+      };
+      pack.update(dt, { previousPlayer, player });
+      if (readRenderPose) void pack.renderViews;
+    }
+    return { state: snapshot(pack), events: pack.consumeEvents() };
+  };
+
+  assert.deepEqual(simulate(true), simulate(false));
+});
+
+test('render extrapolation wraps cleanly and never blends across circulation', () => {
+  const length = 100000;
+  const pack = new RivalPack({
+    count: 1,
+    maxCount: 1,
+    aggression: 0,
+    circulation,
+    spawns: [{ id: 'wrap-car', position: length - 50, offset: 0.5, pace: 1 }],
+  }, circulationTuning, { trackLength: length });
+  const player = { position: 50000, x: 0, speed: 12000, airborne: false };
+
+  pack.update(1 / 120, { previousPlayer: player, player });
+  assert.ok(pack.renderViews[0].renderPosition < 100, 'visual pose wraps at the lap seam');
+
+  const rival = pack.views[0];
+  const oldPosition = rival.position;
+  pack.placeCirculatingRival(rival, player, 'ahead', 'test');
+  const relocatedPosition = rival.position;
+  const renderedPosition = pack.renderViews[0].renderPosition;
+  const visualTravel = wrappedDelta(relocatedPosition, renderedPosition, length);
+  assert.ok(visualTravel >= 0 && visualTravel < tuning.segmentLength);
+  assert.ok(
+    Math.abs(wrappedDelta(oldPosition, renderedPosition, length)) > tuning.segmentLength,
+    'the render pose starts from the new entry instead of crossing the teleport',
+  );
+});
+
 test('only one rival owns the attack token and every tell is at least 650ms', () => {
   const pack = new RivalPack({
     ...config,

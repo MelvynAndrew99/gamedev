@@ -302,8 +302,8 @@ grounded again.
 
 ## Lesson 5: Rival School
 
-**Player sentence:** Score as many wrecks as possible in 35 seconds: collect
-boost, line up a rival, and hit it while boost is live.
+**Player sentence:** Score as many wrecks as possible: boost for an instant
+finish, or commit to two side hits against the same rival.
 
 **Skill:** combine target acquisition, closing speed, committed steering,
 boost timing, threat avoidance, and recovery while hunting a three-car pack.
@@ -317,11 +317,13 @@ rivals so the lesson starts with an immediate attack opportunity. The timeout
 is a normal completion, including when the player scores zero.
 
 The car is the attack verb; there is no extra combat button. A deliberate rear
-ram or side push becomes a takedown only while boost is live. Without boost,
-the rival receives a small lateral knockback/ricochet and recovers—there is no
-hidden damage counter that turns later contact into a surprise wreck. Passive
-equal-speed rubbing, a faster rival hitting the player, and airborne overlap
-never score. A stable rival slot scores only once per generation. After the
+ram or side push becomes an instant takedown while boost is live. Without
+boost, two committed side shunts against the same rival generation also wreck
+it: the first produces a clear stagger and `ONE MORE TO WRECK` confirmation.
+Ordinary rear contact remains a harmless ricochet, so no invisible damage is
+earned by incidental rubbing. Passive equal-speed rubbing, a faster rival
+hitting the player, and airborne overlap never score. A stable rival slot
+scores only once per generation. After the
 local explosion, that identity waits a seeded 2.2–3.4 seconds and then re-enters
 alone with collision grace. Re-entry rotates between distant-ahead quarry and
 behind-camera challengers, with varied lanes and distances instead of a fixed

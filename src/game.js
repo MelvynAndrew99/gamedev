@@ -9,6 +9,12 @@ import { HudScene } from './scenes/HudScene.js';
 import { GarageScene } from './scenes/GarageScene.js';
 import { TRACKS, TRAINING_TRACKS } from './tracks/index.js';
 import { RACER } from './systems/RacerState.js';
+import { presentationFpsLimit } from './systems/FrameRatePolicy.js';
+
+// Emergency presentation fallback for unusual display/browser combinations.
+// Normal play follows requestAnimationFrame and uses smooth render-only rival
+// poses. `?fps=60` caps the complete game loop without changing saved data.
+const fpsLimit = presentationFpsLimit(window.location.search);
 
 const config = {
   type: Phaser.AUTO,
@@ -20,6 +26,10 @@ const config = {
     // Phaser 4 defaults this to false. Keep Phaser 3's pixel positioning
     // behavior so sprites do not shimmer at fractional screen coordinates.
     roundPixels: true,
+  },
+  fps: {
+    target: 60,
+    limit: fpsLimit,
   },
   input: { gamepad: true },
   scene: [TitleScene, GameScene, GarageScene, HudScene], // first boots; Hud is launched by GameScene

@@ -6,9 +6,9 @@
   "finish": "objectives",
   "music": "training-loop",
   "environment": "training-loop",
-  "intro": "Boost into rivals to wreck them. Green clock cones add 2 seconds; normal hits ricochet.",
+  "intro": "Boost for an instant wreck, or land two committed side hits. Green clocks add 2 seconds.",
   "design": {
-    "focus": "Teach readable rival threats and satisfying speed-weighted takedowns in a three-car score attack.",
+    "focus": "Teach instant boosted takedowns and a readable two-hit side-shunt alternative in a three-car score attack.",
     "pacing": "Three persistent rival identities circulate around the player as individuals. Passed cars recover from behind, escaped cars remain chase targets ahead, and wrecked cars rejoin with varied lanes and staggered delays instead of returning as waves."
   },
   "timedScoreAttack": {

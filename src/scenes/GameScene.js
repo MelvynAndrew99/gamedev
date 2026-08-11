@@ -43,7 +43,7 @@ import { RivalPack } from '../entities/RivalPack.js';
 import {
   attackIntent,
   classifyRivalContact,
-  qualifiesRivalTakedown,
+  rivalHitResolution,
   rivalContactTraceEligible,
   rivalDamagePolicy,
   resolveRivalContact,
@@ -293,7 +293,7 @@ export class GameScene extends Phaser.Scene {
       if (padNow.b && !padPrev.b) this.quitToTitle();
       this.renderer.render(
         this.model, this.player, 0, 0, this.sceneryDistance,
-        this.rivalPack?.views,
+        this.rivalPack?.renderViews,
       );
       return; // no movement, collisions, or race time behind the briefing
     }
@@ -308,7 +308,7 @@ export class GameScene extends Phaser.Scene {
         speedPercent,
         this.speedLineBurst,
         this.sceneryDistance,
-        this.rivalPack?.views,
+        this.rivalPack?.renderViews,
       );
       return; // deliberate freeze: no race clock, movement, or collisions
     }
@@ -489,7 +489,7 @@ export class GameScene extends Phaser.Scene {
       speedPercent,
       this.speedLineBurst,
       this.sceneryDistance,
-      this.rivalPack?.views,
+      this.rivalPack?.renderViews,
     );
 
     // Steering FRAMES: 0=hard-left, 1=left, 2=straight, 3=right, 4=hard-right.
@@ -898,12 +898,12 @@ export class GameScene extends Phaser.Scene {
       ...clock.view,
       takedowns: this.timedScoreAttack?.takedowns ?? this.rivalMetrics.takedowns,
       lap: this.race?.lap ?? 1,
-      rivals: this.rivalPack.rivals
+      rivals: this.rivalPack.renderViews
         .filter((rival) => rival.active && !rival.eliminated)
         .map((rival) => ({
           id: rival.id,
           generation: rival.generation,
-          position: rival.position,
+          position: rival.renderPosition,
           state: rival.state,
           color: rival.color,
           active: rival.active,
@@ -1077,10 +1077,16 @@ export class GameScene extends Phaser.Scene {
       if (outcome.deliberate) {
         this.rivalMetrics.deliberateHits += 1;
         this.recordObjective('rival_hit');
-        // Rival School now has one unambiguous combat rule: only a committed
-        // hit while boost is live can wreck. Ordinary rams ricochet the target
-        // off-line but never accumulate invisible damage.
-        const decisive = qualifiesRivalTakedown(outcome, input.boostActive);
+        // Boost remains the clean one-hit finish. A committed non-boost side
+        // shunt uses the rival's existing two-point stability: the first hit
+        // visibly staggers it and says one remains; the second finishes it.
+        // Rear bumps and passive rubs never feed this route.
+        const hitResolution = rivalHitResolution(
+          outcome,
+          input.boostActive,
+          rival.stability,
+        );
+        const decisive = hitResolution.takedown;
         const scoreTime = step.time;
         const scoreOpen = !this.timedScoreAttack ||
           this.timedScoreAttack.canScoreAt(scoreTime);
@@ -1115,10 +1121,10 @@ export class GameScene extends Phaser.Scene {
             'success',
           );
         } else {
-          pack.stagger(rival.id, {
+          const stagger = pack.stagger(rival.id, {
             side: outcome.side,
-            force: 0.85,
-            damage: false,
+            force: hitResolution.sideDamage ? 1 : 0.85,
+            damage: hitResolution.stabilityDamage > 0,
           });
           MUSIC.playRivalImpact({
             kind: 'slam',
@@ -1128,8 +1134,10 @@ export class GameScene extends Phaser.Scene {
           this.startRivalFx('slam', rival);
           if (this.rivalHintCooldown <= 0) {
             this.pushRivalHudEvent(
-              'RICOCHET  •  BOOST TO WRECK',
-              'info',
+              hitResolution.sideDamage && stagger?.stability === 1
+                ? 'SIDE HIT  •  ONE MORE TO WRECK'
+                : 'RICOCHET  •  BOOST OR HIT THE SIDE',
+              hitResolution.sideDamage ? 'warning' : 'info',
             );
             this.rivalHintCooldown = 1.2;
           }

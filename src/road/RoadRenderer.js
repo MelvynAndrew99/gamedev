@@ -593,17 +593,21 @@ export class RoadRenderer {
       for (let i = 0; i < rivals.length && i < this.rivalPool.length; i++) {
         const rival = rivals[i];
         if (!rival?.active || rival.state === 'wrecked') continue;
-        const rivalSeg = model.findSegment(rival.position);
+        const renderPosition = Number.isFinite(rival.renderPosition)
+          ? rival.renderPosition
+          : rival.position;
+        const renderX = Number.isFinite(rival.renderX) ? rival.renderX : rival.x;
+        const rivalSeg = model.findSegment(renderPosition);
         if (rivalSeg.index !== seg.index) continue;
 
-        const local = ((rival.position % t.segmentLength) + t.segmentLength) %
+        const local = ((renderPosition % t.segmentLength) + t.segmentLength) %
           t.segmentLength / t.segmentLength;
         const lerp = (a, b) => a + (b - a) * local;
         const scale = lerp(seg.p1.screen.scale, seg.p2.screen.scale);
         const roadX = lerp(seg.p1.screen.x, seg.p2.screen.x);
         const roadY = lerp(seg.p1.screen.y, seg.p2.screen.y);
         const roadHalfW = lerp(seg.p1.screen.w, seg.p2.screen.w);
-        const x = roadX + rival.x * roadHalfW;
+        const x = roadX + renderX * roadHalfW;
         const projectedHullW = Math.max(
           0,
           0.28 * scale * t.roadWidth * (this.w / 2),
