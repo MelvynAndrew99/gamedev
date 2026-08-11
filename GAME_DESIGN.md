@@ -128,7 +128,8 @@ explicitly says training continues and the trophy is lost. Story and Endless
 show the corresponding hull warning at 25 health and still wreck on the next
 rock.
 
-Redline and Air School are Training Levels 3 and 4 on that same geometry.
+Redline, Air School, and Rival School are Training Levels 3, 4, and 5 on that
+same geometry.
 Redline teaches the boost gauge — tapping stacks the top-speed ceiling,
 holding sustains it — read by the speed number and graded Bronze/Silver/Gold
 on the highest tier reached; see [training_levels.md](./training_levels.md)
@@ -147,6 +148,29 @@ and ramp contact merge into one launch beat instead of stacking popups, shakes,
 or risers. Training result screens
 explicitly offer Retry and Next Track instead of treating completion as an
 automatic return to the title.
+
+Rival School introduces the Story campaign's moving opposition as a timed
+three-car elimination hunt, not a boss or a fixed-lap race. Players wreck each
+stable rival ID with familiar racing inputs: catch it with a meaningful speed
+edge and ram from behind, or hold a committed steering line until the rival is
+pushed beyond the road edge. No special attack-button timing is required;
+passive equal-speed rubbing never earns credit. Once the alignment and closing
+speed gate is met, a rear ram finishes the rival in one readable impact; weak
+contact explains whether the player needs more speed or a cleaner line. Each
+takedown permanently removes that car and awards one bounded boost slot.
+
+The event starts with 35 seconds. Every completed circuit adds 8 seconds and
+six cyan clock-faced cones add 2 seconds once per attempt, with a 45-second clock cap.
+Laps are unlimited: the attempt ends only when all three cars are gone or time
+expires. Distant-only staging keeps living targets findable, then fades before
+contact so every impact is resolved by real relative speed and steering. The
+course ribbon shows all living rivals by stable color and shape, including the
+nearest wrapped copy at the start-line seam; TIME and CARS
+LEFT replace the persistent objective checklist. Training attacks use local
+windscreen grading and a small momentum tax, never campaign hull or a wreck.
+Gold combines all three takedowns, the 120 ms grounded clean-line rule,
+restrained damage, and a fast clear. A timed-out attempt still preserves earned
+training progress, so learning never becomes a Story progression gate.
 
 Proving Ground is the first Story race. It uses the same geometry with campaign
 warnings, hazards, route offers, rewards, normal three-lap finish rules, and the

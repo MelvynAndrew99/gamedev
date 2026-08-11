@@ -13,6 +13,18 @@
 import { getEnvironment } from '../config/environments.js';
 import { ParallaxBackground } from './ParallaxBackground.js';
 import { TracksideScenery } from './TracksideScenery.js';
+import { carSpriteFrame } from '../systems/AirtimeFx.js';
+
+export function rivalRenderAlpha(rival = {}) {
+  const telegraphAlpha = rival.state === 'telegraph'
+    ? 0.72 + Math.sin((rival.stateTime ?? 0) * 26) * 0.22
+    : 1;
+  const graceTotal = Math.max(0, Number(rival.stagingGraceTotal) || 0);
+  const stagingAlpha = graceTotal > 0
+    ? 1 - Math.min(1, Math.max(0, (Number(rival.stagingGrace) || 0) / graceTotal))
+    : 1;
+  return Math.min(1, Math.max(0, telegraphAlpha * stagingAlpha));
+}
 
 export class RoadRenderer {
   constructor(scene, tuning, environmentId = 'endless') {
@@ -62,9 +74,35 @@ export class RoadRenderer {
         scene.add.image(0, 0, 'cone').setOrigin(0.5, 1).setDepth(5).setVisible(false)
       );
     }
+
+    // Moving rivals keep stable identity and therefore use a separate fixed
+    // pool from consumable road props. Six is the system stress cap; Training
+    // 5 deliberately activates at most three.
+    this.rivalPool = [];
+    for (let i = 0; i < 6; i++) {
+      this.rivalPool.push(
+        scene.add.sprite(0, 0, 'car', carSpriteFrame(2, 0))
+          .setOrigin(0.5, 1)
+          .setDepth(7)
+          .setVisible(false),
+      );
+    }
+    this.rivalMarkers = scene.add.graphics().setDepth(7);
+    this.rivalShadows = scene.add.graphics().setDepth(6);
+    // Clock cones share the physical cone sprite, but this pooled world layer
+    // adds a literal clock ring + hands so the time reward is never encoded by
+    // cyan tint alone. One Graphics object is cleared/reused every frame.
+    this.timeBonusMarkers = scene.add.graphics().setDepth(6);
   }
 
-  render(model, player, speedPercent = 0, speedBurst = 0, sceneryDistance = player.position) {
+  render(
+    model,
+    player,
+    speedPercent = 0,
+    speedBurst = 0,
+    sceneryDistance = player.position,
+    rivals = [],
+  ) {
     const t = this.t;
     const g = this.g;
     g.clear();
@@ -173,6 +211,7 @@ export class RoadRenderer {
     this.trackside.render(model, base);
     this.renderGates(model, base);
     this.renderSprites(model, base);
+    this.renderRivals(model, base, player, rivals);
     this.drawSpeedLines();
   }
 
@@ -466,6 +505,7 @@ export class RoadRenderer {
   // coords; clipped segments are skipped along with their sprites.
   renderSprites(model, base) {
     const t = this.t;
+    this.timeBonusMarkers.clear();
     let poolI = 0;
     for (let n = t.drawDistance - 1; n >= 0; n--) {
       const seg = model.segmentAt(base, n);
@@ -479,6 +519,8 @@ export class RoadRenderer {
         ) continue;
         const img = this.pool[poolI++];
         img.setTexture(s.key);
+        if (s.timeBonusSeconds > 0) img.setTint(0x00e5ff);
+        else img.clearTint();
         // Lateral placement: same projection term as the road edges.
         img.x = x + scale * (s.offset * t.roadWidth) * (this.w / 2);
         img.y = y;
@@ -486,9 +528,128 @@ export class RoadRenderer {
         const dw = s.view * scale * t.roadWidth * (this.w / 2);
         img.setDisplaySize(dw, dw * (img.height / img.width));
         img.setVisible(true);
+        if (s.timeBonusSeconds > 0) {
+          const radius = Math.max(3, Math.min(11, dw * 0.32));
+          const clockX = img.x;
+          const clockY = img.y - dw * (img.height / img.width) - radius * 0.8;
+          // Dark keyline then bright face: recognizable by ring/hands even in
+          // grayscale and legible against both road and sky bands.
+          this.timeBonusMarkers.lineStyle(Math.max(3, radius * 0.42), 0x080812, 0.9);
+          this.timeBonusMarkers.strokeCircle(clockX, clockY, radius);
+          this.timeBonusMarkers.lineBetween(clockX, clockY, clockX, clockY - radius * 0.52);
+          this.timeBonusMarkers.lineBetween(clockX, clockY, clockX + radius * 0.45, clockY);
+          this.timeBonusMarkers.lineStyle(Math.max(1, radius * 0.18), 0xffffff, 1);
+          this.timeBonusMarkers.strokeCircle(clockX, clockY, radius);
+          this.timeBonusMarkers.lineBetween(clockX, clockY, clockX, clockY - radius * 0.52);
+          this.timeBonusMarkers.lineBetween(clockX, clockY, clockX + radius * 0.45, clockY);
+        }
       }
     }
     for (let i = poolI; i < this.pool.length; i++) this.pool[i].setVisible(false);
+  }
+
+  renderRivals(model, base, player, rivals = []) {
+    this.rivalMarkers.clear();
+    this.rivalShadows.clear();
+    this.rivalPool.forEach((sprite) => sprite.setVisible(false));
+    if (!rivals?.length) return;
+    rivals.forEach((rival) => {
+      if (rival?.screen) rival.screen.visible = false;
+    });
+
+    const t = this.t;
+    // Use the road's already-projected segment endpoints, walking far→near so
+    // the same depth ordering contract as static props is preserved.
+    for (let n = t.drawDistance - 1; n >= 0; n--) {
+      const seg = model.segmentAt(base, n);
+      if (seg.clipped) continue;
+      for (let i = 0; i < rivals.length && i < this.rivalPool.length; i++) {
+        const rival = rivals[i];
+        if (!rival?.active || rival.state === 'wrecked') continue;
+        const rivalSeg = model.findSegment(rival.position);
+        if (rivalSeg.index !== seg.index) continue;
+
+        const local = ((rival.position % t.segmentLength) + t.segmentLength) %
+          t.segmentLength / t.segmentLength;
+        const lerp = (a, b) => a + (b - a) * local;
+        const scale = lerp(seg.p1.screen.scale, seg.p2.screen.scale);
+        const roadX = lerp(seg.p1.screen.x, seg.p2.screen.x);
+        const roadY = lerp(seg.p1.screen.y, seg.p2.screen.y);
+        const roadHalfW = lerp(seg.p1.screen.w, seg.p2.screen.w);
+        const x = roadX + rival.x * roadHalfW;
+        const visualW = Math.max(2, 0.28 * scale * t.roadWidth * (this.w / 2));
+        const sprite = this.rivalPool[i];
+        const steerFrame = rival.steer < -0.6 ? 0
+          : rival.steer < -0.2 ? 1
+            : rival.steer <= 0.2 ? 2
+              : rival.steer <= 0.6 ? 3 : 4;
+        sprite
+          .setFrame(carSpriteFrame(steerFrame, 0))
+          .setPosition(x, roadY)
+          .setDisplaySize(visualW, visualW * 0.875)
+          .setTint(rival.color ?? 0xff6b6b)
+          .setAlpha(rivalRenderAlpha(rival))
+          .setVisible(true);
+
+        rival.screen.x = x;
+        rival.screen.y = roadY;
+        rival.screen.width = visualW;
+        rival.screen.visible = true;
+        this.rivalShadows.fillStyle(0x05050a, 0.42);
+        this.rivalShadows.fillEllipse(
+          x,
+          roadY - Math.max(1, visualW * 0.03),
+          visualW * 0.92,
+          Math.max(2, visualW * 0.18),
+        );
+
+        if (rival.state === 'telegraph' || rival.state === 'attack') {
+          const markerY = roadY - visualW * 1.04;
+          const size = Math.max(3, visualW * 0.16);
+          const color = rival.state === 'attack' ? 0xff2d55 : 0xffcf3f;
+          // Downward warning diamond plus a directional chevron: readable by
+          // shape and motion even without its yellow→red color transition.
+          this.rivalMarkers.fillStyle(color, 1);
+          this.rivalMarkers.fillTriangle(
+            x, markerY + size,
+            x - size, markerY - size,
+            x + size, markerY - size,
+          );
+          const side = rival.attackSide || 1;
+          this.rivalMarkers.lineStyle(Math.max(1, size * 0.22), 0xffffff, 0.95);
+          this.rivalMarkers.lineBetween(
+            x - side * size * 1.5, markerY,
+            x - side * size * 0.4, markerY,
+          );
+          this.rivalMarkers.lineBetween(
+            x - side * size * 0.4, markerY,
+            x - side * size * 0.9, markerY - size * 0.45,
+          );
+        }
+      }
+    }
+
+    // Threats may begin just behind the projection camera. Keep their side
+    // readable with a world-layer edge chevron instead of adding HUD prose.
+    for (const rival of rivals) {
+      if (!rival?.active || rival.screen?.visible ||
+          (rival.state !== 'telegraph' && rival.state !== 'attack')) continue;
+      const left = rival.x < (player?.x ?? 0);
+      const x = left ? 34 : this.w - 34;
+      const y = this.h - 130;
+      const color = rival.state === 'attack' ? 0xff2d55 : 0xffcf3f;
+      this.rivalMarkers.fillStyle(color, 0.95);
+      this.rivalMarkers.fillTriangle(
+        x + (left ? -9 : 9), y,
+        x + (left ? 8 : -8), y - 10,
+        x + (left ? 8 : -8), y + 10,
+      );
+      this.rivalMarkers.lineStyle(2, 0xffffff, 0.9);
+      this.rivalMarkers.lineBetween(
+        x + (left ? 12 : -12), y - 11,
+        x + (left ? 12 : -12), y + 11,
+      );
+    }
   }
 
   // World -> camera -> screen. THE projection:

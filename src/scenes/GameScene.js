@@ -38,6 +38,17 @@ import {
 } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
 import { Boost } from '../entities/Boost.js';
+import { RivalPack } from '../entities/RivalPack.js';
+import {
+  attackIntent,
+  classifyRivalContact,
+  rivalDamagePolicy,
+  resolveRivalContact,
+  sweptRivalContact,
+} from '../systems/RivalContact.js';
+import { createTrackDiscipline, updateTrackDiscipline } from '../systems/TrackDiscipline.js';
+import { TimedElimination } from '../systems/TimedElimination.js';
+import { rivalFxSpec } from '../systems/RivalFx.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
 import { MUSIC } from '../audio/MusicEngine.js';
@@ -90,6 +101,49 @@ export class GameScene extends Phaser.Scene {
       this.trackData?.environment ?? this.trackData?.id ?? 'endless',
     );
     this.player = new Player(TUNING);
+    this.rivalPack = this.trackData?.rivals
+      ? new RivalPack(this.trackData.rivals, this.rivalTuning(), this.model)
+      : null;
+    // Racer count is an attempt contract, not a live despawn control. The Lab
+    // can tune 1..6 and Retry to compare densities without making an active
+    // clock unwinnable by hiding one of its target IDs mid-run.
+    this.rivalAttemptCount = this.rivalPack
+      ? Math.min(
+        this.trackData.rivals.maxCount ?? 3,
+        Math.max(1, Math.round(TUNING.rivalCount)),
+      )
+      : 0;
+    this.rivalPack?.setCount(this.rivalAttemptCount);
+    this.rivalMetrics = {
+      deliberateHits: 0,
+      takedowns: 0,
+      boostedTakedowns: 0,
+      damageHits: 0,
+    };
+    this.rivalHudEvents = [];
+    this.rivalHudSequence = 0;
+    this.rivalAttackInput = { direction: 0, remaining: 0 };
+    this.previousRivalInput = { airbrakeL: false, airbrakeR: false };
+    this.rivalPlayerGrace = 0;
+    this.rivalHintCooldown = 0;
+    this.rivalPreviousViews = this.rivalPack?.rivals.map((rival) => ({
+      id: rival.id,
+      position: rival.position,
+      x: rival.x,
+      speed: rival.speed,
+      airborne: rival.airborne,
+    })) ?? [];
+    this.trackDiscipline = createTrackDiscipline();
+    this.timedElimination = this.trackData?.timedElimination && this.rivalPack
+      ? new TimedElimination(
+        this.trackData.timedElimination,
+        this.rivalPack.rivals
+          .slice(0, this.rivalAttemptCount)
+          .map((rival) => rival.id),
+      )
+      : null;
+    this.rivalSchoolCompletePending = 0;
+    this.rivalSchoolView = this.buildRivalSchoolView();
     // Player.position wraps at a campaign lap line. Scenery distance does not,
     // so background drift remains continuous rather than snapping each lap.
     this.sceneryDistance = 0;
@@ -149,6 +203,7 @@ export class GameScene extends Phaser.Scene {
       .setScale(TUNING.carScale)
       .setDepth(10);
     this.createAirtimeVisuals();
+    this.createRivalVisuals();
 
     this.controls = new Controls(this);
     this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
@@ -229,7 +284,10 @@ export class GameScene extends Phaser.Scene {
         this.time.now >= this.briefingAcceptAt
       ) this.dismissObjectiveIntro();
       if (padNow.b && !padPrev.b) this.quitToTitle();
-      this.renderer.render(this.model, this.player, 0, 0, this.sceneryDistance);
+      this.renderer.render(
+        this.model, this.player, 0, 0, this.sceneryDistance,
+        this.rivalPack?.views,
+      );
       return; // no movement, collisions, or race time behind the briefing
     }
 
@@ -243,6 +301,7 @@ export class GameScene extends Phaser.Scene {
         speedPercent,
         this.speedLineBurst,
         this.sceneryDistance,
+        this.rivalPack?.views,
       );
       return; // deliberate freeze: no race clock, movement, or collisions
     }
@@ -253,6 +312,12 @@ export class GameScene extends Phaser.Scene {
     const previousPlayer = {
       position: this.player.position,
       x: this.player.x,
+    };
+    const previousRivalPlayer = {
+      position: this.rivalRoadPosition(this.player.position),
+      x: this.player.x,
+      speed: this.player.speed,
+      airborne: this.player.airborne,
     };
 
     // Boost: tapping stacks the ceiling, holding extends its duration — the
@@ -268,11 +333,24 @@ export class GameScene extends Phaser.Scene {
     input.boostActive = this.boost.tier > 0;
 
     this.player.update(dt, input, this.model);
+    this.updateRivals(dt, input, previousRivalPlayer);
+    this.updateRivalVisuals(dt);
     this.updateAirtimeAudio();
     this.updateAirtimeTraining(dt);
     this.recordTopSpeed();
     this.sceneryDistance += this.player.speed * dt;
     this.maybeStartTrainingTutorial(input);
+
+    if (this.rivalPack) {
+      const discipline = updateTrackDiscipline(this.trackDiscipline, dt, {
+        x: this.player.x,
+        airborne: this.player.airborne,
+      });
+      this.trackDiscipline = discipline.state;
+      if (discipline.justLostCleanLine) {
+        this.pushRivalHudEvent('CLEAN LINE LOST  •  GOLD GONE', 'warning');
+      }
+    }
 
     // Zipper crossings: edge-triggered per strip (kick on entry, re-arm on
     // exit), never consumed — the paint is permanent, the skill is lining
@@ -344,7 +422,16 @@ export class GameScene extends Phaser.Scene {
         // Ordinary cones re-arm at the line; objective-linked mastery cones
         // persist and use trainingConeHits across the complete attempt.
         this.conesThisLap = 0;
-        if (this.mode === 'training') {
+        if (this.timedElimination) {
+          const bonus = this.timedElimination.addLapBonus();
+          if (bonus.awarded > 0) {
+            MUSIC.playTimeBonus({ major: true });
+            this.pushRivalHudEvent(
+              `CHECKPOINT  +${Math.round(bonus.awarded)}s`,
+              'success',
+            );
+          }
+        } else if (this.mode === 'training') {
           const lessonMessage = this.trackData.lapMessages?.[this.race.lap];
           this.showBanner(
             lessonMessage ?? `LAP ${this.race.lap}`,
@@ -357,6 +444,22 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    if (this.timedElimination && !this.done) {
+      if (this.rivalSchoolCompletePending > 0) {
+        this.rivalSchoolCompletePending = Math.max(
+          0,
+          this.rivalSchoolCompletePending - dt,
+        );
+        if (this.rivalSchoolCompletePending === 0) {
+          this.race.finish();
+          this.finishRace();
+        }
+      } else if (this.timedElimination.update(dt, this.race.crossedStart) === 'expired') {
+        this.failTimedElimination();
+      }
+      this.rivalSchoolView = this.buildRivalSchoolView();
+    }
+
     const speedPercent = this.player.speed / TUNING.maxSpeed;
     this.renderer.render(
       this.model,
@@ -364,6 +467,7 @@ export class GameScene extends Phaser.Scene {
       speedPercent,
       this.speedLineBurst,
       this.sceneryDistance,
+      this.rivalPack?.views,
     );
 
     // Steering FRAMES: 0=hard-left, 1=left, 2=straight, 3=right, 4=hard-right.
@@ -643,6 +747,437 @@ export class GameScene extends Phaser.Scene {
         Math.round(45 + strength * 24),
         0.0013 + strength * 0.0012,
       );
+    }
+  }
+
+  createRivalVisuals() {
+    this.rivalFxGraphics = null;
+    this.rivalFxParticles = [];
+    this.rivalWreckGhosts = [];
+    this.rivalFxPulse = null;
+    if (!this.rivalPack) return;
+
+    const colors = [0x00e5ff, 0xff2d95, 0xffcf3f, 0x2ee56b, 0xb58cff, 0xff7a45];
+    this.rivalPack.rivals.forEach((rival, index) => {
+      rival.color = colors[index % colors.length];
+    });
+    this.rivalFxGraphics = this.add.graphics().setDepth(23);
+    this.rivalFxParticles = Array.from({ length: 24 }, () => ({
+      active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, total: 0,
+      color: 0xffffff, size: 3,
+    }));
+    this.rivalWreckGhosts = Array.from({ length: 3 }, () => ({
+      active: false,
+      life: 0,
+      total: 0,
+      vx: 0,
+      vy: 0,
+      spin: 0,
+      sprite: this.add.sprite(0, 0, 'car', carSpriteFrame(2, 0))
+        .setOrigin(0.5, 1)
+        .setDepth(22)
+        .setVisible(false),
+    }));
+  }
+
+  startRivalFx(kind, rival, { boosted = false } = {}) {
+    if (!this.rivalFxGraphics) return;
+    const spec = rivalFxSpec(kind, boosted);
+    const visible = rival?.screen?.visible;
+    const x = visible ? rival.screen.x : this.carSprite.x;
+    const y = visible ? rival.screen.y - rival.screen.width * 0.28 : this.carSprite.y - 28;
+    const side = Math.sign(rival?.x - this.player.x) || 1;
+    const color = kind === 'takedown' ? 0xffcf3f
+      : kind === 'incoming' ? 0xff6b6b
+        : kind === 'slam' ? 0x00e5ff : 0xffffff;
+
+    let activated = 0;
+    for (let index = 0; index < this.rivalFxParticles.length; index++) {
+      const particle = this.rivalFxParticles[index];
+      if (particle.active || activated >= spec.particles) continue;
+      const row = Math.floor(activated / 2);
+      const direction = activated % 2 === 0 ? side : -side;
+      particle.active = true;
+      particle.x = x + direction * (4 + row);
+      particle.y = y;
+      particle.vx = direction * (80 + row * 19) * (kind === 'takedown' ? 1.35 : 1);
+      particle.vy = -(45 + (activated % 5) * 24);
+      particle.life = spec.duration;
+      particle.total = spec.duration;
+      particle.color = activated % 3 === 0 && kind === 'takedown' ? 0x2ee56b : color;
+      particle.size = kind === 'takedown' ? 5 : kind === 'rub' ? 2 : 3;
+      activated += 1;
+    }
+
+    this.rivalFxPulse = {
+      x, y, color, life: spec.flash, total: spec.flash,
+      strength: kind === 'takedown' ? 1.8 : 1,
+    };
+    if (spec.shake > 0) {
+      this.cameras.main.shake(kind === 'takedown' ? 120 : 70, spec.shake);
+    }
+
+    if (spec.ghost) {
+      const ghost = this.rivalWreckGhosts.find((candidate) => !candidate.active) ??
+        this.rivalWreckGhosts[0];
+      ghost.active = true;
+      ghost.life = 0.68;
+      ghost.total = 0.68;
+      ghost.vx = side * 170;
+      ghost.vy = -115;
+      ghost.spin = side * 620;
+      ghost.sprite
+        .setPosition(x, y)
+        .setFrame(carSpriteFrame(2, 0))
+        .setDisplaySize(
+          Math.max(24, rival?.screen?.width ?? 48),
+          Math.max(21, (rival?.screen?.width ?? 48) * 0.875),
+        )
+        .setTint(rival?.color ?? 0xff6b6b)
+        .setAngle(0)
+        .setAlpha(1)
+        .setVisible(true);
+    }
+  }
+
+  updateRivalVisuals(dt) {
+    if (!this.rivalFxGraphics) return;
+    const graphics = this.rivalFxGraphics;
+    graphics.clear();
+    for (const particle of this.rivalFxParticles) {
+      if (!particle.active) continue;
+      particle.life = Math.max(0, particle.life - dt);
+      if (particle.life <= 0) {
+        particle.active = false;
+        continue;
+      }
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.vy += 260 * dt;
+      const alpha = particle.life / particle.total;
+      graphics.fillStyle(particle.color, alpha);
+      graphics.fillRect(particle.x, particle.y, particle.size, particle.size);
+    }
+    if (this.rivalFxPulse?.life > 0) {
+      this.rivalFxPulse.life = Math.max(0, this.rivalFxPulse.life - dt);
+      const progress = 1 - this.rivalFxPulse.life / this.rivalFxPulse.total;
+      graphics.lineStyle(
+        3,
+        this.rivalFxPulse.color,
+        1 - progress,
+      );
+      graphics.strokeCircle(
+        this.rivalFxPulse.x,
+        this.rivalFxPulse.y,
+        (8 + progress * 34) * this.rivalFxPulse.strength,
+      );
+    }
+    for (const ghost of this.rivalWreckGhosts) {
+      if (!ghost.active) continue;
+      ghost.life = Math.max(0, ghost.life - dt);
+      if (ghost.life <= 0) {
+        ghost.active = false;
+        ghost.sprite.setVisible(false);
+        continue;
+      }
+      ghost.sprite.x += ghost.vx * dt;
+      ghost.sprite.y += ghost.vy * dt;
+      ghost.vy += 300 * dt;
+      ghost.sprite.angle += ghost.spin * dt;
+      ghost.sprite.setAlpha(ghost.life / ghost.total);
+    }
+  }
+
+  rivalTuning() {
+    const policy = this.trackData?.rivals?.policy ?? {};
+    return {
+      maxSpeed: TUNING.maxSpeed,
+      basePace: TUNING.rivalPace,
+      segmentLength: TUNING.segmentLength,
+      catchUpLimit: TUNING.rivalCatchupCap,
+      slowDownLimit: policy.maximumSlowDown ?? 0.08,
+      localPaceRadiusSegments: policy.localPaceRadiusSegments ?? 18,
+      fullPaceCorrectionSegments: 40,
+      attackTellSeconds: TUNING.rivalTelegraph,
+      contactCooldownSeconds: TUNING.rivalContactCooldown,
+      minimumAttackInterval: TUNING.rivalAttackCooldown,
+    };
+  }
+
+  buildRivalSchoolView() {
+    if (!this.timedElimination || !this.rivalPack) return null;
+    return {
+      ...this.timedElimination.view,
+      lap: this.race?.lap ?? 1,
+      rivals: this.rivalPack.rivals
+        .filter((rival) =>
+          this.timedElimination.rivalIds.includes(rival.id) && !rival.eliminated
+        )
+        .map((rival) => ({
+          id: rival.id,
+          position: rival.position,
+          state: rival.state,
+          color: rival.color,
+          active: rival.active,
+          eliminated: rival.eliminated,
+        })),
+    };
+  }
+
+  failTimedElimination() {
+    this.stopActiveFeedbackLoops();
+    this.race?.finish();
+    this.done = true;
+    this.trainingAdvanceTo = null;
+    const view = this.timedElimination.view;
+    const target = this.objectives.views.find(
+      (objective) => objective.id === this.trackData.scoring.objective,
+    ) ?? this.objectives.primary;
+    const result = submitTrainingResult(
+      this.trackData,
+      target.progress,
+      this.timedElimination.elapsedSeconds,
+      {
+        damageHits: this.trainingDamageHits,
+        offTrackEvents: this.trackDiscipline.offTrackEvents,
+        total: target.total,
+      },
+    );
+    const trophy = result.trophy
+      ? `${result.trophy.rank.toUpperCase()} TROPHY  ${'★'.repeat(result.trophy.stars)}`
+      : 'NO TROPHY  •  TRAINING RECORDED';
+    this.rivalSchoolView = this.buildRivalSchoolView();
+    this.showBanner(
+      `TIME UP\n${view.carsRemaining} CAR${view.carsRemaining === 1 ? '' : 'S'} LEFT` +
+      `\n${trophy}\n\nRAM FROM BEHIND OR PUSH WIDE\nX / R  RETRY`,
+      0,
+    );
+    this.showTrainingResultActions(false);
+  }
+
+  rivalRoadPosition(cameraPosition = this.player.position) {
+    const length = this.model.trackLength;
+    return ((cameraPosition + TUNING.playerZ) % length + length) % length;
+  }
+
+  pushRivalHudEvent(label, tone = 'info') {
+    this.rivalHudSequence += 1;
+    this.rivalHudEvents.push({
+      sequence: this.rivalHudSequence,
+      label,
+      tone,
+    });
+    // HUD consumers advance by sequence. Keeping a small tail prevents an
+    // unattended Lab session from turning transient feedback into a log.
+    if (this.rivalHudEvents.length > 16) this.rivalHudEvents.shift();
+  }
+
+  updateRivals(dt, input, previousPlayer) {
+    const pack = this.rivalPack;
+    if (!pack) return;
+
+    pack.setCount(this.rivalAttemptCount);
+    pack.setAggression(TUNING.rivalAggression);
+    pack.t.maxSpeed = TUNING.maxSpeed;
+    pack.t.segmentLength = TUNING.segmentLength;
+    pack.setBasePace(TUNING.rivalPace);
+    pack.t.catchUpLimit = Math.min(0.12, Math.max(0, TUNING.rivalCatchupCap));
+    pack.t.attackTellSeconds = Math.max(0.65, TUNING.rivalTelegraph);
+    pack.t.contactCooldownSeconds = Math.max(0.75, TUNING.rivalContactCooldown);
+    pack.t.minimumAttackInterval = Math.max(2.5, TUNING.rivalAttackCooldown);
+
+    const freshAttack = attackIntent(input, this.previousRivalInput);
+    this.previousRivalInput = {
+      airbrakeL: input.airbrakeL,
+      airbrakeR: input.airbrakeR,
+    };
+    if (freshAttack) {
+      this.rivalAttackInput.direction = freshAttack;
+      this.rivalAttackInput.remaining = TUNING.rivalAttackWindow;
+    } else {
+      this.rivalAttackInput.remaining = Math.max(
+        0,
+        this.rivalAttackInput.remaining - dt,
+      );
+      if (this.rivalAttackInput.remaining === 0) this.rivalAttackInput.direction = 0;
+    }
+    this.rivalPlayerGrace = Math.max(0, this.rivalPlayerGrace - dt);
+    this.rivalHintCooldown = Math.max(0, this.rivalHintCooldown - dt);
+
+    const player = {
+      position: this.rivalRoadPosition(),
+      x: this.player.x,
+      speed: this.player.speed,
+      airborne: this.player.airborne,
+      air: this.player.air,
+    };
+    for (const snapshot of this.rivalPreviousViews) {
+      const rival = pack.rivals.find((candidate) => candidate.id === snapshot.id);
+      if (!rival) continue;
+      snapshot.position = rival.position;
+      snapshot.x = rival.x;
+      snapshot.speed = rival.speed;
+      snapshot.airborne = rival.airborne;
+    }
+    pack.update(dt, { previousPlayer, player });
+
+    for (const event of pack.consumeEvents()) {
+      if (event.type !== 'rival_threat') continue;
+      MUSIC.playRivalThreat({ pan: (event.side || 0) * 0.7 });
+      this.pushRivalHudEvent(
+        `${event.side < 0 ? '◀' : '▶'} RIVAL ATTACK  •  DODGE`,
+        'warning',
+      );
+    }
+
+    // Rival bodies advance on a fixed 60Hz clock. On a 120Hz render frame
+    // with no simulation step, testing the moving player against a stale
+    // rival creates an early phantom ram. Contact is resolved only after a
+    // real rival step; the swept test still covers every intervening segment.
+    if (pack.lastStepCount === 0) return;
+
+    // Consume every fixed body interval in chronological order. A 30Hz frame
+    // contains two 60Hz traces, while 120Hz alternates one/zero; this makes the
+    // actual contact step identical rather than quantizing it to render rate.
+    // Stable-ID order remains the simultaneous-contact tie breaker, and one
+    // render frame still resolves at most one authoritative physical result.
+    contactSteps:
+    for (let stepIndex = 0; stepIndex < pack.contactStepCount; stepIndex += 1) {
+      const step = pack.contactSteps[stepIndex];
+      for (const rival of pack.views) {
+        const tracedRival = step.rivals.find((candidate) => candidate.id === rival.id);
+        if (!tracedRival?.current.active || tracedRival.current.state === 'wrecked' ||
+            tracedRival.current.eliminated) continue;
+      const contact = sweptRivalContact(
+        step.previousPlayer,
+        step.player,
+        tracedRival.previous,
+        tracedRival.current,
+        {
+          trackLength: this.model.trackLength,
+          dt: 1 / 60,
+          playerHalfWidth: TUNING.playerW,
+          rivalHalfWidth: TUNING.playerW,
+          longitudinalRadius: TUNING.segmentLength * 0.72,
+        },
+      );
+      const outcome = classifyRivalContact(contact, {
+        attackDirection: this.rivalAttackInput.direction,
+        steeringDirection: Math.sign(this.player.steer),
+        lateralCommitment: Math.abs(this.player.steer),
+        boostActive: input.boostActive,
+        contactCooldown: tracedRival.current.contactCooldown,
+        lowRelativeSpeed: TUNING.maxSpeed * (
+          input.boostActive ? 0.02 : TUNING.rivalTakedownAdvantage
+        ),
+        highRelativeSpeed: TUNING.maxSpeed * 0.1,
+        rivalAttacking: tracedRival.current.state === 'attack',
+        rivalAttackSide: tracedRival.current.attackSide,
+      });
+      if (!outcome) continue;
+
+      resolveRivalContact(this.player, rival, outcome, {
+        playerHalfWidth: TUNING.playerW,
+        rivalHalfWidth: TUNING.playerW,
+        contactCooldownSeconds: Math.max(0.75, TUNING.rivalContactCooldown),
+        minimumSeparation: TUNING.playerW * 2.25,
+        roadLimit: 1.7,
+      });
+      this.rivalAttackInput.remaining = 0;
+      this.rivalAttackInput.direction = 0;
+
+      if (outcome.deliberate) {
+        this.rivalMetrics.deliberateHits += 1;
+        this.recordObjective('rival_hit');
+        const edgeBoot = outcome.kind === 'side_push' && Math.abs(rival.x) >= 1;
+        const decisiveRearRam = outcome.kind === 'rear_ram' && outcome.takedownForce;
+        const stagger = pack.stagger(rival.id, {
+          side: outcome.side,
+          force: edgeBoot || decisiveRearRam ? 1.35 : 1,
+          // Rear impacts wear down stability. Steering contact is positional:
+          // it only wrecks after the rival physically leaves the road.
+          damage: outcome.kind === 'rear_ram' || edgeBoot,
+        });
+        // A clean high-speed rear ram or a steering push that physically
+        // crosses the road edge is decisive. A center-road bump needs a
+        // follow-up, so simply leaning on another car cannot farm wrecks.
+        const decisive = stagger?.stability === 0 || edgeBoot;
+        if (decisive && pack.takeDown(rival.id)) {
+          this.rivalMetrics.takedowns += 1;
+          if (input.boostActive) this.rivalMetrics.boostedTakedowns += 1;
+          this.recordObjective('rival_takedown');
+          if (this.timedElimination?.eliminate(rival.id)) {
+            this.rivalSchoolCompletePending = this.timedElimination.complete ? 0.7 : 0;
+          }
+          this.boost.collect();
+          this.player.hitRecovery = Math.max(this.player.hitRecovery, 0.7);
+          MUSIC.playRivalImpact({
+            kind: 'takedown',
+            pan: outcome.side * 0.65,
+            strength: input.boostActive ? 1 : 0.82,
+          });
+          this.startRivalFx('takedown', rival, { boosted: input.boostActive });
+          this.speedLineBurst = Math.max(this.speedLineBurst, 1);
+          this.pushRivalHudEvent(
+            `WRECKED  •  ${this.timedElimination?.carsRemaining ?? 0} LEFT`,
+            'success',
+          );
+        } else {
+          MUSIC.playRivalImpact({
+            kind: 'slam',
+            pan: outcome.side * 0.6,
+            strength: outcome.takedownForce ? 0.9 : 0.68,
+          });
+          this.startRivalFx('slam', rival, { boosted: input.boostActive });
+          this.pushRivalHudEvent(
+            stagger?.stability === 1 ? 'RAMMED  •  FINISH IT' : 'PUSH THEM WIDE',
+            'info',
+          );
+        }
+      } else if (outcome.kind === 'incoming_attack') {
+        pack.cancelAttack(rival);
+        if (this.rivalPlayerGrace <= 0) {
+          this.rivalMetrics.damageHits += 1;
+          const damage = rivalDamagePolicy(this.mode, TUNING.rivalCampaignDamage);
+          if (damage.trainingHits > 0) {
+            this.trainingDamageHits = Math.min(
+              this.trainingDamageMax || Infinity,
+              this.trainingDamageHits + damage.trainingHits,
+            );
+          } else {
+            if (this.mode === 'endless') this.pop.bust();
+            const wrecked = RACER.damage(damage.persistentHullDamage);
+            if (wrecked) this.onWrecked();
+          }
+          this.player.speed *= 1 - Math.min(0.15, TUNING.rivalContactStrength);
+          this.player.hitRecovery = Math.max(this.player.hitRecovery, TUNING.hitRecoveryTime);
+          this.player.x = Math.max(-1.7, Math.min(1.7,
+            this.player.x - (rival.attackSide || outcome.side || 1) * 0.14));
+          this.rivalPlayerGrace = 0.8;
+          MUSIC.playRivalImpact({
+            kind: 'incoming',
+            pan: outcome.side * 0.65,
+            strength: 0.8,
+          });
+          this.startRivalFx('incoming', rival);
+          this.pushRivalHudEvent('RIVAL HIT  •  RECOVER', 'failure');
+        }
+      } else {
+        this.player.speed *= 0.98;
+        MUSIC.playRivalImpact({ kind: 'rub', pan: outcome.side * 0.45, strength: 0.45 });
+        this.startRivalFx('rub', rival);
+        if (this.rivalHintCooldown <= 0 && contact?.playerCatching) {
+          this.pushRivalHudEvent(
+            Math.abs(contact.lateralDistance ?? 0) > 0.2
+              ? 'LINE UP BEHIND THEM'
+              : 'NEED MORE SPEED  •  TRY BOOST',
+            'warning',
+          );
+          this.rivalHintCooldown = 1.5;
+        }
+      }
+        break contactSteps;
+      }
     }
   }
 
@@ -968,6 +1503,14 @@ export class GameScene extends Phaser.Scene {
       milestone: objective ? (objective.complete || objective.progress % 10 === 0) : false,
       complete: objective ? objective.complete : false,
     });
+    if (this.timedElimination && sprite.timeBonusSeconds > 0) {
+      const bonus = this.timedElimination.addTime(sprite.timeBonusSeconds, 'cone');
+      if (bonus.awarded > 0) {
+        MUSIC.playTimeBonus();
+        this.pushRivalHudEvent(`CLOCK CONE  +${Math.round(bonus.awarded)}s`, 'success');
+      }
+      this.rivalSchoolView = this.buildRivalSchoolView();
+    }
     if (objective) {
       if (
         result.allComplete &&
@@ -1120,7 +1663,9 @@ export class GameScene extends Phaser.Scene {
   finishRace() {
     this.stopActiveFeedbackLoops();
     this.done = true;
-    const t = this.race.time;
+    // The rival clock starts at the rolling line; its mastery time must use
+    // the same origin instead of including the pre-start grid approach.
+    const t = this.timedElimination?.elapsedSeconds ?? this.race.time;
     if (this.mode === 'training') {
       const target = this.objectives.views.find(
         (objective) => objective.id === this.trackData.scoring.objective,
@@ -1140,6 +1685,8 @@ export class GameScene extends Phaser.Scene {
       const result = submitTrainingResult(this.trackData, target.progress, t, {
         damageHits: this.trainingDamageHits,
         conesMissed,
+        offTrackEvents: this.trackDiscipline.offTrackEvents,
+        boostedTakedowns: this.rivalMetrics.boostedTakedowns,
         total: target.total,
       });
       const firstTrophy = [...this.trackData.scoring.thresholds]
@@ -1158,7 +1705,8 @@ export class GameScene extends Phaser.Scene {
             ? ''
             : ` / ${firstTrophy.maximumDamageHits} HITS MAX`);
       const perfect = this.objectives.complete &&
-        this.trainingDamageHits === 0 && conesMissed === 0;
+        this.trainingDamageHits === 0 && conesMissed === 0 &&
+        this.trackDiscipline.offTrackEvents === 0;
       const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
       this.trainingAdvanceTo = nextTrack && nextTrack.status !== 'placeholder'
         ? this.trackIndex + 1
@@ -1171,6 +1719,14 @@ export class GameScene extends Phaser.Scene {
       const coneLine = coneGated && coneScore.target > 0
         ? `CONES ${coneScore.hits} / ${coneScore.target}\n`
         : '';
+      const rivalLine = this.rivalPack
+        ? `TAKEDOWNS ${this.rivalMetrics.takedowns}  •  ` +
+          `BOOSTED ${this.rivalMetrics.boostedTakedowns}\n` +
+          `CLEAN LINE ${this.trackDiscipline.offTrackEvents === 0 ? 'YES' : 'LOST'}\n` +
+          (this.timedElimination
+            ? `TIME LEFT ${Math.ceil(this.timedElimination.remainingSeconds)}s\n`
+            : '')
+        : '';
       const nextLine = this.trainingAdvanceTo == null
         ? (nextTrack
           ? `NEXT: ${nextTrack.name} — COMING SOON`
@@ -1182,6 +1738,7 @@ export class GameScene extends Phaser.Scene {
           `${target.hudLabel}  ${target.progressLabel} / ${target.totalLabel}\n` +
           damageLine +
           coneLine +
+          rivalLine +
           `${trophyLine}\n${fmtTime(t)}  •  ${this.objectives.score} PTS` +
           `${result.newBest ? '  •  NEW BEST' : ''}\n\n` +
           nextLine,
@@ -1481,6 +2038,14 @@ export class GameScene extends Phaser.Scene {
               : `Under ${threshold.maximumDamageHits + 1} hits`);
           }
           if (threshold.maximumConesMissed === 0) reqs.push('all cones');
+          if (threshold.maximumOffTrackEvents === 0) reqs.push('clean line');
+          if (threshold.minimumBoostedTakedowns != null) {
+            reqs.push(`${threshold.minimumBoostedTakedowns} boosted takedown` +
+              `${threshold.minimumBoostedTakedowns === 1 ? '' : 's'}`);
+          }
+          if (threshold.maximumTime != null) {
+            reqs.push(`under ${Math.round(threshold.maximumTime)}s`);
+          }
           if (reqs.length === 0) reqs.push('Finish');
           return this.add.text(
             centerX + 90,
@@ -1622,6 +2187,27 @@ export class GameScene extends Phaser.Scene {
       TUNING.sfxVolume = v;
       MUSIC.setSfxVolume(v);
     }, { transform: (v) => v / 100, format: (v) => `${Math.round(v)}%` });
+    hook('rivalCount', (v) => (TUNING.rivalCount = Math.round(v)), {
+      format: (v) => `${Math.round(v)}`,
+    });
+    hook('rivalPace', (v) => (TUNING.rivalPace = v), {
+      transform: (v) => v / 100, format: (v) => `${Math.round(v)}%`,
+    });
+    hook('rivalAggression', (v) => (TUNING.rivalAggression = v), {
+      transform: (v) => v / 100, format: (v) => `${Math.round(v)}%`,
+    });
+    hook('rivalTelegraph', (v) => (TUNING.rivalTelegraph = v), {
+      transform: (v) => v / 1000, format: (v) => `${Math.round(v)}ms`,
+    });
+    hook('rivalCatchupCap', (v) => (TUNING.rivalCatchupCap = v), {
+      transform: (v) => v / 100, format: (v) => `${Math.round(v)}%`,
+    });
+    hook('rivalTakedownAdvantage', (v) => (TUNING.rivalTakedownAdvantage = v), {
+      transform: (v) => v / 100, format: (v) => `${Math.round(v)}%`,
+    });
+    hook('rivalContactStrength', (v) => (TUNING.rivalContactStrength = v), {
+      transform: (v) => v / 100, format: (v) => `${Math.round(v)}%`,
+    });
 
     // Sync the track picker to however we actually got here (title menu,
     // garage "next race", or the picker itself) so it never shows a stale
@@ -1635,11 +2221,19 @@ export class GameScene extends Phaser.Scene {
     }
 
     const fps = document.getElementById('fps');
-    if (fps) {
+    const rivalsActive = document.getElementById('rivalsActive');
+    const rivalAttacker = document.getElementById('rivalAttacker');
+    const rivalPool = document.getElementById('rivalPool');
+    if (fps || rivalsActive || rivalAttacker || rivalPool) {
       this.time.addEvent({
         delay: 1000,
         loop: true,
-        callback: () => (fps.textContent = Math.round(this.game.loop.actualFps)),
+        callback: () => {
+          if (fps) fps.textContent = Math.round(this.game.loop.actualFps);
+          if (rivalsActive) rivalsActive.textContent = `${this.rivalPack?.views.length ?? 0}`;
+          if (rivalAttacker) rivalAttacker.textContent = this.rivalPack?.attackerId ?? 'NONE';
+          if (rivalPool) rivalPool.textContent = `${this.renderer.rivalPool.length} FIXED`;
+        },
       });
     }
   }

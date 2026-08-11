@@ -17,9 +17,15 @@ const RAIL = 0x3a3a46;
 const WHITE = 0xffffff;
 const DIM = 0xb8b8c8;
 
+export function progressMarkerPoint({ x, width }, fraction) {
+  const f = Math.min(1, Math.max(0, Number(fraction) || 0));
+  return x + width * f;
+}
+
 export class ProgressBar {
-  constructor(scene, laps, y = 30) {
+  constructor(scene, laps, y = 30, { lapNumbers = true } = {}) {
     this.laps = Math.max(1, laps);
+    this.lapNumbers = lapNumbers;
     // This is the circuit's sole persistent position/lap read. Corner space
     // remains available for truly mode-specific feedback, not duplicate lap
     // counters or a second health system.
@@ -66,11 +72,13 @@ export class ProgressBar {
         g.fillStyle(MAGENTA, 1);
         g.fillRect(x + (w * l) / this.laps - 1, top - 4, 2, h + 8);
       }
-      const cx = x + (w * (l + 0.5)) / this.laps;
-      scene.add
-        .text(cx, y - 20, `${l + 1}`, { fontSize: '11px', fontStyle: 'bold', color: '#00e5ff' })
-        .setOrigin(0.5, 0)
-        .setDepth(21);
+      if (this.lapNumbers) {
+        const cx = x + (w * (l + 0.5)) / this.laps;
+        scene.add
+          .text(cx, y - 20, `${l + 1}`, { fontSize: '11px', fontStyle: 'bold', color: '#00e5ff' })
+          .setOrigin(0.5, 0)
+          .setDepth(21);
+      }
     }
 
     // Bookend checkered flags.
@@ -117,7 +125,7 @@ export class ProgressBar {
   }
 
   // frac: 0..1 across the whole race (all laps).
-  draw(frac) {
+  draw(frac, markers = []) {
     const g = this.g;
     const { x, y, w, h } = this;
     const top = y - h / 2;
@@ -128,6 +136,29 @@ export class ProgressBar {
     // filled progress
     g.fillStyle(CYAN, 1);
     g.fillRect(x, top, w * f, h);
+
+    // Rival School reuses this course authority instead of adding a minimap.
+    // A dark outline preserves all three identity colors against both the
+    // filled and unfilled halves of the rail; shape remains readable without
+    // relying on color alone.
+    for (const marker of markers) {
+      const rx = progressMarkerPoint({ x, width: w }, marker.fraction);
+      const ry = y;
+      g.lineStyle(2, DARK, 1);
+      g.fillStyle(marker.color ?? WHITE, 1);
+      if (marker.shape === 'diamond') {
+        g.fillTriangle(rx, ry - 5, rx - 5, ry, rx, ry + 5);
+        g.fillTriangle(rx, ry - 5, rx + 5, ry, rx, ry + 5);
+        g.strokeTriangle(rx, ry - 5, rx - 5, ry, rx, ry + 5);
+        g.strokeTriangle(rx, ry - 5, rx + 5, ry, rx, ry + 5);
+      } else if (marker.shape === 'square') {
+        g.fillRect(rx - 4, ry - 4, 8, 8);
+        g.strokeRect(rx - 4, ry - 4, 8, 8);
+      } else {
+        g.fillCircle(rx, ry, 4);
+        g.strokeCircle(rx, ry, 4);
+      }
+    }
 
     // marker: a car chevron riding the front of the fill
     const mx = x + w * f;

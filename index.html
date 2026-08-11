@@ -126,6 +126,47 @@
       </details>
 
       <details class="debug-section">
+        <summary>OPPONENTS</summary>
+        <div class="debug-section-body">
+          <div class="debug-control">
+            <label for="rivalCount">NPC Count (restart)</label>
+            <input type="range" id="rivalCount" min="1" max="6" value="3" step="1" />
+            <div class="value" id="rivalCountValue">3</div>
+          </div>
+          <div class="debug-control">
+            <label for="rivalPace">Rival Pace</label>
+            <input type="range" id="rivalPace" min="70" max="105" value="96" step="1" />
+            <div class="value" id="rivalPaceValue">96%</div>
+          </div>
+          <div class="debug-control">
+            <label for="rivalAggression">Aggression</label>
+            <input type="range" id="rivalAggression" min="0" max="100" value="20" step="5" />
+            <div class="value" id="rivalAggressionValue">20%</div>
+          </div>
+          <div class="debug-control">
+            <label for="rivalTelegraph">Attack Telegraph</label>
+            <input type="range" id="rivalTelegraph" min="550" max="1200" value="750" step="25" />
+            <div class="value" id="rivalTelegraphValue">750ms</div>
+          </div>
+          <div class="debug-control">
+            <label for="rivalCatchupCap">Far Catch-up Cap</label>
+            <input type="range" id="rivalCatchupCap" min="0" max="12" value="12" step="1" />
+            <div class="value" id="rivalCatchupCapValue">12%</div>
+          </div>
+          <div class="debug-control">
+            <label for="rivalTakedownAdvantage">Rear-Ram Speed Edge</label>
+            <input type="range" id="rivalTakedownAdvantage" min="2" max="12" value="4" step="1" />
+            <div class="value" id="rivalTakedownAdvantageValue">4%</div>
+          </div>
+          <div class="debug-control">
+            <label for="rivalContactStrength">Incoming Speed Tax</label>
+            <input type="range" id="rivalContactStrength" min="3" max="15" value="8" step="1" />
+            <div class="value" id="rivalContactStrengthValue">8%</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="debug-section">
         <summary>CAMERA</summary>
         <div class="debug-section-body">
           <div class="debug-control">
@@ -167,6 +208,9 @@
         <div class="debug-section-body">
           <p style="font-size: 11px; line-height: 1.6; margin-bottom: 12px;">
             FPS: <span id="fps">60</span>
+            <br />Rivals: <span id="rivalsActive">0</span>
+            <br />Attacker: <span id="rivalAttacker">NONE</span>
+            <br />Pool: <span id="rivalPool">6 FIXED</span>
           </p>
         </div>
       </details>

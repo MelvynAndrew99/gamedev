@@ -33,6 +33,17 @@ export function damageFeedbackState({
   };
 }
 
+export function trainingDamageTrophyMessage(thresholds = [], hits = 0) {
+  const possible = [...thresholds]
+    .filter((threshold) =>
+      threshold.maximumDamageHits == null || hits <= threshold.maximumDamageHits
+    )
+    .sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0))[0];
+  return possible
+    ? `TRAINING CONTINUES  •  ${String(possible.rank ?? 'TROPHY').toUpperCase()} STILL LIVE`
+    : 'TRAINING CONTINUES  •  NO TROPHY';
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }

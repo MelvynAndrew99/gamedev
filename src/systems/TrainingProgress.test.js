@@ -61,6 +61,36 @@ test('gold can require a full cone sweep while lower trophies do not', () => {
   assert.equal(trophyFor(coneGatedScoring, 2, { damageHits: 1, conesMissed: 5 }).rank, 'silver');
 });
 
+test('timed rival trophies preserve Bronze while Gold demands a clean full clear', () => {
+  const scoring = {
+    thresholds: [
+      { rank: 'bronze', stars: 1, minimum: 1 },
+      {
+        rank: 'silver', stars: 2, minimum: 3,
+        maximumDamageHits: 3,
+      },
+      {
+        rank: 'gold', stars: 3, minimum: 3,
+        maximumDamageHits: 1, maximumOffTrackEvents: 0,
+        maximumTime: 45,
+      },
+    ],
+  };
+  const gold = trophyFor(scoring, 3, {
+    damageHits: 1, offTrackEvents: 0, time: 44.9,
+  });
+  assert.equal(gold.rank, 'gold');
+  assert.equal(trophyFor(scoring, 3, {
+    damageHits: 1, offTrackEvents: 1, time: 44,
+  }).rank, 'silver', 'one material excursion must specifically remove Gold');
+  assert.equal(trophyFor(scoring, 3, {
+    damageHits: 1, offTrackEvents: 0, time: 45.1,
+  }).rank, 'silver', 'a safe full clear remains Silver after the Gold time');
+  assert.equal(trophyFor(scoring, 1, {
+    damageHits: 4, offTrackEvents: 2, time: 80,
+  }).rank, 'bronze', 'one wreck survives timeout and preserves novice progress');
+});
+
 test('all-lap mastery cones score both laps as one continuous course', () => {
   const track = {
     laps: 2,
@@ -157,6 +187,8 @@ test('training persistence keeps only the best lesson result and does not farm s
       bestTime: 90,
       damageHits: 0,
       conesMissed: 0,
+      offTrackEvents: 0,
+      boostedTakedowns: 0,
       trophy: 'silver',
       stars: 2,
     });

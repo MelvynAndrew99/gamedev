@@ -7,6 +7,7 @@ import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingTopSpeed from '../tracks/training-top-speed.json' with { type: 'json' };
 import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
+import trainingRivals from '../tracks/training-rivals.json' with { type: 'json' };
 import trainingValidation from '../tracks/training-validation.json' with { type: 'json' };
 import neonGulch from '../tracks/neon-gulch.json' with { type: 'json' };
 import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
@@ -115,6 +116,7 @@ test('every authored course builds a valid objective stack with points', () => {
     trainingHazardWeave,
     trainingTopSpeed,
     trainingAirtime,
+    trainingRivals,
     trainingValidation,
     neonGulch,
     syndicateRun,

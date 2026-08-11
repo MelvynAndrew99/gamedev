@@ -1,0 +1,114 @@
+{
+  "id": "training-rivals",
+  "name": "RIVAL SCHOOL",
+  "seed": 1105,
+  "laps": 1,
+  "finish": "objectives",
+  "music": "training-loop",
+  "environment": "training-loop",
+  "intro": "Wreck all 3 before time. Ram from behind or push off-road. LAP +8s • CYAN CONE +2s.",
+  "design": {
+    "focus": "Teach readable rival threats, forgiving rear rams, and edge pushes in a timed three-car hunt.",
+    "pacing": "Unlimited laps keep every rival available. Checkpoints and six one-shot clock cones extend the attempt while the pack stays staged near the player."
+  },
+  "timedElimination": {
+    "initialSeconds": 35,
+    "maximumSeconds": 45,
+    "lapBonusSeconds": 8,
+    "coneBonusSeconds": 2
+  },
+  "trainingDamage": { "maxHits": 4 },
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": false
+  },
+  "rivals": {
+    "seed": 1505,
+    "count": 3,
+    "maxCount": 6,
+    "aggression": 0.2,
+    "spawns": [
+      { "id": "rival-cyan", "segmentsAhead": 10, "offset": -0.55, "pace": 1.00 },
+      { "id": "rival-magenta", "segmentsAhead": 18, "offset": 0.55, "pace": 1.02 },
+      { "id": "rival-gold", "segmentsAhead": 26, "offset": 0, "pace": 1.04 }
+    ],
+    "attackZones": [
+      { "from": 216, "to": 858 },
+      { "from": 954, "to": 1194 }
+    ],
+    "policy": {
+      "oneAttacker": true,
+      "productionCount": 3,
+      "minimumTellSeconds": 0.65,
+      "localPaceRadiusSegments": 18,
+      "maximumCatchUp": 0.12,
+      "maximumSlowDown": 0.08,
+      "airborneContact": false
+    }
+  },
+  "objectives": [
+    {
+      "id": "takedowns",
+      "type": "count_event",
+      "event": "rival_takedown",
+      "value": 3,
+      "label": "WRECK ALL 3 RIVALS",
+      "hudLabel": "TAKEDOWNS",
+      "pointsPerUnit": 800
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 2,
+    "objective": "takedowns",
+    "metrics": ["time", "damageHits", "offTrackEvents"],
+    "thresholds": [
+      {
+        "rank": "gold",
+        "minimum": 3,
+        "maximumTime": 45,
+        "maximumDamageHits": 1,
+        "maximumOffTrackEvents": 0,
+        "stars": 3
+      },
+      {
+        "rank": "silver",
+        "minimum": 3,
+        "maximumDamageHits": 3,
+        "stars": 2
+      },
+      { "rank": "bronze", "minimum": 1, "stars": 1 }
+    ]
+  },
+  "objects": [
+    { "id": "rival-boost-1", "at": 610, "kind": "boost", "offset": 0 },
+    { "id": "rival-boost-2", "at": 990, "kind": "boost", "offset": -0.55 },
+    { "id": "rival-boost-3", "at": 1090, "kind": "boost", "offset": 0.55 },
+    { "id": "clock-cone-1", "at": 150, "kind": "cone", "offset": -0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-2", "at": 340, "kind": "cone", "offset": 0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-3", "at": 530, "kind": "cone", "offset": 0, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-4", "at": 720, "kind": "cone", "offset": -0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-5", "at": 920, "kind": "cone", "offset": 0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-6", "at": 1160, "kind": "cone", "offset": 0, "once": true, "timeBonusSeconds": 2 }
+  ],
+  "pieces": [
+    ["straight", 40],
+    ["curve", 32, -1],
+    ["straight", 22],
+    ["curve", 36, 1],
+    ["straight", 28],
+    ["curve", 36, -2],
+    ["straight", 24],
+    ["curve", 40, 2],
+    ["straight", 28],
+    ["curve", 32, 8],
+    ["straight", 32],
+    ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
+    ["straight", 40]
+  ],
+  "obstacles": 0,
+  "par": 150
+}

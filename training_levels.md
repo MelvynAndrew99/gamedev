@@ -30,10 +30,10 @@ skills in a real race.
 
 `src/tracks/training-loop.json` owns the first lesson's authored targets.
 `src/tracks/training-hazard-weave.json`,
-`src/tracks/training-top-speed.json`, `src/tracks/training-airtime.json`, and
-`src/tracks/training-validation.json` mirror its `pieces` for the rest of the
-initial curriculum and the first Story race. Automated tests protect that
-geometry parity.
+`src/tracks/training-top-speed.json`, `src/tracks/training-airtime.json`,
+`src/tracks/training-rivals.json`, and `src/tracks/training-validation.json`
+mirror its `pieces` for the rest of the initial curriculum and the first Story
+race. Automated tests protect that geometry parity.
 
 Training lessons should reuse the same loop while changing only their objective,
 interactive objects, instructions, and any explicitly introduced HUD systems.
@@ -255,6 +255,8 @@ graphic. Internally this reuses Training's existing `count_event` +
 race (1/2/3), and the authored thresholds turn that into Bronze at tier 1,
 Silver at tier 2, Gold at tier 3 — no bespoke scoring code for this lesson.
 
+## Lesson 4: Air School
+
 Training Track 4, **Air School**, introduces measured airtime and active-aero
 glide control on the shared two-lap loop. Stick forward (or W) pitches the car
 down for a shorter, more precise arc; stick back (or S) stretches the glide.
@@ -297,6 +299,70 @@ flight sound or input/tier chirp: the short takeoff swoosh clears the mix so one
 landing response remains the dominant reward. A held boost still affects speed
 and lift, but its sustained audio yields from ramp contact until the car is
 grounded again.
+
+## Lesson 5: Rival School
+
+**Player sentence:** Wreck all three before time runs out: ram from behind or
+steer them off the road; laps and cyan clock-faced cones add time.
+
+**Skill:** combine target acquisition, closing speed, committed steering,
+boost timing, threat avoidance, and recovery while hunting a three-car pack.
+
+Rival School uses three deterministic cars rather than a boss. Laps are
+unlimited and exist as checkpoints rather than a finish limit. The countdown
+starts at 35 seconds, a completed circuit adds 8 seconds, and six cyan clock
+cones, marked by a white clock ring and hands, add 2 seconds each. Cones are one-shot across the complete attempt and
+the clock caps at 45 seconds, so the player can recover without farming an
+infinite run. The attempt resolves only when all three rivals are eliminated or
+the clock expires.
+
+The car is the attack verb; there is no extra combat button. An aligned rear
+ram scores when the player is catching with a real speed advantage and wrecks
+in one impact. Contact below that gate gives a short speed/alignment hint
+instead of hidden damage. A committed joystick or keyboard steering push
+transfers the rival laterally and wrecks it only after it physically
+crosses the road edge. Passive equal-speed rubbing, a faster rival hitting the
+player, and airborne overlap never score. Every rival can be defeated once and
+never respawns.
+
+Training contact is local and forgiving. An incoming attack costs at most 15%
+speed, gives the existing recovery surge, adds a windscreen crack for trophy
+grading, and never changes campaign hull, money, or progression. A tolerant
+clean-line latch counts only a grounded excursion held beyond the road edge for
+at least 120 ms; one noisy edge frame cannot erase Gold. Missing an encounter
+does not stop the race. Distant-only pack staging keeps living rivals near
+enough to find but turns off before contact; close-range pace and collision
+physics never rubber-band.
+
+The live HUD follows the event rather than repeating its briefing. TIME sits at
+the upper left, CARS LEFT at the upper right, and the existing course ribbon
+shows the player plus every living rival by a stable color and shape. The lap
+number has no denominator. Eliminated markers disappear immediately, and no
+objective checklist or rival health bars compete with the driving view.
+
+The trophy combines the mechanics Story will later pressure:
+
+- **Gold** — all three takedowns within 45 elapsed seconds, no material
+  off-track excursion, and no more than one incoming rival hit.
+- **Silver** — all three takedowns before the countdown expires, with no more
+  than three incoming rival hits.
+- **Bronze** — one takedown.
+
+All ranks are optional. Timeout concludes the attempt, preserves any earned
+Bronze result, and does not block Story access. Impacts, time pickups, and
+takedowns use short edge toasts; detailed accounting remains in the paused
+briefing and results.
+
+The Projection Lab exposes per-attempt racer count (applied on Retry), base pace, aggression, attack
+telegraph, far-only catch-up cap, takedown speed edge, and incoming speed tax.
+Production defaults use three racers at 20% aggression and 96% base pace. AI
+pace is never adjusted within 18 segments of the player; only distant staging
+may ease by at most +12% or -8%. The normal lesson contract stays at three; the Projection Lab
+may override it up to the fixed six-car pool for stress/chaos rejection tests.
+
+A Diddy Kong Racing-style boss remains a documented fallback only. Consider it
+after two measured pack iterations fail readability or performance gates, and
+only with explicit product approval; it is not the primary Training 5 design.
 
 ## Cone semantics
 
@@ -385,10 +451,12 @@ The initial Training mode track list is fixed in this order:
 2. Hazard Weave — follow target cones through rocks and read camera damage.
 3. Redline — spend the boost gauge deliberately: tap to stack, hold to sustain.
 4. Air School — acquire ramp approaches and build controlled airtime.
+5. Rival School — hunt opponents with rear rams and edge pushes under a
+   recoverable clock.
 
 Warning reads, zippers, surface changes, and combo lines remain future
-curriculum candidates. Proving Ground combines the completed curriculum
-as the first Story race; it is not a fifth Training track.
+curriculum candidates. Proving Ground combines the completed curriculum as the
+first Story race; it is not a Training track.
 
 Later lessons may add optional mastery targets, but their required objective
 should still teach one new verb. Combining skills is validation, not introduction.

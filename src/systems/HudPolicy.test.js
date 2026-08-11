@@ -44,6 +44,19 @@ test('other training lessons retain compact checkable rows', () => {
   assert.equal(view.windshieldDamage, true);
 });
 
+test('Rival School replaces checklist with timed-event reads and confirmations', () => {
+  const view = hudVisibilityPolicy({
+    mode: 'training', hasRace: true, hasObjectives: true,
+    trackId: 'training-rivals', hasBoostCapability: true,
+  });
+  assert.equal(view.objectiveRows, false);
+  assert.equal(view.objectiveToast, false);
+  assert.equal(view.rivalToast, true);
+  assert.equal(view.rivalEventHud, true);
+  assert.equal(view.rivalCourseMarkers, true);
+  assert.equal(view.airtimeCoach, false);
+});
+
 test('Endless is distance, speed, boost, and glass only', () => {
   const view = hudVisibilityPolicy({
     mode: 'endless', hasBoostCapability: true,
@@ -74,6 +87,13 @@ test('persistent corner instruments stay outside the player and road corridor', 
   const leftTeaching = { ...HUD_SAFE_LAYOUT.leftColumn, height: 100 };
   assert.equal(rectsOverlap(leftTeaching, HUD_SAFE_LAYOUT.roadCorridor), false);
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.speed, HUD_SAFE_LAYOUT.roadCorridor), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.eventTimer, HUD_SAFE_LAYOUT.courseRibbon), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.carsRemaining, HUD_SAFE_LAYOUT.courseRibbon), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.eventTimer, HUD_SAFE_LAYOUT.roadCorridor), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.carsRemaining, HUD_SAFE_LAYOUT.roadCorridor), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.objectiveToast, HUD_SAFE_LAYOUT.rivalToast), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.objectiveToast, HUD_SAFE_LAYOUT.roadCorridor), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.rivalToast, HUD_SAFE_LAYOUT.roadCorridor), false);
   assert.ok(
     HUD_SAFE_LAYOUT.courseRibbon.y + HUD_SAFE_LAYOUT.courseRibbon.height <= 54,
   );

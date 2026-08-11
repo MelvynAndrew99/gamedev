@@ -250,6 +250,7 @@ export class RoadModel {
         trackObjectId: id,
         objectiveId: objective,
         persistentHit: objective != null || once,
+        timeBonusSeconds: Number(object.timeBonusSeconds) || 0,
       });
     }
   }

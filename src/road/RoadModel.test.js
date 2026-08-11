@@ -7,9 +7,11 @@ import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingTopSpeed from '../tracks/training-top-speed.json' with { type: 'json' };
 import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
+import trainingRivals from '../tracks/training-rivals.json' with { type: 'json' };
 import trainingValidation from '../tracks/training-validation.json' with { type: 'json' };
 import neonGulch from '../tracks/neon-gulch.json' with { type: 'json' };
 import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
+import { TRAINING_TRACKS } from '../tracks/index.js';
 import { RoadModel } from './RoadModel.js';
 
 function interactiveLayout(model) {
@@ -214,6 +216,49 @@ test('training is the longer cone-only version of the story proving ground', () 
   assert.equal(interactive.length, trainingLoop.objects.length);
   assert.ok(interactive.every((sprite) => sprite.key === 'cone'));
   assert.ok(interactive.every((sprite) => sprite.objectiveId === 'cone-sweep'));
+  assert.ok(model.segments.every((segment) => !segment.zipper && !segment.launchApproach));
+});
+
+test('Rival School turns the shared loop into a timed three-car elimination hunt', () => {
+  assert.equal(TRAINING_TRACKS.length, 5);
+  assert.equal(TRAINING_TRACKS.at(-1).id, 'training-rivals');
+  assert.deepEqual(trainingRivals.pieces, trainingLoop.pieces);
+  assert.equal(trainingRivals.laps, 1);
+  assert.equal(trainingRivals.finish, 'objectives');
+  assert.deepEqual(trainingRivals.timedElimination, {
+    initialSeconds: 35,
+    maximumSeconds: 45,
+    lapBonusSeconds: 8,
+    coneBonusSeconds: 2,
+  });
+  assert.equal(trainingRivals.rivals.count, 3);
+  assert.equal(trainingRivals.rivals.maxCount, 6, 'Lab may stress the fixed six-car pool');
+  assert.equal(new Set(trainingRivals.rivals.spawns.map((rival) => rival.id)).size, 3);
+  assert.equal(trainingRivals.objects.filter((object) => object.kind === 'boost').length, 3);
+  const clockCones = trainingRivals.objects.filter((object) => object.kind === 'cone');
+  assert.equal(clockCones.length, 6);
+  assert.ok(clockCones.every((object) => object.once && object.timeBonusSeconds === 2));
+  assert.deepEqual(
+    trainingRivals.objectives.map((objective) => objective.event ?? 'lap_complete'),
+    ['rival_takedown'],
+  );
+  assert.equal(trainingRivals.objectives[0].value, 3);
+  const gold = trainingRivals.scoring.thresholds.find((threshold) => threshold.rank === 'gold');
+  assert.equal(gold.maximumDamageHits, 1);
+  assert.equal(gold.maximumOffTrackEvents, 0);
+  assert.equal(gold.maximumTime, 45);
+
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingRivals);
+  const interactive = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.def);
+  assert.equal(interactive.length, trainingRivals.objects.length);
+  assert.equal(interactive.filter((sprite) => sprite.key === 'boost').length, 3);
+  const modelClockCones = interactive.filter((sprite) => sprite.key === 'cone');
+  assert.equal(modelClockCones.length, 6);
+  assert.ok(modelClockCones.every((sprite) => (
+    sprite.persistentHit && sprite.timeBonusSeconds === 2
+  )));
   assert.ok(model.segments.every((segment) => !segment.zipper && !segment.launchApproach));
 });
 
