@@ -6,6 +6,8 @@ import { RoadModel } from './RoadModel.js';
 import {
   backgroundPitchOffset,
   rivalRenderAlpha,
+  rivalSpriteFrameSize,
+  rivalSpriteMode,
   RoadRenderer,
 } from './RoadRenderer.js';
 
@@ -184,12 +186,13 @@ test('clock cones add a pooled clock silhouette while ordinary cones do not', ()
     strokeCircle() { clockDraws.circles += 1; return this; },
     lineBetween() { clockDraws.hands += 1; return this; },
   };
+  let appliedTint = null;
   const pooledProp = {
     width: 10,
     height: 10,
     setTexture() { return this; },
-    setTint() { return this; },
-    clearTint() { return this; },
+    setTint(tint) { appliedTint = tint; return this; },
+    clearTint() { appliedTint = null; return this; },
     setDisplaySize() { return this; },
     setVisible() { return this; },
   };
@@ -201,6 +204,7 @@ test('clock cones add a pooled clock silhouette while ordinary cones do not', ()
 
   prop.timeBonusSeconds = 2;
   renderer.renderSprites(model, segment);
+  assert.equal(appliedTint, 0x2ee56b, 'clock cones use the authored success green');
   assert.equal(clockDraws.circles, 2, 'dark keyline and white clock face are drawn');
   assert.equal(clockDraws.hands, 4, 'two clock hands are drawn with both outline layers');
   assert.equal(renderer.pool, stablePool, 'rendering reuses the existing prop pool');
@@ -211,6 +215,54 @@ test('far-only rival staging fades in during its collision grace instead of popp
   assert.equal(rivalRenderAlpha({ stagingGrace: 0.5, stagingGraceTotal: 1 }), 0.5);
   assert.equal(rivalRenderAlpha({ stagingGrace: 0, stagingGraceTotal: 1 }), 1);
   assert.equal(rivalRenderAlpha({ stagingGrace: 0 }), 1);
+});
+
+test('rivals use opaque hull width and a cohesive far LOD instead of engine fragments', () => {
+  assert.equal(rivalSpriteMode(7.99), 'beacon');
+  assert.equal(rivalSpriteMode(8), 'sprite');
+  assert.equal(
+    rivalSpriteFrameSize(30),
+    64,
+    'a 30px projected hull requires the full 64px transparent steering frame',
+  );
+  assert.ok(
+    rivalSpriteFrameSize(12) > 12 * 2,
+    'transparent padding must not silently halve the visible opponent',
+  );
+});
+
+test('one rival ID occupies exactly one pooled sprite', () => {
+  const renderer = new RoadRenderer(fakeScene(), { ...TUNING, drawDistance: 1 });
+  const model = new RoadModel({ ...TUNING, drawDistance: 1 });
+  model.addStraight(1);
+  const segment = model.segments[0];
+  segment.clipped = false;
+  segment.p1.screen = { x: 480, y: 300, scale: 0.05, w: 220 };
+  segment.p2.screen = { x: 480, y: 290, scale: 0.05, w: 210 };
+
+  renderer.rivalPool = Array.from({ length: 6 }, () => ({
+    visible: false,
+    setFrame() { return this; },
+    setPosition() { return this; },
+    setDisplaySize() { return this; },
+    setTint() { return this; },
+    setAlpha() { return this; },
+    setVisible(value) { this.visible = value; return this; },
+  }));
+  renderer.rivalMarkers = chainable();
+  renderer.rivalShadows = chainable();
+  const rival = {
+    id: 'rival-cyan', active: true, state: 'cruise', position: 0,
+    x: 0, steer: 0, color: 0x00e5ff,
+    screen: { x: 0, y: 0, width: 0, visible: false },
+  };
+
+  renderer.renderRivals(model, segment, { x: 0 }, [rival]);
+  assert.deepEqual(
+    renderer.rivalPool.map((sprite, index) => sprite.visible ? index : null)
+      .filter((index) => index !== null),
+    [0],
+  );
 });
 
 test('every boost tier keeps perspective finite, positive, and below the lens cap', () => {

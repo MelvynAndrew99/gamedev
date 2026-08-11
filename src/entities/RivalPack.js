@@ -28,11 +28,31 @@ export const DEFAULT_RIVAL_TUNING = Object.freeze({
   attackIntervalJitter: 1.2,
   contactCooldownSeconds: 0.45,
   stagingRadiusSegments: 90,
+  stagingBehindRadiusSegments: 24,
   stagingTargetSegments: 24,
   stagingTargetSpacingSegments: 7,
   stagingGraceSeconds: 1,
   staggerSeconds: 0.45,
   wreckSeconds: 0.7,
+});
+
+const DEFAULT_CIRCULATION = Object.freeze({
+  enabled: false,
+  behindMinSegments: 18,
+  behindMaxSegments: 28,
+  aheadMinSegments: 42,
+  aheadMaxSegments: 60,
+  catchUpMinMultiplier: 1.055,
+  catchUpMaxMultiplier: 1.09,
+  catchUpSeconds: 7,
+  pursuitStartSegments: 5,
+  pursuitMinMultiplier: 1.025,
+  pursuitMaxMultiplier: 1.055,
+  reentryDelayMinSeconds: 2.2,
+  reentryDelayMaxSeconds: 3.4,
+  minimumReentryIntervalSeconds: 2.2,
+  minimumSpacingSegments: 3.5,
+  lanePattern: [-0.62, 0.48, -0.08, 0.68, -0.42, 0.2],
 });
 
 export class RivalPack {
@@ -45,11 +65,17 @@ export class RivalPack {
     this.seed = uintSeed(config.seed ?? 1);
     this.random = seededRandom(this.seed);
     this.aggression = clamp01(config.aggression ?? 0.3);
+    this.recycleWrecks = !!config.recycleWrecks;
+    // Circulation is opt-in track data. Rival School uses it to keep three
+    // identities orbiting the player; Story can omit it and retain finite,
+    // authored opponents with the original staging behavior.
+    this.circulation = normalizeCirculation(config.circulation);
     this.maxCount = clampInteger(config.maxCount ?? MAX_RIVALS, 1, MAX_RIVALS);
     this.attackZones = Array.isArray(config.attackZones)
       ? config.attackZones.map(normalizeZone).filter(Boolean)
       : [];
     this.accumulator = 0;
+    this.circulationCooldown = 0;
     this.lastStepCount = 0;
     this.elapsed = 0;
     this.attackerId = null;
@@ -92,10 +118,12 @@ export class RivalPack {
 
     return {
       id,
+      generation: 1,
       active: false,
       position: wrap(position, this.trackLength),
       previousPosition: wrap(position, this.trackLength),
       x,
+      spawnLane: x,
       previousX: x,
       speed: pace * this.t.basePace * this.t.maxSpeed,
       pace,
@@ -111,6 +139,17 @@ export class RivalPack {
       stagingGrace: 0,
       stagingGraceTotal: 0,
       stagingCount: 0,
+      reentryMode: null,
+      reentryTime: 0,
+      reentryPaceMultiplier: 1,
+      pursuitMultiplier: circulationValue(
+        this.seed,
+        id,
+        1,
+        47,
+        this.circulation.pursuitMinMultiplier,
+        this.circulation.pursuitMaxMultiplier,
+      ),
       stability: 2,
       lastStaggerSide: 0,
       eliminated: false,
@@ -167,16 +206,32 @@ export class RivalPack {
     return { rivalId: rival.id, stability: rival.stability, side: rival.lastStaggerSide };
   }
 
-  // Defeated IDs are one-shot for the entire attempt. They remain in views
-  // for a short wreck animation, then become inactive permanently. setCount
-  // can never resurrect an eliminated rival, preventing objective farming.
-  takeDown(id) {
+  // A finite elimination lesson retires this stable ID. A score-attack lesson
+  // may recycle the slot only after its generation-safe wreck beat completes.
+  takeDown(id, { elapsedSince = 0 } = {}) {
     const rival = this.rivals.find((candidate) => candidate.id === id);
     if (!rival?.active || rival.eliminated || rival.state === 'wrecked') return null;
     if (rival.id === this.attackerId) this.attackerId = null;
     rival.stability = 0;
     rival.state = 'wrecked';
-    rival.stateTime = this.t.wreckSeconds;
+    // Contacts are read from fixed-step traces after the render update. At
+    // 30Hz the credited trace may be one 60Hz step old, so age the pause from
+    // that authoritative timestamp instead of making low refresh rates wait
+    // longer for the same replacement.
+    const wreckSeconds = this.circulation.enabled
+      ? circulationValue(
+        this.seed,
+        rival.id,
+        rival.generation,
+        5,
+        this.circulation.reentryDelayMinSeconds,
+        this.circulation.reentryDelayMaxSeconds,
+      )
+      : this.t.wreckSeconds;
+    rival.stateTime = Math.max(
+      0,
+      wreckSeconds - Math.max(0, Number(elapsedSince) || 0),
+    );
     rival.telegraph = 0;
     rival.attackSide = 0;
     rival.contactCooldown = Math.max(rival.contactCooldown, this.t.wreckSeconds);
@@ -260,6 +315,7 @@ export class RivalPack {
 
   step(dt, context) {
     this.elapsed += dt;
+    this.circulationCooldown = Math.max(0, this.circulationCooldown - dt);
     const player = context.player ?? {};
 
     for (const rival of this.rivals) {
@@ -269,42 +325,75 @@ export class RivalPack {
         if (rival.state === 'wrecked') this.updateAttackState(rival, player, dt, 0);
         continue;
       }
-      rival.previousPosition = rival.position;
-      rival.previousX = rival.x;
-      rival.contactCooldown = Math.max(0, rival.contactCooldown - dt);
-      rival.attackCooldown = Math.max(0, rival.attackCooldown - dt);
-      rival.stagingGrace = Math.max(0, rival.stagingGrace - dt);
+      this.advanceRival(rival, player, dt);
+    }
+  }
 
-      let signedPlayerDistance = wrappedDelta(
+  advanceRival(rival, player, dt) {
+    rival.previousPosition = rival.position;
+    rival.previousX = rival.x;
+    rival.contactCooldown = Math.max(0, rival.contactCooldown - dt);
+    rival.attackCooldown = Math.max(0, rival.attackCooldown - dt);
+    rival.stagingGrace = Math.max(0, rival.stagingGrace - dt);
+
+    let signedPlayerDistance = wrappedDelta(
+      rival.position,
+      finite(player.position, rival.position),
+      this.trackLength,
+    );
+    if (this.stageForProximity(rival, player, signedPlayerDistance)) {
+      signedPlayerDistance = wrappedDelta(
         rival.position,
         finite(player.position, rival.position),
         this.trackLength,
       );
-      if (this.stageForProximity(rival, player, signedPlayerDistance)) {
-        signedPlayerDistance = wrappedDelta(
-          rival.position,
-          finite(player.position, rival.position),
-          this.trackLength,
+    }
+    const correction = distantPaceCorrection(
+      signedPlayerDistance,
+      this.t.segmentLength,
+      this.t,
+    );
+    let targetSpeed = this.t.maxSpeed * this.t.basePace * rival.pace * (1 + correction);
+    const distanceSegments = signedPlayerDistance / this.t.segmentLength;
+    if (
+      this.circulation.enabled &&
+      !rival.reentryMode &&
+      distanceSegments > this.circulation.pursuitStartSegments
+    ) {
+      // Give a passed racer time to fight back under its own wheels. This
+      // modest off-screen pursuit begins well outside collision range and is
+      // exhausted before any emergency relocation threshold is reached.
+      targetSpeed = Math.max(
+        targetSpeed,
+        Math.max(0, finite(player.speed, 0)) * rival.pursuitMultiplier,
+      );
+    }
+    if (rival.reentryMode === 'closing') {
+      rival.reentryTime = Math.max(0, rival.reentryTime - dt);
+      if (distanceSegments <= 1.5 || rival.reentryTime <= 0) {
+        rival.reentryMode = null;
+      } else {
+        // The returning rival is still physically driving, not teleporting
+        // into contact. It only receives enough pace while off-screen behind
+        // to rejoin the race, and loses the assist before reaching the player.
+        targetSpeed = Math.max(
+          targetSpeed,
+          Math.max(0, finite(player.speed, 0)) * rival.reentryPaceMultiplier,
         );
       }
-      const correction = distantPaceCorrection(
-        signedPlayerDistance,
-        this.t.segmentLength,
-        this.t,
-      );
-      const targetSpeed = this.t.maxSpeed * this.t.basePace * rival.pace * (1 + correction);
-      const speedBlend = 1 - Math.exp(-this.t.speedEase * dt);
-      rival.speed += (targetSpeed - rival.speed) * speedBlend;
-      rival.position = wrap(rival.position + rival.speed * dt, this.trackLength);
-
-      this.updateAttackState(rival, player, dt, signedPlayerDistance);
-      const laneStep = this.t.laneRate * dt;
-      const previousLane = rival.x;
-      rival.x = moveToward(rival.x, rival.targetLane, laneStep);
-      rival.steer = laneStep > 0
-        ? clamp((rival.x - previousLane) / laneStep, -1, 1)
-        : 0;
     }
+    const speedBlend = 1 - Math.exp(-this.t.speedEase * dt);
+    rival.speed += (targetSpeed - rival.speed) * speedBlend;
+    rival.position = wrap(rival.position + rival.speed * dt, this.trackLength);
+
+    this.updateAttackState(rival, player, dt, signedPlayerDistance);
+    const laneStep = this.t.laneRate * dt;
+    const previousLane = rival.x;
+    rival.x = moveToward(rival.x, rival.targetLane, laneStep);
+    rival.steer = laneStep > 0
+      ? clamp((rival.x - previousLane) / laneStep, -1, 1)
+      : 0;
+    return rival;
   }
 
   // Re-stage only opponents that have left the encounter entirely. Nothing
@@ -317,7 +406,30 @@ export class RivalPack {
     if (rival.state !== 'cruise' && rival.state !== 'recover') return false;
     const segmentLength = positive(this.t.segmentLength, 200);
     const distanceSegments = Math.abs(signedPlayerDistance) / segmentLength;
-    if (distanceSegments <= positive(this.t.stagingRadiusSegments, 90)) return false;
+    // A passed rival is no longer a useful target even when it is still well
+    // inside the broader ahead/behind staging band. Recycle it sooner once the
+    // player is clearly ahead, while preserving the larger radius for cars the
+    // player is actively chasing.
+    const stagingRadius = signedPlayerDistance > 0
+      ? positive(this.t.stagingBehindRadiusSegments, 24)
+      : positive(this.t.stagingRadiusSegments, 90);
+    if (distanceSegments <= stagingRadius) return false;
+
+    if (this.circulation.enabled) {
+      // Never teleport a visible leader back toward the player. It remains a
+      // real race target and the existing far-only pace easing lets the player
+      // reel it in. Only a genuinely lost, behind-camera pursuer may be
+      // reintroduced, and even then it remains behind with contact grace.
+      if (signedPlayerDistance <= 0 || rival.screen.visible) return false;
+      if (this.circulationCooldown > 0) return false;
+      this.placeCirculatingRival(
+        rival,
+        player,
+        'behind',
+        'distance',
+      );
+      return true;
+    }
 
     const activeIndex = Math.max(0, this.rivals.indexOf(rival));
     const targetSegments = positive(this.t.stagingTargetSegments, 24) +
@@ -342,10 +454,16 @@ export class RivalPack {
     if (rival.state === 'wrecked') {
       rival.stateTime = Math.max(0, rival.stateTime - dt);
       if (rival.stateTime <= 0) {
-        rival.state = 'eliminated';
-        rival.eliminated = true;
-        rival.active = false;
-        this.refreshViews();
+        if (this.recycleWrecks) {
+          if (!this.circulation.enabled || this.circulationCooldown <= 0) {
+            this.recycleRival(rival, player);
+          }
+        } else {
+          rival.state = 'eliminated';
+          rival.eliminated = true;
+          rival.active = false;
+          this.refreshViews();
+        }
       }
       return;
     }
@@ -405,6 +523,135 @@ export class RivalPack {
     if (this.canStartAttack(rival, player, signedPlayerDistance)) {
       this.startAttack(rival, player);
     }
+  }
+
+  recycleRival(rival, player = {}) {
+    const segmentLength = positive(this.t.segmentLength, 200);
+    const slot = Math.max(0, this.rivals.indexOf(rival));
+    const targetSegments = positive(this.t.stagingTargetSegments, 24) +
+      slot * positive(this.t.stagingTargetSpacingSegments, 7);
+    const playerPosition = finite(player.position, rival.position);
+    rival.generation += 1;
+    rival.eliminated = false;
+    rival.active = true;
+    rival.state = 'cruise';
+    rival.stateTime = 0;
+    rival.stability = 2;
+    rival.position = wrap(playerPosition + targetSegments * segmentLength, this.trackLength);
+    rival.previousPosition = rival.position;
+    rival.x = rival.spawnLane;
+    rival.previousX = rival.x;
+    rival.targetLane = rival.x;
+    rival.steer = 0;
+    rival.telegraph = 0;
+    rival.attackSide = 0;
+    if (this.circulation.enabled) {
+      // Roughly two lives in three return ahead as reachable quarry, while
+      // the third becomes a rear challenger. This preserves Gold opportunity
+      // without collapsing the encounter into one repeated chase direction.
+      const slot = Math.max(0, this.rivals.indexOf(rival));
+      const side = (slot + rival.generation) % 3 === 0 ? 'behind' : 'ahead';
+      this.placeCirculatingRival(rival, player, side, 'wreck');
+      this.events.push({
+        type: 'rival_respawned',
+        rivalId: rival.id,
+        generation: rival.generation,
+        targetSegments: rival.reentryTargetSegments,
+        side,
+        time: this.elapsed,
+      });
+      this.refreshViews();
+      return rival;
+    }
+    rival.stagingGrace = Math.max(0.25, positive(this.t.stagingGraceSeconds, 1));
+    rival.stagingGraceTotal = rival.stagingGrace;
+    rival.contactCooldown = rival.stagingGrace;
+    rival.attackCooldown = Math.max(1, this.t.recoverySeconds);
+    rival.screen.visible = false;
+    rival.stagingCount += 1;
+    this.events.push({
+      type: 'rival_respawned',
+      rivalId: rival.id,
+      generation: rival.generation,
+      targetSegments,
+    });
+    this.refreshViews();
+    return rival;
+  }
+
+  placeCirculatingRival(rival, player = {}, side = 'behind', cause = 'distance') {
+    const segmentLength = positive(this.t.segmentLength, 200);
+    const playerPosition = finite(player.position, rival.position);
+    const sequence = rival.stagingCount + rival.generation;
+    let distance = circulationValue(
+      this.seed,
+      rival.id,
+      sequence,
+      side === 'behind' ? 11 : 23,
+      side === 'behind' ? this.circulation.behindMinSegments : this.circulation.aheadMinSegments,
+      side === 'behind' ? this.circulation.behindMaxSegments : this.circulation.aheadMaxSegments,
+    );
+    const minimum = side === 'behind'
+      ? this.circulation.behindMinSegments
+      : this.circulation.aheadMinSegments;
+    const maximum = side === 'behind'
+      ? this.circulation.behindMaxSegments
+      : this.circulation.aheadMaxSegments;
+    const direction = side === 'behind' ? -1 : 1;
+    // Prefer the seeded entry but rotate through the authored range if it
+    // would stack on a live opponent. This preserves reproducibility while
+    // avoiding the repeated three-abreast wave silhouette.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = wrap(playerPosition + direction * distance * segmentLength, this.trackLength);
+      const overlaps = this.rivals.some((other) =>
+        other !== rival && other.active && other.state !== 'wrecked' &&
+        Math.abs(wrappedDelta(candidate, other.position, this.trackLength)) <
+          this.circulation.minimumSpacingSegments * segmentLength,
+      );
+      if (!overlaps) break;
+      const span = Math.max(0.01, maximum - minimum);
+      distance = minimum + ((distance - minimum + this.circulation.minimumSpacingSegments) % span);
+    }
+    const signedSegments = direction * distance;
+    const lanePattern = this.circulation.lanePattern;
+    const laneIndex = positiveHash(this.seed, rival.id, sequence, 37) % lanePattern.length;
+    const lane = lanePattern[laneIndex];
+
+    rival.position = wrap(playerPosition + signedSegments * segmentLength, this.trackLength);
+    rival.previousPosition = rival.position;
+    rival.x = lane;
+    rival.previousX = lane;
+    rival.targetLane = lane;
+    rival.steer = 0;
+    rival.reentryMode = side === 'behind' ? 'closing' : null;
+    rival.reentryTime = side === 'behind' ? this.circulation.catchUpSeconds : 0;
+    rival.reentryPaceMultiplier = circulationValue(
+      this.seed,
+      rival.id,
+      sequence,
+      41,
+      this.circulation.catchUpMinMultiplier,
+      this.circulation.catchUpMaxMultiplier,
+    );
+    rival.reentryTargetSegments = signedSegments;
+    rival.stagingGrace = Math.max(0.25, positive(this.t.stagingGraceSeconds, 1));
+    rival.stagingGraceTotal = rival.stagingGrace;
+    rival.contactCooldown = Math.max(rival.contactCooldown, rival.stagingGrace);
+    rival.attackCooldown = Math.max(rival.attackCooldown, this.t.recoverySeconds);
+    rival.stagingCount += 1;
+    this.circulationCooldown = this.circulation.minimumReentryIntervalSeconds;
+    rival.screen.visible = false;
+    this.events.push({
+      type: 'rival_circulated',
+      rivalId: rival.id,
+      generation: rival.generation,
+      cause,
+      side,
+      targetSegments: signedSegments,
+      lane,
+      time: this.elapsed,
+    });
+    return rival;
   }
 
   canStartAttack(rival, player, signedPlayerDistance) {
@@ -505,6 +752,100 @@ export function wrappedDelta(from, to, length) {
   return delta;
 }
 
+function normalizeCirculation(config = {}) {
+  const behindMinSegments = positive(
+    config.behindMinSegments,
+    DEFAULT_CIRCULATION.behindMinSegments,
+  );
+  const aheadMinSegments = positive(
+    config.aheadMinSegments,
+    DEFAULT_CIRCULATION.aheadMinSegments,
+  );
+  const reentryDelayMinSeconds = positive(
+    config.reentryDelayMinSeconds,
+    DEFAULT_CIRCULATION.reentryDelayMinSeconds,
+  );
+  const catchUpMinMultiplier = positive(
+    config.catchUpMinMultiplier,
+    DEFAULT_CIRCULATION.catchUpMinMultiplier,
+  );
+  const authoredLanes = Array.isArray(config.lanePattern)
+    ? config.lanePattern
+      .map((lane) => Number(lane))
+      .filter(Number.isFinite)
+      .map((lane) => clamp(lane, -0.85, 0.85))
+    : [];
+  return {
+    enabled: !!config.enabled,
+    behindMinSegments,
+    behindMaxSegments: Math.max(
+      behindMinSegments,
+      positive(config.behindMaxSegments, DEFAULT_CIRCULATION.behindMaxSegments),
+    ),
+    aheadMinSegments,
+    aheadMaxSegments: Math.max(
+      aheadMinSegments,
+      positive(config.aheadMaxSegments, DEFAULT_CIRCULATION.aheadMaxSegments),
+    ),
+    catchUpMinMultiplier,
+    catchUpMaxMultiplier: Math.max(
+      catchUpMinMultiplier,
+      positive(config.catchUpMaxMultiplier, DEFAULT_CIRCULATION.catchUpMaxMultiplier),
+    ),
+    catchUpSeconds: positive(config.catchUpSeconds, DEFAULT_CIRCULATION.catchUpSeconds),
+    pursuitStartSegments: positive(
+      config.pursuitStartSegments,
+      DEFAULT_CIRCULATION.pursuitStartSegments,
+    ),
+    pursuitMinMultiplier: positive(
+      config.pursuitMinMultiplier,
+      DEFAULT_CIRCULATION.pursuitMinMultiplier,
+    ),
+    pursuitMaxMultiplier: Math.max(
+      positive(config.pursuitMinMultiplier, DEFAULT_CIRCULATION.pursuitMinMultiplier),
+      positive(config.pursuitMaxMultiplier, DEFAULT_CIRCULATION.pursuitMaxMultiplier),
+    ),
+    reentryDelayMinSeconds,
+    reentryDelayMaxSeconds: Math.max(
+      reentryDelayMinSeconds,
+      positive(
+        config.reentryDelayMaxSeconds,
+        DEFAULT_CIRCULATION.reentryDelayMaxSeconds,
+      ),
+    ),
+    minimumReentryIntervalSeconds: positive(
+      config.minimumReentryIntervalSeconds,
+      DEFAULT_CIRCULATION.minimumReentryIntervalSeconds,
+    ),
+    minimumSpacingSegments: positive(
+      config.minimumSpacingSegments,
+      DEFAULT_CIRCULATION.minimumSpacingSegments,
+    ),
+    lanePattern: authoredLanes.length > 0
+      ? authoredLanes
+      : [...DEFAULT_CIRCULATION.lanePattern],
+  };
+}
+
+function circulationValue(seed, id, sequence, salt, low, high) {
+  const amount = positiveHash(seed, id, sequence, salt) / 0xffffffff;
+  return low + (high - low) * amount;
+}
+
+function positiveHash(seed, id, sequence, salt) {
+  let hash = (uintSeed(seed) ^ uintSeed(sequence) ^ uintSeed(salt)) >>> 0;
+  const text = String(id);
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x7feb352d) >>> 0;
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x846ca68b) >>> 0;
+  return (hash ^ (hash >>> 16)) >>> 0;
+}
+
 function normalizeZone(zone) {
   const from = Number(zone?.from);
   const to = Number(zone?.to);
@@ -584,6 +925,7 @@ function copyPlayerContext(target, source = {}) {
 }
 
 function copyRivalContext(target, source = {}) {
+  target.generation = Math.max(1, Math.floor(finite(source.generation, 1)));
   target.position = finite(source.position, 0);
   target.x = finite(source.x, 0);
   target.speed = finite(source.speed, 0);

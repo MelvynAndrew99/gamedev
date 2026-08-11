@@ -26,6 +26,33 @@ export function rivalRenderAlpha(rival = {}) {
   return Math.min(1, Math.max(0, telegraphAlpha * stagingAlpha));
 }
 
+// The generated car lives in a deliberately roomy 64x56 steering frame. Its
+// straight-on hull occupies about 30 pixels of that width. Treating the whole
+// transparent frame as the projected car width made distant rivals collapse
+// into two isolated engine pixels — visually similar to two offset sprites.
+// Keep the authored frame, but size it from its opaque hull and switch to one
+// cohesive world marker before the detailed sprite becomes sub-pixel noise.
+const RIVAL_HULL_FRAME_RATIO = 30 / 64;
+const RIVAL_FRAME_ASPECT = 56 / 64;
+const RIVAL_SPRITE_LOD_WIDTH = 8;
+
+export function rivalSpriteMode(projectedHullWidth) {
+  const hullWidth = Math.max(0, Number(projectedHullWidth) || 0);
+  return hullWidth < RIVAL_SPRITE_LOD_WIDTH ? 'beacon' : 'sprite';
+}
+
+export function rivalSpriteFrameSize(projectedHullWidth) {
+  const hullWidth = Math.max(0, Number(projectedHullWidth) || 0);
+  return hullWidth / RIVAL_HULL_FRAME_RATIO;
+}
+
+export function rivalSteerFrame(steer = 0) {
+  return steer < -0.6 ? 0
+    : steer < -0.2 ? 1
+      : steer <= 0.2 ? 2
+        : steer <= 0.6 ? 3 : 4;
+}
+
 export class RoadRenderer {
   constructor(scene, tuning, environmentId = 'endless') {
     this.t = tuning;
@@ -76,8 +103,8 @@ export class RoadRenderer {
     }
 
     // Moving rivals keep stable identity and therefore use a separate fixed
-    // pool from consumable road props. Six is the system stress cap; Training
-    // 5 deliberately activates at most three.
+    // pool from consumable road props. Six remains the system cap for future
+    // Story races; Rival School activates three without reallocating.
     this.rivalPool = [];
     for (let i = 0; i < 6; i++) {
       this.rivalPool.push(
@@ -519,7 +546,7 @@ export class RoadRenderer {
         ) continue;
         const img = this.pool[poolI++];
         img.setTexture(s.key);
-        if (s.timeBonusSeconds > 0) img.setTint(0x00e5ff);
+        if (s.timeBonusSeconds > 0) img.setTint(0x2ee56b);
         else img.clearTint();
         // Lateral placement: same projection term as the road edges.
         img.x = x + scale * (s.offset * t.roadWidth) * (this.w / 2);
@@ -577,53 +604,79 @@ export class RoadRenderer {
         const roadY = lerp(seg.p1.screen.y, seg.p2.screen.y);
         const roadHalfW = lerp(seg.p1.screen.w, seg.p2.screen.w);
         const x = roadX + rival.x * roadHalfW;
-        const visualW = Math.max(2, 0.28 * scale * t.roadWidth * (this.w / 2));
+        const projectedHullW = Math.max(
+          0,
+          0.28 * scale * t.roadWidth * (this.w / 2),
+        );
+        const spriteMode = rivalSpriteMode(projectedHullW);
         const sprite = this.rivalPool[i];
-        const steerFrame = rival.steer < -0.6 ? 0
-          : rival.steer < -0.2 ? 1
-            : rival.steer <= 0.2 ? 2
-              : rival.steer <= 0.6 ? 3 : 4;
-        sprite
-          .setFrame(carSpriteFrame(steerFrame, 0))
-          .setPosition(x, roadY)
-          .setDisplaySize(visualW, visualW * 0.875)
-          .setTint(rival.color ?? 0xff6b6b)
-          .setAlpha(rivalRenderAlpha(rival))
-          .setVisible(true);
+        const steerFrame = rivalSteerFrame(rival.steer);
+        const alpha = rivalRenderAlpha(rival);
+        const drawX = x;
+        if (spriteMode === 'sprite') {
+          const frameWidth = rivalSpriteFrameSize(projectedHullW);
+          sprite
+            .setFrame(carSpriteFrame(steerFrame, 0))
+            .setPosition(Math.round(drawX), Math.round(roadY))
+            .setDisplaySize(
+              frameWidth,
+              frameWidth * RIVAL_FRAME_ASPECT,
+            )
+            .setTint(rival.color ?? 0xff6b6b)
+            .setAlpha(alpha)
+            .setVisible(true);
+        } else {
+          // One filled, outlined hover-car wedge replaces unreadable 2–7px
+          // engine fragments. It is world-linked and uses the same identity
+          // color, but its silhouette remains one object in grayscale.
+          const size = Math.max(2, projectedHullW * 0.5);
+          this.rivalMarkers.lineStyle(1, 0x080812, alpha);
+          this.rivalMarkers.fillStyle(rival.color ?? 0xff6b6b, alpha);
+          this.rivalMarkers.fillTriangle(
+            drawX, roadY - size * 1.2,
+            drawX - size * 1.45, roadY,
+            drawX + size * 1.45, roadY,
+          );
+          this.rivalMarkers.strokeTriangle(
+            drawX, roadY - size * 1.2,
+            drawX - size * 1.45, roadY,
+            drawX + size * 1.45, roadY,
+          );
+        }
 
-        rival.screen.x = x;
+        rival.screen.x = drawX;
         rival.screen.y = roadY;
-        rival.screen.width = visualW;
+        rival.screen.width = Math.max(2, projectedHullW);
         rival.screen.visible = true;
         this.rivalShadows.fillStyle(0x05050a, 0.42);
         this.rivalShadows.fillEllipse(
-          x,
-          roadY - Math.max(1, visualW * 0.03),
-          visualW * 0.92,
-          Math.max(2, visualW * 0.18),
+          drawX,
+          roadY - Math.max(1, projectedHullW * 0.03),
+          Math.max(3, projectedHullW * 0.92),
+          Math.max(2, projectedHullW * 0.18),
         );
 
         if (rival.state === 'telegraph' || rival.state === 'attack') {
-          const markerY = roadY - visualW * 1.04;
-          const size = Math.max(3, visualW * 0.16);
+          const markerY = roadY - Math.max(8, projectedHullW * 1.04);
+          const size = Math.max(3, projectedHullW * 0.16);
           const color = rival.state === 'attack' ? 0xff2d55 : 0xffcf3f;
           // Downward warning diamond plus a directional chevron: readable by
           // shape and motion even without its yellow→red color transition.
           this.rivalMarkers.fillStyle(color, 1);
           this.rivalMarkers.fillTriangle(
-            x, markerY + size,
-            x - size, markerY - size,
-            x + size, markerY - size,
+            drawX, markerY + size,
+            drawX - size, markerY - size,
+            drawX + size, markerY - size,
           );
           const side = rival.attackSide || 1;
           this.rivalMarkers.lineStyle(Math.max(1, size * 0.22), 0xffffff, 0.95);
           this.rivalMarkers.lineBetween(
-            x - side * size * 1.5, markerY,
-            x - side * size * 0.4, markerY,
+            drawX - side * size * 1.5, markerY,
+            drawX - side * size * 0.4, markerY,
           );
           this.rivalMarkers.lineBetween(
-            x - side * size * 0.4, markerY,
-            x - side * size * 0.9, markerY - size * 0.45,
+            drawX - side * size * 0.4, markerY,
+            drawX - side * size * 0.9, markerY - size * 0.45,
           );
         }
       }

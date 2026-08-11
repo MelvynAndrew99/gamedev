@@ -30,14 +30,16 @@ test('lap and cone bonuses are explicit and capped', () => {
   assert.equal(state.totalTimeAdded, 15);
 });
 
-test('three stable rival IDs can be eliminated exactly once', () => {
-  const state = new TimedElimination({}, ['cyan', 'magenta', 'gold']);
+test('five stable rival IDs can be eliminated exactly once', () => {
+  const state = new TimedElimination({}, ['cyan', 'magenta', 'gold', 'green', 'violet']);
   assert.equal(state.eliminate('cyan'), true);
   assert.equal(state.eliminate('cyan'), false);
-  assert.equal(state.carsRemaining, 2);
+  assert.equal(state.carsRemaining, 4);
   assert.equal(state.eliminate('unknown'), false);
   assert.equal(state.eliminate('magenta'), true);
   assert.equal(state.eliminate('gold'), true);
+  assert.equal(state.eliminate('green'), true);
+  assert.equal(state.eliminate('violet'), true);
   assert.equal(state.complete, true);
   assert.equal(state.carsRemaining, 0);
   assert.deepEqual(state.addLapBonus(), { reason: 'lap', awarded: 0 });

@@ -35,6 +35,7 @@ import {
 import {
   submitTrainingResult,
   trainingConeScore,
+  trainingMetricUsage,
 } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
 import { Boost } from '../entities/Boost.js';
@@ -42,12 +43,15 @@ import { RivalPack } from '../entities/RivalPack.js';
 import {
   attackIntent,
   classifyRivalContact,
+  qualifiesRivalTakedown,
+  rivalContactTraceEligible,
   rivalDamagePolicy,
   resolveRivalContact,
   sweptRivalContact,
 } from '../systems/RivalContact.js';
 import { createTrackDiscipline, updateTrackDiscipline } from '../systems/TrackDiscipline.js';
 import { TimedElimination } from '../systems/TimedElimination.js';
+import { TimedScoreAttack } from '../systems/TimedScoreAttack.js';
 import { rivalFxSpec } from '../systems/RivalFx.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
@@ -105,7 +109,7 @@ export class GameScene extends Phaser.Scene {
       ? new RivalPack(this.trackData.rivals, this.rivalTuning(), this.model)
       : null;
     // Racer count is an attempt contract, not a live despawn control. The Lab
-    // can tune 1..6 and Retry to compare densities without making an active
+    // can tune 1..5 and Retry to compare densities without making an active
     // clock unwinnable by hiding one of its target IDs mid-run.
     this.rivalAttemptCount = this.rivalPack
       ? Math.min(
@@ -141,6 +145,9 @@ export class GameScene extends Phaser.Scene {
           .slice(0, this.rivalAttemptCount)
           .map((rival) => rival.id),
       )
+      : null;
+    this.timedScoreAttack = this.trackData?.timedScoreAttack && this.rivalPack
+      ? new TimedScoreAttack(this.trackData.timedScoreAttack)
       : null;
     this.rivalSchoolCompletePending = 0;
     this.rivalSchoolView = this.buildRivalSchoolView();
@@ -347,7 +354,8 @@ export class GameScene extends Phaser.Scene {
         airborne: this.player.airborne,
       });
       this.trackDiscipline = discipline.state;
-      if (discipline.justLostCleanLine) {
+      const metricUsage = trainingMetricUsage(this.trackData.scoring);
+      if (discipline.justLostCleanLine && metricUsage.offTrack) {
         this.pushRivalHudEvent('CLEAN LINE LOST  •  GOLD GONE', 'warning');
       }
     }
@@ -415,6 +423,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       const event = this.race.update(dt, this.player);
       if (event === 'start') {
+        this.timedScoreAttack?.start(this.rivalPack?.elapsed ?? 0);
         this.showBanner('GO!', 800);
       } else if (event === 'lap') {
         this.recordObjective('lap_complete');
@@ -422,7 +431,10 @@ export class GameScene extends Phaser.Scene {
         // Ordinary cones re-arm at the line; objective-linked mastery cones
         // persist and use trainingConeHits across the complete attempt.
         this.conesThisLap = 0;
-        if (this.timedElimination) {
+        if (this.timedScoreAttack) {
+          // Rival School earns time from authored clock cones, not passively
+          // from completing laps.
+        } else if (this.timedElimination) {
           const bonus = this.timedElimination.addLapBonus();
           if (bonus.awarded > 0) {
             MUSIC.playTimeBonus({ major: true });
@@ -456,6 +468,16 @@ export class GameScene extends Phaser.Scene {
         }
       } else if (this.timedElimination.update(dt, this.race.crossedStart) === 'expired') {
         this.failTimedElimination();
+      }
+      this.rivalSchoolView = this.buildRivalSchoolView();
+    }
+    if (this.timedScoreAttack && !this.done) {
+      if (this.timedScoreAttack.update(
+        this.rivalPack?.elapsed ?? 0,
+        this.race.crossedStart,
+      ) === 'expired') {
+        this.race.finish();
+        this.finishRace();
       }
       this.rivalSchoolView = this.buildRivalSchoolView();
     }
@@ -753,7 +775,6 @@ export class GameScene extends Phaser.Scene {
   createRivalVisuals() {
     this.rivalFxGraphics = null;
     this.rivalFxParticles = [];
-    this.rivalWreckGhosts = [];
     this.rivalFxPulse = null;
     if (!this.rivalPack) return;
 
@@ -761,22 +782,12 @@ export class GameScene extends Phaser.Scene {
     this.rivalPack.rivals.forEach((rival, index) => {
       rival.color = colors[index % colors.length];
     });
-    this.rivalFxGraphics = this.add.graphics().setDepth(23);
+    // Combat debris lives above rivals/road but below the player car. This
+    // keeps a close takedown from pasting a large overlay over the player.
+    this.rivalFxGraphics = this.add.graphics().setDepth(9);
     this.rivalFxParticles = Array.from({ length: 24 }, () => ({
       active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, total: 0,
       color: 0xffffff, size: 3,
-    }));
-    this.rivalWreckGhosts = Array.from({ length: 3 }, () => ({
-      active: false,
-      life: 0,
-      total: 0,
-      vx: 0,
-      vy: 0,
-      spin: 0,
-      sprite: this.add.sprite(0, 0, 'car', carSpriteFrame(2, 0))
-        .setOrigin(0.5, 1)
-        .setDepth(22)
-        .setVisible(false),
     }));
   }
 
@@ -784,8 +795,13 @@ export class GameScene extends Phaser.Scene {
     if (!this.rivalFxGraphics) return;
     const spec = rivalFxSpec(kind, boosted);
     const visible = rival?.screen?.visible;
-    const x = visible ? rival.screen.x : this.carSprite.x;
-    const y = visible ? rival.screen.y - rival.screen.width * 0.28 : this.carSprite.y - 28;
+    // Collision feedback must originate from the car the player actually saw.
+    // An off-camera/stale contact keeps its audio but never fabricates a large
+    // sprite at the player's position.
+    if (!visible) return;
+    const x = rival.screen.x;
+    const y = rival.screen.y;
+    const contactY = y - rival.screen.width * 0.12;
     const side = Math.sign(rival?.x - this.player.x) || 1;
     const color = kind === 'takedown' ? 0xffcf3f
       : kind === 'incoming' ? 0xff6b6b
@@ -799,7 +815,7 @@ export class GameScene extends Phaser.Scene {
       const direction = activated % 2 === 0 ? side : -side;
       particle.active = true;
       particle.x = x + direction * (4 + row);
-      particle.y = y;
+      particle.y = contactY;
       particle.vx = direction * (80 + row * 19) * (kind === 'takedown' ? 1.35 : 1);
       particle.vy = -(45 + (activated % 5) * 24);
       particle.life = spec.duration;
@@ -810,34 +826,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.rivalFxPulse = {
-      x, y, color, life: spec.flash, total: spec.flash,
+      x, y: contactY, color, life: spec.flash, total: spec.flash,
       strength: kind === 'takedown' ? 1.8 : 1,
     };
     if (spec.shake > 0) {
       this.cameras.main.shake(kind === 'takedown' ? 120 : 70, spec.shake);
     }
 
-    if (spec.ghost) {
-      const ghost = this.rivalWreckGhosts.find((candidate) => !candidate.active) ??
-        this.rivalWreckGhosts[0];
-      ghost.active = true;
-      ghost.life = 0.68;
-      ghost.total = 0.68;
-      ghost.vx = side * 170;
-      ghost.vy = -115;
-      ghost.spin = side * 620;
-      ghost.sprite
-        .setPosition(x, y)
-        .setFrame(carSpriteFrame(2, 0))
-        .setDisplaySize(
-          Math.max(24, rival?.screen?.width ?? 48),
-          Math.max(21, (rival?.screen?.width ?? 48) * 0.875),
-        )
-        .setTint(rival?.color ?? 0xff6b6b)
-        .setAngle(0)
-        .setAlpha(1)
-        .setVisible(true);
-    }
   }
 
   updateRivalVisuals(dt) {
@@ -872,20 +867,6 @@ export class GameScene extends Phaser.Scene {
         (8 + progress * 34) * this.rivalFxPulse.strength,
       );
     }
-    for (const ghost of this.rivalWreckGhosts) {
-      if (!ghost.active) continue;
-      ghost.life = Math.max(0, ghost.life - dt);
-      if (ghost.life <= 0) {
-        ghost.active = false;
-        ghost.sprite.setVisible(false);
-        continue;
-      }
-      ghost.sprite.x += ghost.vx * dt;
-      ghost.sprite.y += ghost.vy * dt;
-      ghost.vy += 300 * dt;
-      ghost.sprite.angle += ghost.spin * dt;
-      ghost.sprite.setAlpha(ghost.life / ghost.total);
-    }
   }
 
   rivalTuning() {
@@ -898,6 +879,12 @@ export class GameScene extends Phaser.Scene {
       slowDownLimit: policy.maximumSlowDown ?? 0.08,
       localPaceRadiusSegments: policy.localPaceRadiusSegments ?? 18,
       fullPaceCorrectionSegments: 40,
+      stagingRadiusSegments: policy.stagingRadiusSegments ?? 90,
+      stagingBehindRadiusSegments: policy.stagingBehindRadiusSegments ?? 24,
+      stagingTargetSegments: policy.stagingTargetSegments ?? 24,
+      stagingTargetSpacingSegments: policy.stagingTargetSpacingSegments ?? 7,
+      stagingGraceSeconds: policy.stagingGraceSeconds ?? 1,
+      wreckSeconds: policy.wreckSeconds ?? 0.7,
       attackTellSeconds: TUNING.rivalTelegraph,
       contactCooldownSeconds: TUNING.rivalContactCooldown,
       minimumAttackInterval: TUNING.rivalAttackCooldown,
@@ -905,16 +892,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   buildRivalSchoolView() {
-    if (!this.timedElimination || !this.rivalPack) return null;
+    const clock = this.timedScoreAttack ?? this.timedElimination;
+    if (!clock || !this.rivalPack) return null;
     return {
-      ...this.timedElimination.view,
+      ...clock.view,
+      takedowns: this.timedScoreAttack?.takedowns ?? this.rivalMetrics.takedowns,
       lap: this.race?.lap ?? 1,
       rivals: this.rivalPack.rivals
-        .filter((rival) =>
-          this.timedElimination.rivalIds.includes(rival.id) && !rival.eliminated
-        )
+        .filter((rival) => rival.active && !rival.eliminated)
         .map((rival) => ({
           id: rival.id,
+          generation: rival.generation,
           position: rival.position,
           state: rival.state,
           color: rival.color,
@@ -1039,15 +1027,15 @@ export class GameScene extends Phaser.Scene {
     // Consume every fixed body interval in chronological order. A 30Hz frame
     // contains two 60Hz traces, while 120Hz alternates one/zero; this makes the
     // actual contact step identical rather than quantizing it to render rate.
-    // Stable-ID order remains the simultaneous-contact tie breaker, and one
-    // render frame still resolves at most one authoritative physical result.
-    contactSteps:
+    // Stable-ID order remains the simultaneous-contact tie breaker. Resolve
+    // at most one result per fixed physics step—not per rendered frame—so a
+    // 30Hz frame containing two legitimate 60Hz contacts cannot discard the
+    // second result that 60/120Hz would process.
     for (let stepIndex = 0; stepIndex < pack.contactStepCount; stepIndex += 1) {
       const step = pack.contactSteps[stepIndex];
       for (const rival of pack.views) {
         const tracedRival = step.rivals.find((candidate) => candidate.id === rival.id);
-        if (!tracedRival?.current.active || tracedRival.current.state === 'wrecked' ||
-            tracedRival.current.eliminated) continue;
+        if (!rivalContactTraceEligible(tracedRival, rival)) continue;
       const contact = sweptRivalContact(
         step.previousPlayer,
         step.player,
@@ -1089,24 +1077,26 @@ export class GameScene extends Phaser.Scene {
       if (outcome.deliberate) {
         this.rivalMetrics.deliberateHits += 1;
         this.recordObjective('rival_hit');
-        const edgeBoot = outcome.kind === 'side_push' && Math.abs(rival.x) >= 1;
-        const decisiveRearRam = outcome.kind === 'rear_ram' && outcome.takedownForce;
-        const stagger = pack.stagger(rival.id, {
-          side: outcome.side,
-          force: edgeBoot || decisiveRearRam ? 1.35 : 1,
-          // Rear impacts wear down stability. Steering contact is positional:
-          // it only wrecks after the rival physically leaves the road.
-          damage: outcome.kind === 'rear_ram' || edgeBoot,
-        });
-        // A clean high-speed rear ram or a steering push that physically
-        // crosses the road edge is decisive. A center-road bump needs a
-        // follow-up, so simply leaning on another car cannot farm wrecks.
-        const decisive = stagger?.stability === 0 || edgeBoot;
-        if (decisive && pack.takeDown(rival.id)) {
+        // Rival School now has one unambiguous combat rule: only a committed
+        // hit while boost is live can wreck. Ordinary rams ricochet the target
+        // off-line but never accumulate invisible damage.
+        const decisive = qualifiesRivalTakedown(outcome, input.boostActive);
+        const scoreTime = step.time;
+        const scoreOpen = !this.timedScoreAttack ||
+          this.timedScoreAttack.canScoreAt(scoreTime);
+        if (decisive && scoreOpen && pack.takeDown(rival.id, {
+          elapsedSince: Math.max(0, pack.elapsed - scoreTime),
+        })) {
+          const generation = tracedRival.current.generation ?? rival.generation;
+          if (this.timedScoreAttack && !this.timedScoreAttack.recordTakedown(
+            rival.id,
+            generation,
+            scoreTime,
+          )) continue;
           this.rivalMetrics.takedowns += 1;
           if (input.boostActive) this.rivalMetrics.boostedTakedowns += 1;
           this.recordObjective('rival_takedown');
-          if (this.timedElimination?.eliminate(rival.id)) {
+          if (!this.timedScoreAttack && this.timedElimination?.eliminate(rival.id)) {
             this.rivalSchoolCompletePending = this.timedElimination.complete ? 0.7 : 0;
           }
           this.boost.collect();
@@ -1119,20 +1109,30 @@ export class GameScene extends Phaser.Scene {
           this.startRivalFx('takedown', rival, { boosted: input.boostActive });
           this.speedLineBurst = Math.max(this.speedLineBurst, 1);
           this.pushRivalHudEvent(
-            `WRECKED  •  ${this.timedElimination?.carsRemaining ?? 0} LEFT`,
+            this.timedScoreAttack
+              ? `WRECK +1  •  ${this.timedScoreAttack.takedowns} TOTAL`
+              : `WRECKED  •  ${this.timedElimination?.carsRemaining ?? 0} LEFT`,
             'success',
           );
         } else {
+          pack.stagger(rival.id, {
+            side: outcome.side,
+            force: 0.85,
+            damage: false,
+          });
           MUSIC.playRivalImpact({
             kind: 'slam',
             pan: outcome.side * 0.6,
-            strength: outcome.takedownForce ? 0.9 : 0.68,
+            strength: 0.62,
           });
-          this.startRivalFx('slam', rival, { boosted: input.boostActive });
-          this.pushRivalHudEvent(
-            stagger?.stability === 1 ? 'RAMMED  •  FINISH IT' : 'PUSH THEM WIDE',
-            'info',
-          );
+          this.startRivalFx('slam', rival);
+          if (this.rivalHintCooldown <= 0) {
+            this.pushRivalHudEvent(
+              'RICOCHET  •  BOOST TO WRECK',
+              'info',
+            );
+            this.rivalHintCooldown = 1.2;
+          }
         }
       } else if (outcome.kind === 'incoming_attack') {
         pack.cancelAttack(rival);
@@ -1164,8 +1164,16 @@ export class GameScene extends Phaser.Scene {
         }
       } else {
         this.player.speed *= 0.98;
-        MUSIC.playRivalImpact({ kind: 'rub', pan: outcome.side * 0.45, strength: 0.45 });
-        this.startRivalFx('rub', rival);
+        const ricochet = outcome.kind === 'shunt';
+        if (ricochet) {
+          pack.stagger(rival.id, { side: outcome.side, force: 0.65, damage: false });
+        }
+        MUSIC.playRivalImpact({
+          kind: ricochet ? 'slam' : 'rub',
+          pan: outcome.side * 0.45,
+          strength: ricochet ? 0.55 : 0.4,
+        });
+        this.startRivalFx(ricochet ? 'slam' : 'rub', rival);
         if (this.rivalHintCooldown <= 0 && contact?.playerCatching) {
           this.pushRivalHudEvent(
             Math.abs(contact.lateralDistance ?? 0) > 0.2
@@ -1176,7 +1184,7 @@ export class GameScene extends Phaser.Scene {
           this.rivalHintCooldown = 1.5;
         }
       }
-        break contactSteps;
+        break;
       }
     }
   }
@@ -1503,8 +1511,14 @@ export class GameScene extends Phaser.Scene {
       milestone: objective ? (objective.complete || objective.progress % 10 === 0) : false,
       complete: objective ? objective.complete : false,
     });
-    if (this.timedElimination && sprite.timeBonusSeconds > 0) {
-      const bonus = this.timedElimination.addTime(sprite.timeBonusSeconds, 'cone');
+    const bonusClock = this.timedScoreAttack ?? this.timedElimination;
+    if (bonusClock && sprite.timeBonusSeconds > 0) {
+      const bonus = this.timedScoreAttack
+        ? this.timedScoreAttack.addTime(
+          sprite.timeBonusSeconds,
+          this.rivalPack?.elapsed ?? 0,
+        )
+        : this.timedElimination.addTime(sprite.timeBonusSeconds, 'cone');
       if (bonus.awarded > 0) {
         MUSIC.playTimeBonus();
         this.pushRivalHudEvent(`CLOCK CONE  +${Math.round(bonus.awarded)}s`, 'success');
@@ -1665,7 +1679,8 @@ export class GameScene extends Phaser.Scene {
     this.done = true;
     // The rival clock starts at the rolling line; its mastery time must use
     // the same origin instead of including the pre-start grid approach.
-    const t = this.timedElimination?.elapsedSeconds ?? this.race.time;
+    const t = this.timedScoreAttack?.elapsedSeconds ??
+      this.timedElimination?.elapsedSeconds ?? this.race.time;
     if (this.mode === 'training') {
       const target = this.objectives.views.find(
         (objective) => objective.id === this.trackData.scoring.objective,
@@ -1674,15 +1689,17 @@ export class GameScene extends Phaser.Scene {
       // Where cones ARE the objective (Cone Control) they reset each lap and
       // the objective row tracks unique hits, so the finishing-lap tally must
       // not feed the trophy or the perfect flag.
-      const coneGated = this.trackData.scoring?.thresholds?.some(
-        (threshold) => threshold.maximumConesMissed != null,
-      );
+      const metricUsage = trainingMetricUsage(this.trackData.scoring);
+      const coneGated = metricUsage.cones;
       const coneScore = trainingConeScore(this.trackData, {
         allHits: this.trainingConeHits,
         lastLapHits: this.conesThisLap,
       });
       const conesMissed = coneGated ? coneScore.missed : 0;
-      const result = submitTrainingResult(this.trackData, target.progress, t, {
+      const scoredProgress = this.timedScoreAttack
+        ? this.timedScoreAttack.takedowns
+        : target.progress;
+      const result = submitTrainingResult(this.trackData, scoredProgress, t, {
         damageHits: this.trainingDamageHits,
         conesMissed,
         offTrackEvents: this.trackDiscipline.offTrackEvents,
@@ -1704,14 +1721,14 @@ export class GameScene extends Phaser.Scene {
           (firstTrophy.maximumDamageHits == null
             ? ''
             : ` / ${firstTrophy.maximumDamageHits} HITS MAX`);
-      const perfect = this.objectives.complete &&
-        this.trainingDamageHits === 0 && conesMissed === 0 &&
-        this.trackDiscipline.offTrackEvents === 0;
+      const goldTarget = this.trackData.scoring?.thresholds
+        ?.find((threshold) => threshold.rank === 'gold')?.minimum ?? target.total;
+      const perfect = result.trophy?.rank === 'gold';
       const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
       this.trainingAdvanceTo = nextTrack && nextTrack.status !== 'placeholder'
         ? this.trackIndex + 1
         : null;
-      const damageLine = this.trainingDamageMax > 0
+      const damageLine = metricUsage.damage && this.trainingDamageMax > 0
         ? `WINDSCREEN ${this.trainingDamageHits} / ${this.trainingDamageMax} HITS\n`
         : '';
       // Surface a cones tally only when cones gate the trophy (Hazard Weave);
@@ -1720,10 +1737,16 @@ export class GameScene extends Phaser.Scene {
         ? `CONES ${coneScore.hits} / ${coneScore.target}\n`
         : '';
       const rivalLine = this.rivalPack
-        ? `TAKEDOWNS ${this.rivalMetrics.takedowns}  •  ` +
-          `BOOSTED ${this.rivalMetrics.boostedTakedowns}\n` +
-          `CLEAN LINE ${this.trackDiscipline.offTrackEvents === 0 ? 'YES' : 'LOST'}\n` +
-          (this.timedElimination
+        ? `TAKEDOWNS ${this.rivalMetrics.takedowns}\n` +
+          (metricUsage.offTrack
+            ? `CLEAN LINE ${this.trackDiscipline.offTrackEvents === 0 ? 'YES' : 'LOST'}\n`
+            : '') +
+          (this.timedScoreAttack
+            ? `RUN TIME ${Math.round(this.timedScoreAttack.elapsedSeconds)}s\n` +
+              (this.timedScoreAttack.bonusSeconds > 0
+                ? `CLOCK BONUS +${Math.round(this.timedScoreAttack.bonusSeconds)}s\n`
+                : '')
+            : this.timedElimination
             ? `TIME LEFT ${Math.ceil(this.timedElimination.remainingSeconds)}s\n`
             : '')
         : '';
@@ -1735,7 +1758,8 @@ export class GameScene extends Phaser.Scene {
           `${TRAINING_TRACKS[this.trainingAdvanceTo].name}`;
       this.showBanner(
         `${perfect ? 'PERFECT CLEAR!' : 'TRAINING COMPLETE'}\n` +
-          `${target.hudLabel}  ${target.progressLabel} / ${target.totalLabel}\n` +
+          `${target.hudLabel}  ${scoredProgress}` +
+          `${this.timedScoreAttack ? '' : ` / ${target.totalLabel}`}\n` +
           damageLine +
           coneLine +
           rivalLine +

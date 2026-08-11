@@ -137,13 +137,19 @@ export class HudScene extends Phaser.Scene {
         this,
         this.hudPolicy.rivalEventHud ? 1 : this.gs.race.laps,
         30,
-        { lapNumbers: !this.hudPolicy.rivalEventHud },
+        {
+          lapNumbers: !this.hudPolicy.rivalEventHud,
+          // This is a looping hunt, not a finite race. Removing endpoint
+          // furniture gives three packed target markers an unobscured lane.
+          endpointLabels: !this.hudPolicy.rivalEventHud,
+          showProgressFill: !this.hudPolicy.rivalEventHud,
+        },
       )
       : null;
 
-    // Rival School is a timed loop, so checkpoints add time rather than
-    // advancing toward a lap finish. Two compact corner reads replace its
-    // generic objective stack; the center remains the one course ribbon.
+    // Rival School is a fixed-time score attack. Two compact corner reads
+    // replace its generic objective stack; the center remains a neutral loop
+    // locator rather than implying lap or endpoint progress.
     if (this.hudPolicy.rivalEventHud) this.createRivalEventHud();
 
     // Training lessons without a dedicated live coach retain one compact
@@ -270,6 +276,7 @@ export class HudScene extends Phaser.Scene {
           trackLength: gs.model.trackLength,
           laps: 1,
           loop: true,
+          ribbonWidth: this.progressBar?.w,
         })
         : [];
       this.progressBar?.draw(
@@ -426,17 +433,12 @@ export class HudScene extends Phaser.Scene {
       stroke: '#080812', strokeThickness: 3,
     }).setOrigin(1, 0).setDepth(61);
 
-    this.rivalLapText = this.add.text(this.scale.width / 2, 10, 'LAP 1', {
-      fontSize: '11px', fontStyle: 'bold', color: '#00e5ff',
-      stroke: '#080812', strokeThickness: 3,
-    }).setOrigin(0.5, 0).setDepth(61);
-
     this.rivalCarsPanel = makePanel(this.scale.width - 154);
-    this.rivalCarsLabel = this.add.text(this.scale.width - 144, 14, 'CARS LEFT', {
+    this.rivalCarsLabel = this.add.text(this.scale.width - 144, 14, 'TAKEDOWNS', {
       fontSize: '10px', fontStyle: 'bold', color: '#b8b8c8',
       stroke: '#080812', strokeThickness: 3,
     }).setDepth(61);
-    this.rivalCarsText = this.add.text(this.scale.width - 20, 20, '3', {
+    this.rivalCarsText = this.add.text(this.scale.width - 20, 20, '0', {
       fontSize: '22px', fontStyle: 'bold', color: '#ffffff',
       stroke: '#080812', strokeThickness: 3,
     }).setOrigin(1, 0).setDepth(61);
@@ -445,7 +447,6 @@ export class HudScene extends Phaser.Scene {
       this.rivalTimerPanel,
       this.rivalTimerLabel,
       this.rivalTimerText,
-      this.rivalLapText,
       this.rivalCarsPanel,
       this.rivalCarsLabel,
       this.rivalCarsText,
@@ -464,6 +465,8 @@ export class HudScene extends Phaser.Scene {
         this.gs.rivalTimeRemaining,
       carsRemaining: publicView.carsRemaining ?? visibleCars,
       startingCars,
+      takedowns: publicView.takedowns,
+      scoreAttack: !!publicView.scoreAttack,
       lap: publicView.lap ?? this.gs.race?.lap,
     });
     const timerColor = view.critical ? '#ff6b6b'
@@ -477,7 +480,7 @@ export class HudScene extends Phaser.Scene {
       view.critical ? 0xff6b6b : view.urgent ? 0xffcf3f : 0x00e5ff,
       view.urgent ? 0.9 : 0.5,
     );
-    this.rivalLapText.setText(view.lapText);
+    this.rivalCarsLabel.setText(view.counterLabel);
     this.rivalCarsText
       .setText(view.carsText)
       .setColor(view.cleared ? '#2ee56b' : '#ffffff');

@@ -7,6 +7,7 @@ import {
   submitTrainingResult,
   totalTrainingStars,
   trainingConeScore,
+  trainingMetricUsage,
   trophyFor,
 } from './TrainingProgress.js';
 
@@ -17,6 +18,22 @@ const scoring = {
     { rank: 'bronze', minimum: 20, stars: 1 },
   ],
 };
+
+test('live/result metrics appear only when a trophy threshold actually grades them', () => {
+  assert.deepEqual(trainingMetricUsage({
+    thresholds: [
+      { rank: 'gold', minimum: 8 },
+      { rank: 'silver', minimum: 5 },
+      { rank: 'bronze', minimum: 2 },
+    ],
+  }), { damage: false, cones: false, offTrack: false });
+  assert.deepEqual(trainingMetricUsage({
+    thresholds: [{
+      rank: 'gold', minimum: 2, maximumDamageHits: 0,
+      maximumConesMissed: 0, maximumOffTrackEvents: 0,
+    }],
+  }), { damage: true, cones: true, offTrack: true });
+});
 
 test('training trophies reward cone mastery at authored thresholds', () => {
   assert.equal(trophyFor(scoring, 19), null);
@@ -66,29 +83,45 @@ test('timed rival trophies preserve Bronze while Gold demands a clean full clear
     thresholds: [
       { rank: 'bronze', stars: 1, minimum: 1 },
       {
-        rank: 'silver', stars: 2, minimum: 3,
+        rank: 'silver', stars: 2, minimum: 5,
         maximumDamageHits: 3,
       },
       {
-        rank: 'gold', stars: 3, minimum: 3,
+        rank: 'gold', stars: 3, minimum: 5,
         maximumDamageHits: 1, maximumOffTrackEvents: 0,
-        maximumTime: 45,
+        maximumTime: 60,
       },
     ],
   };
-  const gold = trophyFor(scoring, 3, {
-    damageHits: 1, offTrackEvents: 0, time: 44.9,
+  const gold = trophyFor(scoring, 5, {
+    damageHits: 1, offTrackEvents: 0, time: 59.9,
   });
   assert.equal(gold.rank, 'gold');
-  assert.equal(trophyFor(scoring, 3, {
-    damageHits: 1, offTrackEvents: 1, time: 44,
+  assert.equal(trophyFor(scoring, 5, {
+    damageHits: 1, offTrackEvents: 1, time: 59,
   }).rank, 'silver', 'one material excursion must specifically remove Gold');
-  assert.equal(trophyFor(scoring, 3, {
-    damageHits: 1, offTrackEvents: 0, time: 45.1,
+  assert.equal(trophyFor(scoring, 5, {
+    damageHits: 1, offTrackEvents: 0, time: 60.1,
   }).rank, 'silver', 'a safe full clear remains Silver after the Gold time');
   assert.equal(trophyFor(scoring, 1, {
     damageHits: 4, offTrackEvents: 2, time: 80,
   }).rank, 'bronze', 'one wreck survives timeout and preserves novice progress');
+});
+
+test('35-second rival score attack uses literal count-only 2/5/8 trophies', () => {
+  const scoreAttack = {
+    thresholds: [
+      { rank: 'gold', stars: 3, minimum: 8 },
+      { rank: 'silver', stars: 2, minimum: 5 },
+      { rank: 'bronze', stars: 1, minimum: 2 },
+    ],
+  };
+  assert.equal(trophyFor(scoreAttack, 0), null);
+  assert.equal(trophyFor(scoreAttack, 1), null);
+  assert.equal(trophyFor(scoreAttack, 2, { damageHits: 99 }).rank, 'bronze');
+  assert.equal(trophyFor(scoreAttack, 5, { offTrackEvents: 99 }).rank, 'silver');
+  assert.equal(trophyFor(scoreAttack, 8, { damageHits: 99, offTrackEvents: 99 }).rank, 'gold');
+  assert.equal(trophyFor(scoreAttack, 12).rank, 'gold');
 });
 
 test('all-lap mastery cones score both laps as one continuous course', () => {

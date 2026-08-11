@@ -4,11 +4,14 @@ import test from 'node:test';
 import {
   attackIntent,
   classifyRivalContact,
+  qualifiesRivalTakedown,
+  rivalContactTraceEligible,
   rivalDamagePolicy,
   resolveRivalContact,
   sweptRivalContact,
 } from './RivalContact.js';
 import { RivalPack } from '../entities/RivalPack.js';
+import rivalSchool from '../tracks/training-rivals.json' with { type: 'json' };
 
 const trackLength = 10000;
 
@@ -93,6 +96,29 @@ test('RivalPack contact strength is identical at 30, 60, and 120Hz', () => {
     assert.equal(advantage.scores, true, `${hz}Hz speed-edge score`);
     assert.equal(advantage.takedownForce, true, `${hz}Hz speed-edge force`);
   }
+});
+
+test('only a boosted deliberate hit qualifies as a Rival School takedown', () => {
+  const ram = { deliberate: true, takedownForce: true };
+  assert.equal(qualifiesRivalTakedown(ram, false), false);
+  assert.equal(qualifiesRivalTakedown(ram, true), true);
+  assert.equal(qualifiesRivalTakedown({ deliberate: false, takedownForce: true }, true), false);
+  assert.equal(qualifiesRivalTakedown(null, true), false);
+});
+
+test('a later stored trace cannot contact a rival wrecked earlier in the render frame', () => {
+  const traced = {
+    current: { active: true, eliminated: false, state: 'cruise', generation: 2 },
+  };
+  assert.equal(rivalContactTraceEligible(traced, {
+    active: true, eliminated: false, state: 'cruise', generation: 2,
+  }), true);
+  assert.equal(rivalContactTraceEligible(traced, {
+    active: true, eliminated: false, state: 'wrecked', generation: 2,
+  }), false);
+  assert.equal(rivalContactTraceEligible(traced, {
+    active: true, eliminated: false, state: 'cruise', generation: 3,
+  }), false);
 });
 
 test('moving-player rear-ram timing uses matched fixed-step samples at every refresh rate', () => {
@@ -337,4 +363,106 @@ test('training contact is local while future Story rivals damage campaign hull',
     trainingHits: 0,
     persistentHullDamage: 10,
   });
+});
+
+test('delayed boosted wreck opportunities are identical at 30, 60, and 120Hz', () => {
+  const simulate = (hz) => {
+    const config = structuredClone(rivalSchool.rivals);
+    const length = 279600;
+    const pack = new RivalPack(config, {
+      maxSpeed: 12000,
+      basePace: 0.96,
+      segmentLength: 200,
+      catchUpLimit: 0.12,
+      slowDownLimit: 0.08,
+      localPaceRadiusSegments: 18,
+      fullPaceCorrectionSegments: 40,
+      stagingRadiusSegments: 44,
+      stagingBehindRadiusSegments: 12,
+      stagingTargetSegments: rivalSchool.rivals.policy.stagingTargetSegments,
+      stagingTargetSpacingSegments: rivalSchool.rivals.policy.stagingTargetSpacingSegments,
+      stagingGraceSeconds: rivalSchool.rivals.policy.stagingGraceSeconds,
+      wreckSeconds: rivalSchool.rivals.policy.wreckSeconds,
+    }, { trackLength: length });
+    let player = { position: 0, x: 0, speed: 16200, airborne: false };
+    const kills = [];
+
+    for (let frame = 0; frame < 35 * hz; frame += 1) {
+      const previousPlayer = { ...player };
+      const target = pack.rivals
+        .filter((rival) => rival.active && rival.state !== 'wrecked')
+        .map((rival) => ({
+          rival,
+          distance: ((rival.position - player.position) % length + length) % length,
+        }))
+        .filter(({ distance }) => distance < length / 2)
+        .sort((a, b) => a.distance - b.distance)[0]?.rival;
+      const targetX = target?.x ?? player.x;
+      player = {
+        ...player,
+        position: (player.position + player.speed / hz) % length,
+        // This is the ideal veteran ceiling, not a novice model: perfect line
+        // acquisition isolates whether the director offers eight legal cars.
+        x: targetX,
+      };
+      pack.update(1 / hz, { previousPlayer, player });
+
+      for (let stepIndex = 0; stepIndex < pack.contactStepCount; stepIndex += 1) {
+        const step = pack.contactSteps[stepIndex];
+        for (const traced of step.rivals) {
+          if (!traced.current.active || traced.current.state === 'wrecked') continue;
+          const live = pack.rivals.find((rival) => rival.id === traced.id);
+          if (traced.current.generation !== live.generation) continue;
+          const contact = sweptRivalContact(
+            step.previousPlayer,
+            step.player,
+            traced.previous,
+            traced.current,
+            { trackLength: length, dt: 1 / 60, longitudinalRadius: 144 },
+          );
+          const outcome = classifyRivalContact(contact, {
+            steeringDirection: 0,
+            lateralCommitment: 0,
+            boostActive: true,
+            contactCooldown: traced.current.contactCooldown,
+            lowRelativeSpeed: 240,
+            highRelativeSpeed: 1200,
+          });
+          if (outcome?.kind !== 'rear_ram') continue;
+
+          pack.stagger(live.id, { side: outcome.side, force: 1.35, damage: true });
+          if (!pack.takeDown(live.id, {
+            elapsedSince: Math.max(0, pack.elapsed - step.time),
+          })) continue;
+          kills.push({
+            time: Number(step.time.toFixed(6)),
+            id: live.id,
+            generation: traced.current.generation,
+          });
+          break;
+        }
+      }
+    }
+    return kills;
+  };
+
+  const thirty = simulate(30);
+  const sixty = simulate(60);
+  const oneTwenty = simulate(120);
+  assert.ok(
+    thirty.length >= 8,
+    `the clean boosted benchmark can still earn Gold (got ${thirty.length})`,
+  );
+  assert.deepEqual(
+    thirty.map(({ id, generation }) => ({ id, generation })),
+    sixty.map(({ id, generation }) => ({ id, generation })),
+  );
+  assert.deepEqual(
+    sixty.map(({ id, generation }) => ({ id, generation })),
+    oneTwenty.map(({ id, generation }) => ({ id, generation })),
+  );
+  for (let index = 0; index < thirty.length; index += 1) {
+    assert.ok(Math.abs(thirty[index].time - sixty[index].time) <= 0.051);
+    assert.ok(Math.abs(sixty[index].time - oneTwenty[index].time) <= 0.018);
+  }
 });

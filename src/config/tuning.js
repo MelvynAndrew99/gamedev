@@ -31,7 +31,7 @@ export const TUNING = {
   airbrakeForce: 2.2,  // extra lateral authority while an airbrake is held
 
   // ---- Rivals / takedowns (live in the Projection Lab) ---------------
-  rivalCount: 3,             // captured per Rival School attempt; Lab supports 1..6
+  rivalCount: 3,             // captured per Rival School attempt; Lab supports 1..3
   rivalPace: 0.96,           // shared base-speed multiplier before profiles
   rivalAggression: 0.2,      // changes attack frequency, never attack physics
   rivalTelegraph: 0.75,      // seconds of visible intent before lateral attack

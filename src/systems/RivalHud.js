@@ -7,7 +7,24 @@ export const RIVAL_MARKER_IDENTITIES = Object.freeze([
   Object.freeze({ key: 'cyan', color: 0x00e5ff, shape: 'circle' }),
   Object.freeze({ key: 'magenta', color: 0xff2d95, shape: 'diamond' }),
   Object.freeze({ key: 'gold', color: 0xffcf3f, shape: 'square' }),
+  Object.freeze({ key: 'green', color: 0x2ee56b, shape: 'triangle' }),
+  Object.freeze({ key: 'violet', color: 0xb58cff, shape: 'cross' }),
 ]);
+
+const MARKER_OFFSET_CANDIDATES = Object.freeze([
+  Object.freeze({ x: 0, y: 0 }),
+  Object.freeze({ x: 0, y: 8.5 }),
+  Object.freeze({ x: 0, y: 17 }),
+  Object.freeze({ x: -10, y: 0 }),
+  Object.freeze({ x: 10, y: 8.5 }),
+  Object.freeze({ x: -10, y: 17 }),
+  Object.freeze({ x: 10, y: 0 }),
+  Object.freeze({ x: 10, y: 17 }),
+  Object.freeze({ x: -10, y: 8.5 }),
+  Object.freeze({ x: 20, y: 0 }),
+  Object.freeze({ x: -20, y: 17 }),
+]);
+const MARKER_MIN_CENTER_DISTANCE = 9.5;
 
 function clamp(value, low, high) {
   return Math.max(low, Math.min(high, value));
@@ -28,6 +45,34 @@ export function rivalMarkerIdentity(id = '', index = 0) {
   ];
 }
 
+export function packRivalMarkerOffsets(markers = [], ribbonWidth = 336) {
+  const width = Math.max(1, Number(ribbonWidth) || 336);
+  const placed = [];
+  return markers.map((marker) => {
+    const baseX = clamp(Number(marker.fraction) || 0, 0, 1) * width;
+    let selected = MARKER_OFFSET_CANDIDATES.at(-1);
+    let selectedX = clamp(baseX + selected.x, 0, width);
+    for (const candidate of MARKER_OFFSET_CANDIDATES) {
+      const candidateX = clamp(baseX + candidate.x, 0, width);
+      const clear = placed.every((other) => Math.hypot(
+        candidateX - other.x,
+        candidate.y - other.y,
+      ) >= MARKER_MIN_CENTER_DISTANCE);
+      if (clear) {
+        selected = candidate;
+        selectedX = candidateX;
+        break;
+      }
+    }
+    placed.push({ x: selectedX, y: selected.y });
+    return Object.freeze({
+      ...marker,
+      xOffset: selectedX - baseX,
+      yOffset: selected.y,
+    });
+  });
+}
+
 // Rivals only expose position around one wrapped circuit while the ribbon
 // represents the whole event. Put each marker on the nearest ribbon location
 // to the player so a rival just behind the start line never appears laps away.
@@ -38,11 +83,12 @@ export function rivalCourseMarkers({
   trackLength = 1,
   laps = 1,
   loop = false,
+  ribbonWidth = 336,
 } = {}) {
   const safeLength = Math.max(1, Number(trackLength) || 1);
   const safeLaps = Math.max(1, Number(laps) || 1);
 
-  return rivals
+  const markers = rivals
     .filter((rival) => rival && rival.active !== false &&
       rival.eliminated !== true && rival.state !== 'wrecked')
     .map((rival, index) => {
@@ -54,7 +100,7 @@ export function rivalCourseMarkers({
         ? rawDelta - safeLength
         : rawDelta;
       const identity = rivalMarkerIdentity(rival.id, index);
-      return Object.freeze({
+      return {
         id: rival.id ?? `rival-${index}`,
         // A loop is drawn on a linear ribbon. Anchor living rivals to the
         // player's nearest wrapped copy so a car just across the start seam
@@ -69,8 +115,9 @@ export function rivalCourseMarkers({
         shape: identity.shape,
         // Relative side lets a renderer layer nearby markers consistently.
         side: Math.sign(delta),
-      });
+      };
     });
+  return packRivalMarkerOffsets(markers, ribbonWidth);
 }
 
 export function formatEventTime(seconds) {
@@ -84,6 +131,8 @@ export function rivalEventHudView({
   timeRemainingSeconds,
   carsRemaining,
   startingCars = 3,
+  takedowns = 0,
+  scoreAttack = false,
   lap = 1,
 } = {}) {
   const initial = Math.max(0, Math.floor(Number(startingCars) || 0));
@@ -98,11 +147,14 @@ export function rivalEventHudView({
 
   return Object.freeze({
     timeText: formatEventTime(seconds),
-    carsText: `${remaining}`,
+    carsText: `${scoreAttack
+      ? Math.max(0, Math.floor(Number(takedowns) || 0))
+      : remaining}`,
     carsRemaining: remaining,
     urgent: seconds !== null && seconds <= 10,
     critical: seconds !== null && seconds <= 5,
-    cleared: initial > 0 && remaining === 0,
-    lapText: `LAP ${Math.max(1, Math.floor(Number(lap) || 1))}`,
+    cleared: !scoreAttack && initial > 0 && remaining === 0,
+    lapText: scoreAttack ? '' : `LAP ${Math.max(1, Math.floor(Number(lap) || 1))}`,
+    counterLabel: scoreAttack ? 'TAKEDOWNS' : 'CARS LEFT',
   });
 }

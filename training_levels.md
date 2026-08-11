@@ -302,63 +302,69 @@ grounded again.
 
 ## Lesson 5: Rival School
 
-**Player sentence:** Wreck all three before time runs out: ram from behind or
-steer them off the road; laps and cyan clock-faced cones add time.
+**Player sentence:** Score as many wrecks as possible in 35 seconds: collect
+boost, line up a rival, and hit it while boost is live.
 
 **Skill:** combine target acquisition, closing speed, committed steering,
 boost timing, threat avoidance, and recovery while hunting a three-car pack.
 
-Rival School uses three deterministic cars rather than a boss. Laps are
-unlimited and exist as checkpoints rather than a finish limit. The countdown
-starts at 35 seconds, a completed circuit adds 8 seconds, and six cyan clock
-cones, marked by a white clock ring and hands, add 2 seconds each. Cones are one-shot across the complete attempt and
-the clock caps at 45 seconds, so the player can recover without farming an
-infinite run. The attempt resolves only when all three rivals are eliminated or
-the clock expires.
+Rival School uses exactly three deterministic cars in circulation rather than a
+boss or a crowded moving wall. Laps are navigation only. The countdown begins
+at the rolling line with 35 seconds. Six one-shot green clock cones add two
+seconds each, for a maximum 47-second run; laps and checkpoints never add time.
+Five boost packs are spread around the loop, with the first before the opening
+rivals so the lesson starts with an immediate attack opportunity. The timeout
+is a normal completion, including when the player scores zero.
 
-The car is the attack verb; there is no extra combat button. An aligned rear
-ram scores when the player is catching with a real speed advantage and wrecks
-in one impact. Contact below that gate gives a short speed/alignment hint
-instead of hidden damage. A committed joystick or keyboard steering push
-transfers the rival laterally and wrecks it only after it physically
-crosses the road edge. Passive equal-speed rubbing, a faster rival hitting the
-player, and airborne overlap never score. Every rival can be defeated once and
-never respawns.
+The car is the attack verb; there is no extra combat button. A deliberate rear
+ram or side push becomes a takedown only while boost is live. Without boost,
+the rival receives a small lateral knockback/ricochet and recovers—there is no
+hidden damage counter that turns later contact into a surprise wreck. Passive
+equal-speed rubbing, a faster rival hitting the player, and airborne overlap
+never score. A stable rival slot scores only once per generation. After the
+local explosion, that identity waits a seeded 2.2–3.4 seconds and then re-enters
+alone with collision grace. Re-entry rotates between distant-ahead quarry and
+behind-camera challengers, with varied lanes and distances instead of a fixed
+three-car formation.
 
 Training contact is local and forgiving. An incoming attack costs at most 15%
-speed, gives the existing recovery surge, adds a windscreen crack for trophy
-grading, and never changes campaign hull, money, or progression. A tolerant
-clean-line latch counts only a grounded excursion held beyond the road edge for
-at least 120 ms; one noisy edge frame cannot erase Gold. Missing an encounter
-does not stop the race. Distant-only pack staging keeps living rivals near
-enough to find but turns off before contact; close-range pace and collision
-physics never rubber-band.
+speed, gives the existing recovery surge, and never changes campaign hull,
+money, trophy rank, or progression. Track-discipline telemetry remains
+available for future Story tuning but is not shown as a score condition here;
+Rival School's trophies use takedown count only. Missing an encounter does not
+stop the race. Distant-only pack staging keeps living rivals near enough to
+find but turns off before contact; close-range pace and collision physics never
+rubber-band. A passed rival pursues naturally for several seconds and is only
+circulated after falling far behind and off-camera. Far-ahead leaders are never
+teleported toward the player; their pace eases until the player can reel them in.
 
 The live HUD follows the event rather than repeating its briefing. TIME sits at
-the upper left, CARS LEFT at the upper right, and the existing course ribbon
-shows the player plus every living rival by a stable color and shape. The lap
-number has no denominator. Eliminated markers disappear immediately, and no
-objective checklist or rival health bars compete with the driving view.
+the upper left, TAKEDOWNS at the upper right, and a neutral loop ribbon shows
+the player plus all three live rivals by stable color and shape. It has no lap
+number, finish fill, flags, or endpoint labels. A marker disappears during its
+wreck beat and returns only with the safely staged rival. No objective checklist
+or rival health bars compete with the driving view.
 
-The trophy combines the mechanics Story will later pressure:
+The trophy is deliberately count-only so the training result is immediately
+understandable:
 
-- **Gold** — all three takedowns within 45 elapsed seconds, no material
-  off-track excursion, and no more than one incoming rival hit.
-- **Silver** — all three takedowns before the countdown expires, with no more
-  than three incoming rival hits.
-- **Bronze** — one takedown.
+- **Gold** — eight takedowns.
+- **Silver** — five takedowns.
+- **Bronze** — two takedowns.
 
-All ranks are optional. Timeout concludes the attempt, preserves any earned
-Bronze result, and does not block Story access. Impacts, time pickups, and
-takedowns use short edge toasts; detailed accounting remains in the paused
-briefing and results.
+All ranks are optional. Zero takedowns earns no trophy but still completes the
+lesson and does not block Story access. The score may continue beyond eight.
+Impacts and takedowns use short edge toasts; detailed accounting remains in the
+paused briefing and results. A takedown uses one compact explosion at the
+contact point. The destroyed car does not become a detached spinning overlay,
+and ordinary ricochets never stretch, blur, or rescale its rendered sprite.
 
 The Projection Lab exposes per-attempt racer count (applied on Retry), base pace, aggression, attack
 telegraph, far-only catch-up cap, takedown speed edge, and incoming speed tax.
-Production defaults use three racers at 20% aggression and 96% base pace. AI
+Production uses exactly three racers at 20% aggression and 96% base pace. AI
 pace is never adjusted within 18 segments of the player; only distant staging
-may ease by at most +12% or -8%. The normal lesson contract stays at three; the Projection Lab
-may override it up to the fixed six-car pool for stress/chaos rejection tests.
+may ease by at most +12% or -8%. Rival School clamps the Lab to three so its
+authored spacing and target count cannot drift into a crowded stress test.
 
 A Diddy Kong Racing-style boss remains a documented fallback only. Consider it
 after two measured pack iterations fail readability or performance gates, and
@@ -451,8 +457,8 @@ The initial Training mode track list is fixed in this order:
 2. Hazard Weave — follow target cones through rocks and read camera damage.
 3. Redline — spend the boost gauge deliberately: tap to stack, hold to sustain.
 4. Air School — acquire ramp approaches and build controlled airtime.
-5. Rival School — hunt opponents with rear rams and edge pushes under a
-   recoverable clock.
+5. Rival School — score boosted wrecks during a 35-second base run, extending
+   it by driving through green clock cones.
 
 Warning reads, zippers, surface changes, and combo lines remain future
 curriculum candidates. Proving Ground combines the completed curriculum as the

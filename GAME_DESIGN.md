@@ -149,28 +149,38 @@ or risers. Training result screens
 explicitly offer Retry and Next Track instead of treating completion as an
 automatic return to the title.
 
-Rival School introduces the Story campaign's moving opposition as a timed
-three-car elimination hunt, not a boss or a fixed-lap race. Players wreck each
-stable rival ID with familiar racing inputs: catch it with a meaningful speed
-edge and ram from behind, or hold a committed steering line until the rival is
-pushed beyond the road edge. No special attack-button timing is required;
-passive equal-speed rubbing never earns credit. Once the alignment and closing
-speed gate is met, a rear ram finishes the rival in one readable impact; weak
-contact explains whether the player needs more speed or a cleaner line. Each
-takedown permanently removes that car and awards one bounded boost slot.
+Rival School introduces the Story campaign's moving opposition as a 35-second
+base wreck score attack, not a boss or a lap-limited race. Exactly three
+collision-capable rivals stay in circulation so the road retains passing space
+and the encounter reads like a Burnout-style pack rather than a moving wall.
+Players use familiar racing inputs: bank boost, line up a rival, and ram it
+while boost is live. No special attack-button timing is required. Ordinary
+contact produces a small physical ricochet but never accumulates hidden damage
+or earns credit; this keeps the takedown rule visible and consistent. Each
+boosted takedown awards one bounded boost slot.
 
-The event starts with 35 seconds. Every completed circuit adds 8 seconds and
-six cyan clock-faced cones add 2 seconds once per attempt, with a 45-second clock cap.
-Laps are unlimited: the attempt ends only when all three cars are gone or time
-expires. Distant-only staging keeps living targets findable, then fades before
-contact so every impact is resolved by real relative speed and steering. The
-course ribbon shows all living rivals by stable color and shape, including the
-nearest wrapped copy at the start-line seam; TIME and CARS
-LEFT replace the persistent objective checklist. Training attacks use local
-windscreen grading and a small momentum tax, never campaign hull or a wreck.
-Gold combines all three takedowns, the 120 ms grounded clean-line rule,
-restrained damage, and a fast clear. A timed-out attempt still preserves earned
-training progress, so learning never becomes a Story progression gate.
+Six one-shot green clock cones add two seconds each, up to 12 bonus seconds;
+laps and checkpoints never add time. Five evenly distributed boost packs,
+including one before the opening pack, keep the attack resource available
+without granting permanent boost. A boosted wreck resolves as one short local
+explosion—no barrel roll, detached car ghost, or cone-style secondary burst.
+Its identity waits a seeded 2.2–3.4 seconds before
+re-entering individually, never as a fixed formation. Most replacements appear
+as distant quarry near the horizon; some approach from behind as challengers.
+Entries are separated by at least 2.2 seconds, vary lane and distance, and keep
+collision disabled during their fade. Passed rivals first chase back under
+their own wheels and are repositioned only after falling genuinely off-camera.
+Story races do not enable this training-only circulation director. Contact
+debris clears before the next driving decision.
+
+The course ribbon is a neutral loop locator showing the player and all three
+living rivals by stable shape and color. TIME and TAKEDOWNS replace the
+persistent objective checklist, lap count, and endpoint furniture. Every valid
+wreck is exactly +1: Bronze is 2, Silver is 5, and Gold is 8. Zero earns no
+trophy but still records completion and unlocks progression. Training attacks
+use local windscreen feedback and a small momentum tax, never campaign hull or
+a hard wreck. The score can exceed eight; the objective display may cap at its
+authored goal, but results and persistence use the uncapped takedown count.
 
 Proving Ground is the first Story race. It uses the same geometry with campaign
 warnings, hazards, route offers, rewards, normal three-lap finish rules, and the

@@ -171,6 +171,25 @@ export function classifyRivalContact(contact, options = {}) {
   };
 }
 
+// Rival School's current lesson rule is intentionally binary and visible:
+// contact can create a ricochet, but only contact made during live boost can
+// remove a car. Keeping the gate pure prevents hidden stability damage from
+// quietly turning ordinary bumps into later takedowns.
+export function qualifiesRivalTakedown(classification, boostActive = false) {
+  return !!boostActive && !!classification?.deliberate &&
+    !!classification?.takedownForce;
+}
+
+// Stored fixed-step traces describe what existed during that step, but an
+// earlier trace in the same 30Hz render frame may already have wrecked the
+// live slot. Both snapshots must still be eligible before contact resolution.
+export function rivalContactTraceEligible(tracedRival, liveRival) {
+  const traced = tracedRival?.current;
+  return !!traced?.active && !traced.eliminated && traced.state !== 'wrecked' &&
+    !!liveRival?.active && !liveRival.eliminated && liveRival.state !== 'wrecked' &&
+    traced.generation === liveRival.generation;
+}
+
 // Apply a small symmetric lateral separation and arm the rival's cooldown.
 // The caller owns the objects and explicitly opts into mutation by calling it.
 export function resolveRivalContact(player, rival, classification, options = {}) {

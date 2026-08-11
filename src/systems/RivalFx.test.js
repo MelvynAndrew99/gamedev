@@ -10,9 +10,10 @@ test('combat FX has a strict readable hierarchy and safe caps', () => {
   assert.ok(rub.particles < slam.particles);
   assert.ok(slam.particles < takedown.particles);
   assert.equal(rub.shake, 0);
-  assert.equal(takedown.ghost, true);
+  assert.equal(takedown.ghost, false, 'wrecks explode in place; cars never barrel-roll');
   assert.ok(takedown.flash <= 0.12);
   assert.ok(takedown.particles <= 24);
+  assert.ok(slam.duration <= 0.2, 'ordinary ricochet feedback stays subtle');
 });
 
 test('unknown contact degrades safely to a quiet rub', () => {

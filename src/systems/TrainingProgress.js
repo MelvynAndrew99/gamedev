@@ -6,6 +6,15 @@
 
 const KEY = 'destruction-racer.training.v1';
 
+export function trainingMetricUsage(scoring = {}) {
+  const thresholds = scoring?.thresholds ?? [];
+  return Object.freeze({
+    damage: thresholds.some((threshold) => threshold.maximumDamageHits != null),
+    cones: thresholds.some((threshold) => threshold.maximumConesMissed != null),
+    offTrack: thresholds.some((threshold) => threshold.maximumOffTrackEvents != null),
+  });
+}
+
 function load() {
   try {
     return JSON.parse(globalThis.localStorage.getItem(KEY)) ?? {};
