@@ -16,6 +16,15 @@ test('single-variant pools remain valid', () => {
   assert.equal(nonRepeatingIndex(0, 1, () => 0.9), 0);
 });
 
+test('rival feedback remains safe before browser audio is unlocked', () => {
+  assert.doesNotThrow(() => MUSIC.playRivalThreat({ pan: -1 }));
+  assert.doesNotThrow(() => MUSIC.playRivalImpact({ kind: 'rub' }));
+  assert.doesNotThrow(() => MUSIC.playRivalImpact({ kind: 'slam', strength: 1.2 }));
+  assert.doesNotThrow(() => MUSIC.playRivalImpact({ kind: 'takedown', pan: 1 }));
+  assert.doesNotThrow(() => MUSIC.playTimeBonus());
+  assert.doesNotThrow(() => MUSIC.playTimeBonus({ major: true }));
+});
+
 test('music and gameplay feedback retain independent live volume settings', () => {
   const previousMusic = MUSIC.volume;
   const previousSfx = MUSIC.sfxVolume;

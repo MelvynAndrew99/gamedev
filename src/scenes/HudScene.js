@@ -14,11 +14,18 @@ import { getScore } from '../systems/HighScores.js';
 import { ProgressBar } from '../ui/ProgressBar.js';
 import { BoostGauge } from '../ui/BoostGauge.js';
 import { OBSTACLES } from '../config/obstacles.js';
-import { damageFeedbackState } from '../systems/DamageFeedback.js';
+import {
+  damageFeedbackState,
+  trainingDamageTrophyMessage,
+} from '../systems/DamageFeedback.js';
 import {
   airtimeCoachView,
 } from '../systems/AirtimeCoach.js';
 import { hudVisibilityPolicy } from '../systems/HudPolicy.js';
+import {
+  rivalCourseMarkers,
+  rivalEventHudView,
+} from '../systems/RivalHud.js';
 import { nextObjectiveFeedback } from '../systems/ObjectiveFeedback.js';
 import {
   objectivePanelLayout,
@@ -71,6 +78,10 @@ export class HudScene extends Phaser.Scene {
     this.objectiveToastParts = null;
     this.objectiveToastSequence = 0;
     this.objectiveToastBusy = false;
+    this.rivalToastParts = null;
+    this.rivalToastSequence = 0;
+    this.rivalToastBusy = false;
+    this.rivalEventParts = null;
     this.boostGauge = null;
     this.airtimeCoachPanel = null;
     this.airtimeCoachParts = null;
@@ -122,8 +133,24 @@ export class HudScene extends Phaser.Scene {
 
     // Top-center: race progress, alone in its lane.
     this.progressBar = this.hudPolicy.courseProgress
-      ? new ProgressBar(this, this.gs.race.laps, 30)
+      ? new ProgressBar(
+        this,
+        this.hudPolicy.rivalEventHud ? 1 : this.gs.race.laps,
+        30,
+        {
+          lapNumbers: !this.hudPolicy.rivalEventHud,
+          // This is a looping hunt, not a finite race. Removing endpoint
+          // furniture gives three packed target markers an unobscured lane.
+          endpointLabels: !this.hudPolicy.rivalEventHud,
+          showProgressFill: !this.hudPolicy.rivalEventHud,
+        },
+      )
       : null;
+
+    // Rival School is a fixed-time score attack. Two compact corner reads
+    // replace its generic objective stack; the center remains a neutral loop
+    // locator rather than implying lap or endpoint progress.
+    if (this.hudPolicy.rivalEventHud) this.createRivalEventHud();
 
     // Training lessons without a dedicated live coach retain one compact
     // checkable list in the safe left column. Story objectives are expressed
@@ -182,6 +209,7 @@ export class HudScene extends Phaser.Scene {
     }
 
     if (this.hudPolicy.objectiveToast) this.createObjectiveToast();
+    if (this.hudPolicy.rivalToast) this.createRivalToast();
 
     // Bottom-right: the speedo. Big number, small label — read at a glance.
     chip(w - 148, h - 68, 136, 56);
@@ -238,7 +266,26 @@ export class HudScene extends Phaser.Scene {
       const raceProgress = gs.race.lap > gs.race.laps
         ? 1
         : (gs.race.lap - 1 + inLap) / gs.race.laps;
-      this.progressBar?.draw(raceProgress);
+      const rivalPublicView = gs.rivalSchoolView ?? {};
+      const rivals = rivalPublicView.rivals ?? gs.rivalPack?.views ?? [];
+      const markers = this.hudPolicy.rivalCourseMarkers
+        ? rivalCourseMarkers({
+          rivals,
+          playerPosition: gs.player.position,
+          playerRaceProgress: inLap,
+          trackLength: gs.model.trackLength,
+          laps: 1,
+          loop: true,
+          ribbonWidth: this.progressBar?.w,
+        })
+        : [];
+      this.progressBar?.draw(
+        this.hudPolicy.rivalEventHud ? inLap : raceProgress,
+        markers,
+      );
+      if (this.rivalEventParts) {
+        this.updateRivalEventHud(rivalPublicView, rivals, time);
+      }
     } else if (this.line1) {
       this.line1.setText(`${gs.distanceM()}m`);
       this.line2.setText(this.cachedBest ? `BEST ${this.cachedBest}m` : '');
@@ -281,6 +328,7 @@ export class HudScene extends Phaser.Scene {
       });
     }
     this.updateObjectiveToast();
+    this.updateRivalToast();
     if (this.boostGauge) {
       const maxCeiling = TUNING.boostTierCeilings[TUNING.boostTierCeilings.length - 1];
       this.boostGauge.draw({
@@ -346,6 +394,128 @@ export class HudScene extends Phaser.Scene {
       duration: 240,
       ease: 'Quad.in',
       onComplete: () => { this.objectiveToastBusy = false; },
+    });
+  }
+
+  createRivalToast() {
+    const x = 10;
+    const y = this.hudPolicy.objectiveToast ? 110 : 68;
+    const w = 230;
+    const h = 38;
+    this.rivalToastPanel = this.add.rectangle(
+      x + w / 2, y + h / 2, w, h, 0x080812, 0.88,
+    ).setStrokeStyle(1, 0x00e5ff, 0.8).setDepth(88);
+    this.rivalToastAccent = this.add.rectangle(
+      x + 3, y + h / 2, 6, h, 0x00e5ff, 1,
+    ).setDepth(89);
+    this.rivalToastText = this.add.text(x + 15, y + 10, '', {
+      fontSize: '13px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#080812', strokeThickness: 3,
+    }).setDepth(90);
+    this.rivalToastParts = [
+      this.rivalToastPanel, this.rivalToastAccent, this.rivalToastText,
+    ];
+    this.rivalToastParts.forEach((part) => part.setAlpha(0));
+  }
+
+  createRivalEventHud() {
+    const makePanel = (x) => this.add.rectangle(
+      x + 72, 30, 144, 44, 0x080812, 0.82,
+    ).setStrokeStyle(1, 0x00e5ff, 0.5).setDepth(60);
+
+    this.rivalTimerPanel = makePanel(10);
+    this.rivalTimerLabel = this.add.text(20, 14, 'TIME', {
+      fontSize: '10px', fontStyle: 'bold', color: '#b8b8c8',
+      stroke: '#080812', strokeThickness: 3,
+    }).setDepth(61);
+    this.rivalTimerText = this.add.text(144, 22, '--:--', {
+      fontSize: '20px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#080812', strokeThickness: 3,
+    }).setOrigin(1, 0).setDepth(61);
+
+    this.rivalCarsPanel = makePanel(this.scale.width - 154);
+    this.rivalCarsLabel = this.add.text(this.scale.width - 144, 14, 'TAKEDOWNS', {
+      fontSize: '10px', fontStyle: 'bold', color: '#b8b8c8',
+      stroke: '#080812', strokeThickness: 3,
+    }).setDepth(61);
+    this.rivalCarsText = this.add.text(this.scale.width - 20, 20, '0', {
+      fontSize: '22px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#080812', strokeThickness: 3,
+    }).setOrigin(1, 0).setDepth(61);
+
+    this.rivalEventParts = [
+      this.rivalTimerPanel,
+      this.rivalTimerLabel,
+      this.rivalTimerText,
+      this.rivalCarsPanel,
+      this.rivalCarsLabel,
+      this.rivalCarsText,
+    ];
+  }
+
+  updateRivalEventHud(publicView, rivals, time) {
+    const startingCars = publicView.startingCars ??
+      this.gs.trackData?.rivals?.count ?? 3;
+    const visibleCars = rivals.filter((rival) =>
+      rival?.active !== false && rival?.eliminated !== true &&
+      rival?.state !== 'wrecked'
+    ).length;
+    const view = rivalEventHudView({
+      timeRemainingSeconds: publicView.timeRemainingSeconds ??
+        this.gs.rivalTimeRemaining,
+      carsRemaining: publicView.carsRemaining ?? visibleCars,
+      startingCars,
+      takedowns: publicView.takedowns,
+      scoreAttack: !!publicView.scoreAttack,
+      lap: publicView.lap ?? this.gs.race?.lap,
+    });
+    const timerColor = view.critical ? '#ff6b6b'
+      : view.urgent ? '#ffcf3f' : '#ffffff';
+    this.rivalTimerText
+      .setText(view.timeText)
+      .setColor(timerColor)
+      .setAlpha(view.critical ? 0.72 + Math.sin(time / 90) * 0.28 : 1);
+    this.rivalTimerPanel.setStrokeStyle(
+      1,
+      view.critical ? 0xff6b6b : view.urgent ? 0xffcf3f : 0x00e5ff,
+      view.urgent ? 0.9 : 0.5,
+    );
+    this.rivalCarsLabel.setText(view.counterLabel);
+    this.rivalCarsText
+      .setText(view.carsText)
+      .setColor(view.cleared ? '#2ee56b' : '#ffffff');
+    this.rivalCarsPanel.setStrokeStyle(
+      1,
+      view.cleared ? 0x2ee56b : 0x00e5ff,
+      view.cleared ? 0.9 : 0.5,
+    );
+  }
+
+  updateRivalToast() {
+    if (!this.rivalToastParts || this.rivalToastBusy) return;
+    const event = nextObjectiveFeedback(
+      this.gs.rivalHudEvents,
+      this.rivalToastSequence,
+    );
+    if (!event) return;
+    this.rivalToastSequence = event.sequence;
+    this.rivalToastBusy = true;
+    const color = event.tone === 'success' ? '#2ee56b'
+      : event.tone === 'danger' || event.tone === 'failure' ? '#ff6b6b'
+        : event.tone === 'warning' ? '#ffcf3f' : '#00e5ff';
+    const numeric = Phaser.Display.Color.HexStringToColor(color).color;
+    this.tweens.killTweensOf(this.rivalToastParts);
+    this.rivalToastText.setText(event.label).setColor(color);
+    this.rivalToastPanel.setStrokeStyle(1, numeric, 0.8);
+    this.rivalToastAccent.setFillStyle(numeric, 1);
+    this.rivalToastParts.forEach((part) => part.setAlpha(1));
+    this.tweens.add({
+      targets: this.rivalToastParts,
+      alpha: 0,
+      delay: 720,
+      duration: 220,
+      ease: 'Quad.in',
+      onComplete: () => { this.rivalToastBusy = false; },
     });
   }
 
@@ -631,7 +801,10 @@ export class HudScene extends Phaser.Scene {
 
     if (state.destroyed && this.training) {
       this.criticalDamageTitle.setText('GLASS SHATTERED');
-      this.criticalDamageDetail.setText('TRAINING CONTINUES  •  NO TROPHY');
+      this.criticalDamageDetail.setText(trainingDamageTrophyMessage(
+        this.gs.trackData?.scoring?.thresholds,
+        this.gs.trainingDamageHits,
+      ));
     } else if (this.training) {
       this.criticalDamageTitle.setText('GLASS CRITICAL');
       this.criticalDamageDetail.setText('NEXT ROCK SHATTERS IT');

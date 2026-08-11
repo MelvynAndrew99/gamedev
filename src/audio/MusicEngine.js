@@ -58,6 +58,37 @@ const BOOST_APPLY_VARIATIONS = [
   { base: 156, noiseFreq: 900, q: 1.1, pan: -0.06 },
 ];
 
+// Rival contact has its own material pool. Variation changes the resonant
+// body, metal band, decay, and stereo bias—not only pitch—so repeated pack
+// fighting does not turn into one machine-gun sample.
+const RIVAL_IMPACT_VARIATIONS = [
+  { body: 72, metal: 760, q: 0.8, decay: 0.1, pan: -0.12, wave: 'sine' },
+  { body: 84, metal: 980, q: 1.25, decay: 0.13, pan: 0.1, wave: 'triangle' },
+  { body: 64, metal: 1280, q: 1.55, decay: 0.09, pan: -0.04, wave: 'sine' },
+  { body: 96, metal: 620, q: 0.65, decay: 0.15, pan: 0.16, wave: 'triangle' },
+];
+
+const RIVAL_TAKEDOWN_VARIATIONS = [
+  { body: 58, metal: 540, chord: [196, 246.94, 329.63], pan: -0.1 },
+  { body: 66, metal: 720, chord: [220, 277.18, 369.99], pan: 0.12 },
+  { body: 52, metal: 880, chord: [174.61, 261.63, 349.23], pan: 0 },
+];
+
+const RIVAL_THREAT_VARIATIONS = [
+  { start: 340, end: 510, wave: 'square' },
+  { start: 390, end: 585, wave: 'triangle' },
+  { start: 310, end: 465, wave: 'sawtooth' },
+];
+
+// Clock rewards need to read as added opportunity, not another impact or
+// boost pickup. Three short ascending intervals rotate without immediate
+// repeats; lap bonuses use a slightly wider second note than clock cones.
+const TIME_BONUS_VARIATIONS = [
+  { tone: 523.25, ratio: 1.5, wave: 'sine', pan: -0.08 },
+  { tone: 587.33, ratio: 1.333, wave: 'triangle', pan: 0.08 },
+  { tone: 659.25, ratio: 1.25, wave: 'sine', pan: 0 },
+];
+
 class MusicEngine {
   constructor() {
     this.ctx = null;
@@ -72,6 +103,10 @@ class MusicEngine {
     this.lastConeVariation = -1;
     this.lastBoostPickupVariation = -1;
     this.lastBoostApplyVariation = -1;
+    this.lastRivalImpactVariation = -1;
+    this.lastRivalTakedownVariation = -1;
+    this.lastRivalThreatVariation = -1;
+    this.lastTimeBonusVariation = -1;
     this.lastTakeoffTime = -Infinity;
   }
 
@@ -845,6 +880,118 @@ class MusicEngine {
       osc.start(start);
       osc.stop(start + 0.12);
     });
+  }
+
+  playRivalThreat({ pan = 0 } = {}) {
+    if (!this.ctx || !this.sfxBus) return;
+    const index = nonRepeatingIndex(
+      this.lastRivalThreatVariation,
+      RIVAL_THREAT_VARIATIONS.length,
+    );
+    this.lastRivalThreatVariation = index;
+    const v = RIVAL_THREAT_VARIATIONS[index];
+    const time = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = v.wave;
+    osc.frequency.setValueAtTime(v.start, time);
+    osc.frequency.exponentialRampToValueAtTime(v.end, time + 0.11);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(0.035, time + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+    const panner = this.ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    osc.connect(gain).connect(panner).connect(this.sfxBus);
+    osc.start(time);
+    osc.stop(time + 0.15);
+  }
+
+  playTimeBonus({ major = false } = {}) {
+    if (!this.ctx || !this.sfxBus) return;
+    const index = nonRepeatingIndex(
+      this.lastTimeBonusVariation,
+      TIME_BONUS_VARIATIONS.length,
+    );
+    this.lastTimeBonusVariation = index;
+    const v = TIME_BONUS_VARIATIONS[index];
+    const time = this.ctx.currentTime;
+    [1, major ? v.ratio * 1.125 : v.ratio].forEach((ratio, noteIndex) => {
+      const start = time + noteIndex * 0.055;
+      const osc = this.ctx.createOscillator();
+      osc.type = v.wave;
+      osc.frequency.value = v.tone * ratio;
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(major ? 0.065 : 0.048, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.14);
+      const pan = this.ctx.createStereoPanner();
+      pan.pan.value = v.pan;
+      osc.connect(gain).connect(pan).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.15);
+    });
+  }
+
+  playRivalImpact({ kind = 'rub', pan = 0, strength = 1 } = {}) {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const takedown = kind === 'takedown';
+    const pool = takedown ? RIVAL_TAKEDOWN_VARIATIONS : RIVAL_IMPACT_VARIATIONS;
+    const previous = takedown
+      ? this.lastRivalTakedownVariation
+      : this.lastRivalImpactVariation;
+    const index = nonRepeatingIndex(previous, pool.length);
+    if (takedown) this.lastRivalTakedownVariation = index;
+    else this.lastRivalImpactVariation = index;
+    const v = pool[index];
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const level = Math.max(0.5, Math.min(1.25, strength));
+    const contactLevel = kind === 'rub' ? 0.48 : kind === 'incoming' ? 0.82 : 1;
+
+    const body = ctx.createOscillator();
+    body.type = v.wave ?? 'sine';
+    body.frequency.setValueAtTime(v.body * 1.8, time);
+    body.frequency.exponentialRampToValueAtTime(v.body, time + (takedown ? 0.2 : 0.09));
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0.11 * level * contactLevel, time);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, time + (takedown ? 0.25 : 0.12));
+    const bodyPan = ctx.createStereoPanner();
+    bodyPan.pan.value = Math.max(-1, Math.min(1, pan + v.pan));
+    body.connect(bodyGain).connect(bodyPan).connect(this.sfxBus);
+    body.start(time);
+    body.stop(time + (takedown ? 0.27 : 0.14));
+
+    const metal = ctx.createBufferSource();
+    metal.buffer = this.noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = takedown ? 'lowpass' : 'bandpass';
+    filter.frequency.value = v.metal;
+    filter.Q.value = v.q ?? 0.75;
+    const metalGain = ctx.createGain();
+    metalGain.gain.setValueAtTime(0.07 * level * contactLevel, time);
+    metalGain.gain.exponentialRampToValueAtTime(
+      0.001,
+      time + (takedown ? 0.32 : v.decay),
+    );
+    metal.connect(filter).connect(metalGain).connect(bodyPan);
+    metal.start(time);
+    metal.stop(time + (takedown ? 0.34 : v.decay + 0.02));
+
+    if (takedown) {
+      v.chord.forEach((frequency, chordIndex) => {
+        const start = time + 0.045 + chordIndex * 0.045;
+        const note = ctx.createOscillator();
+        note.type = 'triangle';
+        note.frequency.value = frequency;
+        const noteGain = ctx.createGain();
+        noteGain.gain.setValueAtTime(0.0001, start);
+        noteGain.gain.exponentialRampToValueAtTime(0.045, start + 0.012);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
+        note.connect(noteGain).connect(this.sfxBus);
+        note.start(start);
+        note.stop(start + 0.22);
+      });
+    }
   }
 
   playGlassCrack(stage = 1) {

@@ -1,0 +1,135 @@
+{
+  "id": "training-rivals",
+  "name": "RIVAL SCHOOL",
+  "seed": 1105,
+  "laps": 1,
+  "finish": "objectives",
+  "music": "training-loop",
+  "environment": "training-loop",
+  "intro": "Boost for an instant wreck, or land two committed side hits. Green clocks add 2 seconds.",
+  "design": {
+    "focus": "Teach instant boosted takedowns and a readable two-hit side-shunt alternative in a three-car score attack.",
+    "pacing": "Three persistent rival identities circulate around the player as individuals. Passed cars recover from behind, escaped cars remain chase targets ahead, and wrecked cars rejoin with varied lanes and staggered delays instead of returning as waves."
+  },
+  "timedScoreAttack": {
+    "durationSeconds": 35,
+    "maximumBonusSeconds": 12
+  },
+  "trainingDamage": { "maxHits": 4 },
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": false
+  },
+  "rivals": {
+    "seed": 1505,
+    "count": 3,
+    "maxCount": 3,
+    "recycleWrecks": true,
+    "aggression": 0.2,
+    "spawns": [
+      { "id": "rival-cyan", "segmentsAhead": 14, "offset": -0.55, "pace": 1.01 },
+      { "id": "rival-magenta", "segmentsAhead": 24, "offset": 0.55, "pace": 1.04 },
+      { "id": "rival-gold", "segmentsAhead": 36, "offset": 0, "pace": 1.07 }
+    ],
+    "circulation": {
+      "enabled": true,
+      "behindMinSegments": 18,
+      "behindMaxSegments": 28,
+      "aheadMinSegments": 42,
+      "aheadMaxSegments": 60,
+      "catchUpMinMultiplier": 1.055,
+      "catchUpMaxMultiplier": 1.09,
+      "catchUpSeconds": 7,
+      "pursuitStartSegments": 5,
+      "pursuitMinMultiplier": 1.025,
+      "pursuitMaxMultiplier": 1.055,
+      "reentryDelayMinSeconds": 2.2,
+      "reentryDelayMaxSeconds": 3.4,
+      "minimumReentryIntervalSeconds": 2.2,
+      "minimumSpacingSegments": 3.5,
+      "lanePattern": [-0.62, 0.48, -0.08, 0.68, -0.42, 0.2]
+    },
+    "attackZones": [
+      { "from": 216, "to": 858 },
+      { "from": 954, "to": 1194 }
+    ],
+    "policy": {
+      "oneAttacker": true,
+      "productionCount": 3,
+      "minimumTellSeconds": 0.65,
+      "localPaceRadiusSegments": 18,
+      "maximumCatchUp": 0.12,
+      "maximumSlowDown": 0.08,
+      "stagingRadiusSegments": 32,
+      "stagingBehindRadiusSegments": 36,
+      "stagingTargetSegments": 24,
+      "stagingTargetSpacingSegments": 7,
+      "stagingGraceSeconds": 0.85,
+      "wreckSeconds": 2.2,
+      "airborneContact": false
+    }
+  },
+  "objectives": [
+    {
+      "id": "takedowns",
+      "type": "count_event",
+      "event": "rival_takedown",
+      "value": 8,
+      "label": "WRECK 8 RIVALS BEFORE TIME EXPIRES",
+      "hudLabel": "TAKEDOWNS",
+      "pointsPerUnit": 800
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 3,
+    "objective": "takedowns",
+    "metrics": [],
+    "thresholds": [
+      {
+        "rank": "gold",
+        "minimum": 8,
+        "stars": 3
+      },
+      {
+        "rank": "silver",
+        "minimum": 5,
+        "stars": 2
+      },
+      { "rank": "bronze", "minimum": 2, "stars": 1 }
+    ]
+  },
+  "objects": [
+    { "id": "rival-boost-start", "at": 8, "kind": "boost", "offset": 0 },
+    { "id": "rival-boost-1", "at": 280, "kind": "boost", "offset": -0.55 },
+    { "id": "rival-boost-2", "at": 560, "kind": "boost", "offset": 0 },
+    { "id": "rival-boost-3", "at": 840, "kind": "boost", "offset": 0.55 },
+    { "id": "rival-boost-4", "at": 1120, "kind": "boost", "offset": 0 },
+    { "id": "clock-cone-1", "at": 150, "kind": "cone", "offset": -0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-2", "at": 340, "kind": "cone", "offset": 0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-3", "at": 530, "kind": "cone", "offset": 0, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-4", "at": 720, "kind": "cone", "offset": -0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-5", "at": 920, "kind": "cone", "offset": 0.55, "once": true, "timeBonusSeconds": 2 },
+    { "id": "clock-cone-6", "at": 1160, "kind": "cone", "offset": 0, "once": true, "timeBonusSeconds": 2 }
+  ],
+  "pieces": [
+    ["straight", 40],
+    ["curve", 32, -1],
+    ["straight", 22],
+    ["curve", 36, 1],
+    ["straight", 28],
+    ["curve", 36, -2],
+    ["straight", 24],
+    ["curve", 40, 2],
+    ["straight", 28],
+    ["curve", 32, 8],
+    ["straight", 32],
+    ["curve", 30, -3],
+    ["straight", 18],
+    ["curve", 28, -8],
+    ["straight", 40]
+  ],
+  "obstacles": 0,
+  "par": 150
+}

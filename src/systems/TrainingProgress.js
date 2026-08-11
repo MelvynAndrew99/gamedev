@@ -6,6 +6,15 @@
 
 const KEY = 'destruction-racer.training.v1';
 
+export function trainingMetricUsage(scoring = {}) {
+  const thresholds = scoring?.thresholds ?? [];
+  return Object.freeze({
+    damage: thresholds.some((threshold) => threshold.maximumDamageHits != null),
+    cones: thresholds.some((threshold) => threshold.maximumConesMissed != null),
+    offTrack: thresholds.some((threshold) => threshold.maximumOffTrackEvents != null),
+  });
+}
+
 function load() {
   try {
     return JSON.parse(globalThis.localStorage.getItem(KEY)) ?? {};
@@ -25,9 +34,16 @@ function save(progress) {
 export function trophyFor(scoring, progress, metrics = {}) {
   const damageHits = metrics.damageHits ?? 0;
   const conesMissed = metrics.conesMissed ?? 0;
+  const offTrackEvents = metrics.offTrackEvents ?? 0;
+  const boostedTakedowns = metrics.boostedTakedowns ?? 0;
+  const time = metrics.time ?? Infinity;
   const thresholds = [...(scoring?.thresholds ?? [])]
     .filter((threshold) => Number.isFinite(threshold.minimum))
-    .sort((a, b) => b.minimum - a.minimum);
+    // Evaluate mastery before fallback when ranks share a target count.
+    // Authoring order should never turn a Gold-qualified result into Silver.
+    .sort((a, b) =>
+      b.minimum - a.minimum || (b.stars ?? 0) - (a.stars ?? 0)
+    );
   const earned = thresholds.find((threshold) =>
     progress >= threshold.minimum &&
     (
@@ -37,6 +53,18 @@ export function trophyFor(scoring, progress, metrics = {}) {
     (
       threshold.maximumConesMissed == null ||
       conesMissed <= threshold.maximumConesMissed
+    ) &&
+    (
+      threshold.maximumOffTrackEvents == null ||
+      offTrackEvents <= threshold.maximumOffTrackEvents
+    ) &&
+    (
+      threshold.minimumBoostedTakedowns == null ||
+      boostedTakedowns >= threshold.minimumBoostedTakedowns
+    ) &&
+    (
+      threshold.maximumTime == null ||
+      time <= threshold.maximumTime
     )
   );
   return earned
@@ -50,6 +78,15 @@ export function trophyFor(scoring, progress, metrics = {}) {
       ...(earned.maximumConesMissed == null
         ? {}
         : { maximumConesMissed: earned.maximumConesMissed }),
+      ...(earned.maximumOffTrackEvents == null
+        ? {}
+        : { maximumOffTrackEvents: earned.maximumOffTrackEvents }),
+      ...(earned.minimumBoostedTakedowns == null
+        ? {}
+        : { minimumBoostedTakedowns: earned.minimumBoostedTakedowns }),
+      ...(earned.maximumTime == null
+        ? {}
+        : { maximumTime: earned.maximumTime }),
     }
     : null;
 }
@@ -90,13 +127,21 @@ export function submitTrainingResult(track, progress, time, metrics = {}) {
   const previous = stored?.version === version ? stored : null;
   const damageHits = metrics.damageHits ?? 0;
   const conesMissed = metrics.conesMissed ?? 0;
+  const offTrackEvents = metrics.offTrackEvents ?? 0;
+  const boostedTakedowns = metrics.boostedTakedowns ?? 0;
   const objectiveTargetCount = track.objects?.filter(
     (object) => object?.objective === track.scoring?.objective,
   ).length ?? 0;
   const total = metrics.total ?? (
     objectiveTargetCount || track.objects?.length || progress
   );
-  const trophy = trophyFor(track.scoring, progress, { damageHits, conesMissed });
+  const trophy = trophyFor(track.scoring, progress, {
+    damageHits,
+    conesMissed,
+    offTrackEvents,
+    boostedTakedowns,
+    time,
+  });
   const stars = trophy?.stars ?? 0;
   const newBest = previous == null ||
     stars > (previous.stars ?? 0) ||
@@ -110,7 +155,13 @@ export function submitTrainingResult(track, progress, time, metrics = {}) {
             damageHits < (previous.damageHits ?? Infinity) ||
             (
               damageHits === (previous.damageHits ?? Infinity) &&
-              time < previous.bestTime
+              (
+                offTrackEvents < (previous.offTrackEvents ?? Infinity) ||
+                (
+                  offTrackEvents === (previous.offTrackEvents ?? Infinity) &&
+                  time < previous.bestTime
+                )
+              )
             )
           )
         )
@@ -126,6 +177,8 @@ export function submitTrainingResult(track, progress, time, metrics = {}) {
       bestTime: time,
       damageHits,
       conesMissed,
+      offTrackEvents,
+      boostedTakedowns,
       trophy: trophy?.rank ?? null,
       stars,
     };

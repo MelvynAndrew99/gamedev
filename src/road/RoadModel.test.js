@@ -7,9 +7,11 @@ import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingTopSpeed from '../tracks/training-top-speed.json' with { type: 'json' };
 import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
+import trainingRivals from '../tracks/training-rivals.json' with { type: 'json' };
 import trainingValidation from '../tracks/training-validation.json' with { type: 'json' };
 import neonGulch from '../tracks/neon-gulch.json' with { type: 'json' };
 import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
+import { TRAINING_TRACKS } from '../tracks/index.js';
 import { RoadModel } from './RoadModel.js';
 
 function interactiveLayout(model) {
@@ -214,6 +216,76 @@ test('training is the longer cone-only version of the story proving ground', () 
   assert.equal(interactive.length, trainingLoop.objects.length);
   assert.ok(interactive.every((sprite) => sprite.key === 'cone'));
   assert.ok(interactive.every((sprite) => sprite.objectiveId === 'cone-sweep'));
+  assert.ok(model.segments.every((segment) => !segment.zipper && !segment.launchApproach));
+});
+
+test('Rival School turns the shared loop into a circulating three-rival score attack', () => {
+  assert.equal(TRAINING_TRACKS.length, 5);
+  assert.equal(TRAINING_TRACKS.at(-1).id, 'training-rivals');
+  assert.deepEqual(trainingRivals.pieces, trainingLoop.pieces);
+  assert.equal(trainingRivals.laps, 1);
+  assert.equal(trainingRivals.finish, 'objectives');
+  assert.equal(trainingRivals.timedElimination, undefined);
+  assert.deepEqual(trainingRivals.timedScoreAttack, {
+    durationSeconds: 35,
+    maximumBonusSeconds: 12,
+  });
+  assert.equal(trainingRivals.rivals.count, 3);
+  assert.equal(trainingRivals.rivals.maxCount, 3);
+  assert.equal(trainingRivals.rivals.recycleWrecks, true);
+  assert.deepEqual(
+    trainingRivals.rivals.spawns.map((rival) => rival.segmentsAhead),
+    [14, 24, 36],
+    'the opening preserves the original readable three-racer spacing',
+  );
+  assert.equal(trainingRivals.rivals.policy.wreckSeconds, 2.2);
+  assert.equal(trainingRivals.rivals.policy.stagingTargetSegments, 24);
+  assert.equal(trainingRivals.rivals.circulation.enabled, true);
+  assert.ok(
+    trainingRivals.rivals.circulation.reentryDelayMaxSeconds >
+      trainingRivals.rivals.circulation.reentryDelayMinSeconds,
+    'wrecked rivals must not return on one shared wave timer',
+  );
+  assert.ok(
+    trainingRivals.rivals.circulation.behindMaxSegments <
+      trainingRivals.rivals.policy.stagingBehindRadiusSegments,
+    'a passed rival returns behind the player without immediately recycling again',
+  );
+  assert.ok(trainingRivals.rivals.circulation.minimumReentryIntervalSeconds >= 2.2);
+  assert.ok(new Set(trainingRivals.rivals.circulation.lanePattern).size >= 5);
+  assert.equal(new Set(trainingRivals.rivals.spawns.map((rival) => rival.id)).size, 3);
+  assert.equal(
+    trainingRivals.rivals.policy.productionCount,
+    trainingRivals.rivals.count,
+    'every production rival must be an authored, countable target',
+  );
+  assert.equal(trainingRivals.objects.filter((object) => object.kind === 'boost').length, 5);
+  assert.equal(trainingRivals.objects.find((object) => object.kind === 'boost').at, 8);
+  const clockCones = trainingRivals.objects.filter((object) => object.kind === 'cone');
+  assert.equal(clockCones.length, 6);
+  assert.ok(clockCones.every((cone) => cone.once && cone.timeBonusSeconds === 2));
+  assert.deepEqual(
+    trainingRivals.objectives.map((objective) => objective.event ?? 'lap_complete'),
+    ['rival_takedown'],
+  );
+  assert.equal(trainingRivals.objectives[0].value, 8);
+  const gold = trainingRivals.scoring.thresholds.find((threshold) => threshold.rank === 'gold');
+  const silver = trainingRivals.scoring.thresholds.find((threshold) => threshold.rank === 'silver');
+  const bronze = trainingRivals.scoring.thresholds.find((threshold) => threshold.rank === 'bronze');
+  assert.deepEqual([gold.minimum, silver.minimum, bronze.minimum], [8, 5, 2]);
+  assert.deepEqual(trainingRivals.scoring.metrics, []);
+
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingRivals);
+  const interactive = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.def);
+  assert.equal(interactive.length, trainingRivals.objects.length);
+  assert.equal(interactive.filter((sprite) => sprite.key === 'boost').length, 5);
+  assert.equal(interactive.filter((sprite) => sprite.key === 'cone').length, 6);
+  assert.ok(
+    interactive.filter((sprite) => sprite.key === 'cone')
+      .every((sprite) => sprite.timeBonusSeconds === 2 && sprite.persistentHit),
+  );
   assert.ok(model.segments.every((segment) => !segment.zipper && !segment.launchApproach));
 });
 

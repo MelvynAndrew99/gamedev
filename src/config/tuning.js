@@ -30,6 +30,20 @@ export const TUNING = {
   steerExpo: 1.6,      // analog stick response curve (1 = linear, higher = softer center)
   airbrakeForce: 2.2,  // extra lateral authority while an airbrake is held
 
+  // ---- Rivals / takedowns (live in the Projection Lab) ---------------
+  rivalCount: 3,             // captured per Rival School attempt; Lab supports 1..3
+  rivalPace: 0.96,           // shared base-speed multiplier before profiles
+  rivalAggression: 0.2,      // changes attack frequency, never attack physics
+  rivalTelegraph: 0.75,      // seconds of visible intent before lateral attack
+  rivalCatchupCap: 0.12,     // far-only pace help; disabled near contact
+  rivalTakedownAdvantage: 0.04, // forgiving but real closing-speed edge for a rear ram
+  rivalContactStrength: 0.08,   // training incoming-hit speed tax (8%)
+  rivalCampaignDamage: 10,      // persistent hull cost when Story enables rivals
+  rivalContactCooldown: 0.8,    // pair immunity after one resolved contact
+  rivalAttackCooldown: 3.5,     // per-rival minimum time between attempts
+  rivalAttackWindow: 0.22,      // one-sided airbrake tap commitment window
+  rivalMaxCount: 6,             // renderer/system stress cap; production uses three
+
   // ---- Terrain physics ------------------------------------------------
   overspeedCap: 1.25,  // the overspeed ceiling: HUD 150 — the top of the fun band Melvyn found (140-150). Everything that grants speed clamps here.
   torqueLow: 3.6,      // engine multiplier at standstill. Sized to BEAT gravity on

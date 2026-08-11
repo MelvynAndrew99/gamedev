@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 
 import { TUNING } from '../config/tuning.js';
 import { RoadModel } from './RoadModel.js';
-import { backgroundPitchOffset, RoadRenderer } from './RoadRenderer.js';
+import {
+  backgroundPitchOffset,
+  rivalRenderAlpha,
+  rivalSpriteFrameSize,
+  rivalSpriteMode,
+  RoadRenderer,
+} from './RoadRenderer.js';
 
 function chainable(base = {}) {
   let proxy;
@@ -25,6 +31,7 @@ function fakeScene() {
     add: {
       graphics: () => chainable(),
       image: () => chainable({ width: 10, height: 10 }),
+      sprite: () => chainable({ width: 64, height: 56 }),
       text: () => chainable({ width: 170, height: 24 }),
     },
   };
@@ -127,6 +134,8 @@ test('gate stays stable while roadside speed markers keep their horizon wink', (
     height: 56,
     visible: false,
     setTexture() { return this; },
+    setTint() { return this; },
+    clearTint() { return this; },
     setDisplaySize() { return this; },
     setVisible(visible) {
       this.visible = visible;
@@ -154,6 +163,111 @@ test('gate stays stable while roadside speed markers keep their horizon wink', (
     postStates,
     new Set([true, false]),
     'roadside pickets should retain their alternating speed cadence'
+  );
+});
+
+test('clock cones add a pooled clock silhouette while ordinary cones do not', () => {
+  const renderer = new RoadRenderer(fakeScene(), { ...TUNING, drawDistance: 1 });
+  const model = new RoadModel({ ...TUNING, drawDistance: 1 });
+  model.addStraight(1);
+  const segment = model.segments[0];
+  segment.clipped = false;
+  segment.speedMarkerClipped = false;
+  segment.p1.screen = { x: 480, y: 300, scale: 0.02, w: 220 };
+  const prop = {
+    key: 'cone', view: 0.09, offset: 0, hit: false, timeBonusSeconds: 0,
+  };
+  segment.sprites = [prop];
+
+  const clockDraws = { circles: 0, hands: 0 };
+  renderer.timeBonusMarkers = {
+    clear() { clockDraws.circles = 0; clockDraws.hands = 0; return this; },
+    lineStyle() { return this; },
+    strokeCircle() { clockDraws.circles += 1; return this; },
+    lineBetween() { clockDraws.hands += 1; return this; },
+  };
+  let appliedTint = null;
+  const pooledProp = {
+    width: 10,
+    height: 10,
+    setTexture() { return this; },
+    setTint(tint) { appliedTint = tint; return this; },
+    clearTint() { appliedTint = null; return this; },
+    setDisplaySize() { return this; },
+    setVisible() { return this; },
+  };
+  renderer.pool = [pooledProp];
+  const stablePool = renderer.pool;
+
+  renderer.renderSprites(model, segment);
+  assert.deepEqual(clockDraws, { circles: 0, hands: 0 });
+
+  prop.timeBonusSeconds = 2;
+  renderer.renderSprites(model, segment);
+  assert.equal(appliedTint, 0x2ee56b, 'clock cones use the authored success green');
+  assert.equal(clockDraws.circles, 2, 'dark keyline and white clock face are drawn');
+  assert.equal(clockDraws.hands, 4, 'two clock hands are drawn with both outline layers');
+  assert.equal(renderer.pool, stablePool, 'rendering reuses the existing prop pool');
+});
+
+test('far-only rival staging fades in during its collision grace instead of popping', () => {
+  assert.equal(rivalRenderAlpha({ stagingGrace: 1, stagingGraceTotal: 1 }), 0);
+  assert.equal(rivalRenderAlpha({ stagingGrace: 0.5, stagingGraceTotal: 1 }), 0.5);
+  assert.equal(rivalRenderAlpha({ stagingGrace: 0, stagingGraceTotal: 1 }), 1);
+  assert.equal(rivalRenderAlpha({ stagingGrace: 0 }), 1);
+});
+
+test('rivals use opaque hull width and a cohesive far LOD instead of engine fragments', () => {
+  assert.equal(rivalSpriteMode(7.99), 'beacon');
+  assert.equal(rivalSpriteMode(8), 'sprite');
+  assert.equal(
+    rivalSpriteFrameSize(30),
+    64,
+    'a 30px projected hull requires the full 64px transparent steering frame',
+  );
+  assert.ok(
+    rivalSpriteFrameSize(12) > 12 * 2,
+    'transparent padding must not silently halve the visible opponent',
+  );
+});
+
+test('one rival ID occupies exactly one pooled sprite', () => {
+  const renderer = new RoadRenderer(fakeScene(), { ...TUNING, drawDistance: 1 });
+  const model = new RoadModel({ ...TUNING, drawDistance: 1 });
+  model.addStraight(1);
+  const segment = model.segments[0];
+  segment.clipped = false;
+  segment.p1.screen = { x: 480, y: 300, scale: 0.05, w: 220 };
+  segment.p2.screen = { x: 480, y: 290, scale: 0.05, w: 210 };
+
+  renderer.rivalPool = Array.from({ length: 6 }, () => ({
+    visible: false,
+    setFrame() { return this; },
+    setPosition(x, y) { this.x = x; this.y = y; return this; },
+    setDisplaySize() { return this; },
+    setTint() { return this; },
+    setAlpha() { return this; },
+    setVisible(value) { this.visible = value; return this; },
+  }));
+  renderer.rivalMarkers = chainable();
+  renderer.rivalShadows = chainable();
+  const rival = {
+    id: 'rival-cyan', active: true, state: 'cruise', position: 0,
+    renderPosition: 0, x: -0.8, renderX: 0.25,
+    steer: 0, color: 0x00e5ff,
+    screen: { x: 0, y: 0, width: 0, visible: false },
+  };
+
+  renderer.renderRivals(model, segment, { x: 0 }, [rival]);
+  assert.deepEqual(
+    renderer.rivalPool.map((sprite, index) => sprite.visible ? index : null)
+      .filter((index) => index !== null),
+    [0],
+  );
+  assert.equal(
+    renderer.rivalPool[0].x,
+    535,
+    'world projection consumes the smooth render lane, not the fixed physics lane',
   );
 });
 

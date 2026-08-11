@@ -128,7 +128,8 @@ explicitly says training continues and the trophy is lost. Story and Endless
 show the corresponding hull warning at 25 health and still wreck on the next
 rock.
 
-Redline and Air School are Training Levels 3 and 4 on that same geometry.
+Redline, Air School, and Rival School are Training Levels 3, 4, and 5 on that
+same geometry.
 Redline teaches the boost gauge — tapping stacks the top-speed ceiling,
 holding sustains it — read by the speed number and graded Bronze/Silver/Gold
 on the highest tier reached; see [training_levels.md](./training_levels.md)
@@ -147,6 +148,41 @@ and ramp contact merge into one launch beat instead of stacking popups, shakes,
 or risers. Training result screens
 explicitly offer Retry and Next Track instead of treating completion as an
 automatic return to the title.
+
+Rival School introduces the Story campaign's moving opposition as a 35-second
+base wreck score attack, not a boss or a lap-limited race. Exactly three
+collision-capable rivals stay in circulation so the road retains passing space
+and the encounter reads like a Burnout-style pack rather than a moving wall.
+Players use familiar racing inputs: bank boost, line up a rival, and ram it
+while boost is live for an instant wreck. As a lower-power alternative, two
+committed non-boost side shunts against the same rival generation also wreck
+it. The first side hit visibly staggers the car and announces that one hit
+remains. No special attack-button timing is required. Ordinary rear contact
+and passive rubbing produce a small physical ricochet but never accumulate
+damage or earn credit. Each takedown awards one bounded boost slot.
+
+Six one-shot green clock cones add two seconds each, up to 12 bonus seconds;
+laps and checkpoints never add time. Five evenly distributed boost packs,
+including one before the opening pack, keep the attack resource available
+without granting permanent boost. A boosted wreck resolves as one short local
+explosion—no barrel roll, detached car ghost, or cone-style secondary burst.
+Its identity waits a seeded 2.2–3.4 seconds before
+re-entering individually, never as a fixed formation. Most replacements appear
+as distant quarry near the horizon; some approach from behind as challengers.
+Entries are separated by at least 2.2 seconds, vary lane and distance, and keep
+collision disabled during their fade. Passed rivals first chase back under
+their own wheels and are repositioned only after falling genuinely off-camera.
+Story races do not enable this training-only circulation director. Contact
+debris clears before the next driving decision.
+
+The course ribbon is a neutral loop locator showing the player and all three
+living rivals by stable shape and color. TIME and TAKEDOWNS replace the
+persistent objective checklist, lap count, and endpoint furniture. Every valid
+wreck is exactly +1: Bronze is 2, Silver is 5, and Gold is 8. Zero earns no
+trophy but still records completion and unlocks progression. Training attacks
+use local windscreen feedback and a small momentum tax, never campaign hull or
+a hard wreck. The score can exceed eight; the objective display may cap at its
+authored goal, but results and persistence use the uncapped takedown count.
 
 Proving Ground is the first Story race. It uses the same geometry with campaign
 warnings, hazards, route offers, rewards, normal three-lap finish rules, and the

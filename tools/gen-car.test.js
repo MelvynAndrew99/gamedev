@@ -89,3 +89,16 @@ test('nose-down and nose-up rows reveal genuinely different 3D silhouettes', () 
   }
   assert.ok(differingPixels > 250, 'pitch rows collapsed into the same raster pose');
 });
+
+test('neutral rival frame keeps the opaque-width contract used by projection', () => {
+  let minX = FRAME_W;
+  let maxX = -1;
+  for (let y = 0; y < FRAME_H; y++) {
+    for (let x = 0; x < FRAME_W; x++) {
+      if (pixel(1, 2, x, y).a === 0) continue;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+    }
+  }
+  assert.equal(maxX - minX + 1, 30);
+});
