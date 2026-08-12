@@ -55,6 +55,29 @@ import { TimedScoreAttack } from '../systems/TimedScoreAttack.js';
 import { rivalFxSpec } from '../systems/RivalFx.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
+import { STORY_PHASES, modeMenuTarget } from '../ui/FrontEndModel.js';
+import {
+  QualifierClock,
+  RivalRaceOrder,
+  objectivesForStoryPhase,
+  remainingStoryOpponents,
+} from '../systems/StoryEventState.js';
+import {
+  isStoryCampaignComplete,
+  isStoryCampaignPlatinum,
+  submitQualifierResult,
+  submitRivalResult,
+} from '../systems/StoryProgress.js';
+import {
+  STORY_STYLE_RULES,
+  StoryStyleTracker,
+  storyStyleRulesForTrack,
+} from '../systems/StyleEvents.js';
+import {
+  HeldBoostAccumulator,
+  createPlayerStatEvent,
+  submitPlayerStatEvent,
+} from '../systems/PlayerStats.js';
 import { MUSIC } from '../audio/MusicEngine.js';
 import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
 import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
@@ -69,6 +92,8 @@ const CAMPAIGN_THEMES = {
   'syndicate-run': SYNDICATE_RUN_THEME,
 };
 
+let runSequence = 0;
+
 export class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
@@ -78,6 +103,9 @@ export class GameScene extends Phaser.Scene {
   init(data) {
     this.mode = data.mode ?? 'story';
     this.trackIndex = data.trackIndex ?? 0;
+    this.storyPhase = this.mode === 'story'
+      ? data.storyPhase ?? STORY_PHASES.QUALIFIER
+      : null;
     this.garageData = null;
   }
 
@@ -92,20 +120,43 @@ export class GameScene extends Phaser.Scene {
       this.trackData = trackList[this.trackIndex];
       this.model = new RoadModel(TUNING);
       this.model.buildFromData(this.trackData);
-      this.race = new RaceState(this.model, this.trackData.laps ?? 3, {
+      const storyEvent = this.mode === 'story'
+        ? this.storyPhase === STORY_PHASES.RIVALS
+          ? this.trackData.rivalRace
+          : this.trackData.qualifier
+        : null;
+      this.race = new RaceState(this.model, storyEvent?.laps ?? this.trackData.laps ?? 3, {
         finishOnLapLimit: this.trackData.finish !== 'objectives',
       });
     }
-    this.objectives = new ObjectiveState(this.trackData?.objectives, this.model);
+    const objectiveDefinitions = this.mode === 'story'
+      ? objectivesForStoryPhase(this.trackData?.objectives, this.storyPhase, this.race.laps)
+      : this.trackData?.objectives;
+    this.objectives = new ObjectiveState(objectiveDefinitions, this.model);
     this.objectiveHudSequence = 0;
     this.objectiveHudEvents = [];
+    runSequence += 1;
+    this.gameplayRunId = `run-${Date.now().toString(36)}-${runSequence}`;
+    this.playerStatSequence = 0;
+    this.heldBoostStats = new HeldBoostAccumulator(
+      STORY_STYLE_RULES.longBurn.minimumHeldSeconds,
+    );
+    this.styleTracker = this.mode === 'story'
+      ? new StoryStyleTracker({
+        runId: this.gameplayRunId,
+        rules: storyStyleRulesForTrack(this.trackData),
+      })
+      : null;
     this.renderer = new RoadRenderer(
       this,
       TUNING,
       this.trackData?.environment ?? this.trackData?.id ?? 'endless',
     );
     this.player = new Player(TUNING);
-    this.rivalPack = this.trackData?.rivals
+    const rivalConfig = this.mode !== 'story' || this.storyPhase === STORY_PHASES.RIVALS
+      ? this.trackData?.rivals
+      : null;
+    this.rivalPack = rivalConfig
       ? new RivalPack(this.trackData.rivals, this.rivalTuning(), this.model)
       : null;
     // Racer count is an attempt contract, not a live despawn control. The Lab
@@ -151,6 +202,17 @@ export class GameScene extends Phaser.Scene {
       : null;
     this.rivalSchoolCompletePending = 0;
     this.rivalSchoolView = this.buildRivalSchoolView();
+    this.qualifierClock = this.mode === 'story' && this.storyPhase === STORY_PHASES.QUALIFIER
+      ? new QualifierClock(this.trackData.qualifier?.targetSeconds)
+      : null;
+    this.storyRaceOrder = this.mode === 'story' && this.storyPhase === STORY_PHASES.RIVALS
+      ? new RivalRaceOrder({
+        trackLength: this.model.trackLength,
+        laps: this.race.laps,
+        rivals: this.rivalPack?.rivals ?? [],
+      })
+      : null;
+    this.storyEventView = this.buildStoryEventView();
     // Player.position wraps at a campaign lap line. Scenery distance does not,
     // so background drift remains continuous rather than snapping each lap.
     this.sceneryDistance = 0;
@@ -171,6 +233,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingAirtimeLanding = null;
     this.jumpLaunchedThisFrame = false;
     this.speedLineBurst = 0; // ramp/boost streak-bloom, decays over speedLineBurstTime
+    this.speedPadPulse = 0;
     this.wasOnZipper = false;
     this.trainingDamageHits = 0;
     this.trainingDamageMax = this.trackData?.trainingDamage?.maxHits ?? 0;
@@ -187,8 +250,8 @@ export class GameScene extends Phaser.Scene {
     this.failedTrainingCues = new Set();
     // Air School telemetry is intentionally public/pull-based: HudScene reads
     // one small view model without owning physics or training decisions.
-    this.airtimeTrainingConfig = this.trackData?.id === 'training-airtime'
-      ? this.trackData.airtimeTraining
+    this.airtimeTrainingConfig = this.mode === 'training'
+      ? this.trackData?.airtimeTraining ?? null
       : null;
     this.airtimeGapAttempt = null;
     this.airtimeFeedback = null;
@@ -210,6 +273,7 @@ export class GameScene extends Phaser.Scene {
       .setScale(TUNING.carScale)
       .setDepth(10);
     this.createAirtimeVisuals();
+    this.speedPadGraphics = this.add.graphics().setDepth(11);
     this.createRivalVisuals();
 
     this.controls = new Controls(this);
@@ -264,6 +328,7 @@ export class GameScene extends Phaser.Scene {
     // needs its own explicit stop or the drone plays on regardless.
     this.events.once('shutdown', () => this.boostHoldHandle?.stop());
     this.events.once('shutdown', () => this.airtimeAudioHandle?.stop());
+    this.events.once('shutdown', () => this.flushHeldBoostStats());
   }
 
   update(time, delta) {
@@ -331,8 +396,16 @@ export class GameScene extends Phaser.Scene {
     // ceiling itself is enforced inside Player.update's own clamp (see
     // Boost.js and Player.js). Feed it in BEFORE update so it's live this frame.
     this.boost.update(dt, input.nitro);
+    this.styleTracker?.update(dt, {
+      boostHeld: this.boost.holding && input.nitro,
+    });
+    this.updateHeldBoostStats(dt, this.boost.holding && input.nitro);
     if (this.boost.justActivated > 0) {
       this.player.boost(TUNING.boostTierCeilings[this.boost.justActivated - 1]);
+      if (this.boost.justActivated === 3) {
+        this.styleTracker?.recordBoostTier(3);
+        this.recordLifetimeStat('tierThreeBoosts');
+      }
     } else if (this.boost.justExtended) {
       this.player.boost(TUNING.boostTierCeilings[this.boost.tier - 1]);
     }
@@ -341,6 +414,9 @@ export class GameScene extends Phaser.Scene {
 
     this.player.update(dt, input, this.model);
     this.updateRivals(dt, input, previousRivalPlayer);
+    const storyFinishers = this.storyRaceOrder?.update(this.rivalPack?.rivals ?? []) ?? [];
+    storyFinishers.forEach((id) => this.rivalPack?.retireFinisher(id));
+    this.storyEventView = this.buildStoryEventView();
     this.updateRivalVisuals(dt);
     this.updateAirtimeAudio();
     this.updateAirtimeTraining(dt);
@@ -375,8 +451,16 @@ export class GameScene extends Phaser.Scene {
       });
       if (on && !this.wasOnZipper) {
         this.player.zip();
+        MUSIC.playSpeedLine();
+        this.speedLineBurst = 1;
+        this.speedPadPulse = 1;
+        this.cameras.main.shake(105, 0.006);
         if (this.mode === 'endless') this.pop.add(TUNING.zipPop);
         this.recordObjective('zipper_hit');
+        const segment = this.model.findSegment(this.player.position + TUNING.playerZ);
+        const speedLineId = `${this.race?.lap ?? 1}:${segment.index}`;
+        this.styleTracker?.recordSpeedLine(speedLineId);
+        this.recordLifetimeStat('speedLinesCrossed');
         this.popup('SPEED LINE!', '#2ee56b');
       }
       this.wasOnZipper = on;
@@ -416,6 +500,7 @@ export class GameScene extends Phaser.Scene {
     this.reactToBoost();
     this.iframes = Math.max(0, this.iframes - dt);
     this.speedLineBurst = Math.max(0, this.speedLineBurst - dt / TUNING.speedLineBurstTime);
+    this.speedPadPulse = Math.max(0, this.speedPadPulse - dt / 0.42);
     this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
 
     if (this.mode === 'endless') {
@@ -424,6 +509,7 @@ export class GameScene extends Phaser.Scene {
       const event = this.race.update(dt, this.player);
       if (event === 'start') {
         this.timedScoreAttack?.start(this.rivalPack?.elapsed ?? 0);
+        this.qualifierClock?.start();
         this.showBanner('GO!', 800);
       } else if (event === 'lap') {
         this.recordObjective('lap_complete');
@@ -455,6 +541,15 @@ export class GameScene extends Phaser.Scene {
         this.finishRace();
       }
     }
+
+    if (
+      this.qualifierClock && !this.done &&
+      this.qualifierClock.update(dt, this.race.crossedStart) === 'expired'
+    ) {
+      this.race.finish();
+      this.failStoryQualifier();
+    }
+    this.storyEventView = this.buildStoryEventView();
 
     if (this.timedElimination && !this.done) {
       if (this.rivalSchoolCompletePending > 0) {
@@ -521,6 +616,26 @@ export class GameScene extends Phaser.Scene {
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
     this.renderAirtimeVisuals(time, airFx);
+    this.renderSpeedPadFx();
+  }
+
+  renderSpeedPadFx() {
+    const g = this.speedPadGraphics;
+    if (!g) return;
+    g.clear();
+    if (this.speedPadPulse <= 0) return;
+    const progress = 1 - this.speedPadPulse;
+    const cx = this.carSprite.x;
+    const y = this.carBaselineY - 35;
+    const radius = 44 + progress * 92;
+    const alpha = this.speedPadPulse * 0.9;
+    g.lineStyle(5 - progress * 3, 0x2ee56b, alpha);
+    g.strokeEllipse(cx, y, radius * 2, radius * 0.8);
+    g.lineStyle(3, 0xbfffd9, alpha * 0.85);
+    for (const side of [-1, 1]) {
+      g.lineBetween(cx + side * 34, y + 18, cx + side * (80 + progress * 65), y + 52);
+      g.lineBetween(cx + side * 46, y - 2, cx + side * (98 + progress * 75), y + 12);
+    }
   }
 
   createAirtimeVisuals() {
@@ -871,9 +986,14 @@ export class GameScene extends Phaser.Scene {
 
   rivalTuning() {
     const policy = this.trackData?.rivals?.policy ?? {};
+    const finiteStoryRace = this.mode === 'story' &&
+      this.storyPhase === STORY_PHASES.RIVALS &&
+      !this.trackData?.rivals?.recycleWrecks;
     return {
       maxSpeed: TUNING.maxSpeed,
-      basePace: TUNING.rivalPace,
+      basePace: finiteStoryRace
+        ? this.trackData.rivals.racePace ?? 1.08
+        : TUNING.rivalPace,
       segmentLength: TUNING.segmentLength,
       catchUpLimit: TUNING.rivalCatchupCap,
       slowDownLimit: policy.maximumSlowDown ?? 0.08,
@@ -888,6 +1008,10 @@ export class GameScene extends Phaser.Scene {
       attackTellSeconds: TUNING.rivalTelegraph,
       contactCooldownSeconds: TUNING.rivalContactCooldown,
       minimumAttackInterval: TUNING.rivalAttackCooldown,
+      // Story's opponents are a finite race field, not replenishing targets.
+      // A car the player passes must stay behind unless it drives back under
+      // its own power; otherwise finishing order is only theatre.
+      stagingEnabled: !finiteStoryRace,
     };
   }
 
@@ -910,6 +1034,48 @@ export class GameScene extends Phaser.Scene {
           eliminated: rival.eliminated,
         })),
     };
+  }
+
+  buildStoryEventView() {
+    if (this.mode !== 'story') return null;
+    if (this.storyPhase === STORY_PHASES.QUALIFIER) {
+      return {
+        phase: this.storyPhase,
+        targetSeconds: this.qualifierClock?.targetSeconds ??
+          this.trackData?.qualifier?.targetSeconds ?? 0,
+        elapsedSeconds: this.qualifierClock?.elapsedSeconds ?? 0,
+        remainingSeconds: this.qualifierClock?.remainingSeconds ??
+          this.trackData?.qualifier?.targetSeconds ?? 0,
+      };
+    }
+    const rivals = this.rivalPack?.rivals ?? [];
+    const opponentCount = Math.max(1, this.rivalAttemptCount ??
+      this.trackData?.rivals?.count ?? 3);
+    const takedowns = this.rivalMetrics?.takedowns ?? 0;
+    return {
+      phase: this.storyPhase,
+      place: this.storyRaceOrder?.livePlace(
+        this.player?.position ?? 0,
+        this.race?.completedLaps ?? 0,
+        rivals,
+        this.race?.crossedStart ?? false,
+      ) ?? 1,
+      fieldSize: (this.rivalAttemptCount ?? 0) + 1,
+      takedowns,
+      opponentsLeft: remainingStoryOpponents(opponentCount, takedowns),
+      rivals: this.rivalPack?.renderViews ?? [],
+    };
+  }
+
+  failStoryQualifier() {
+    this.stopActiveFeedbackLoops();
+    this.done = true;
+    const target = this.trackData.qualifier.targetSeconds;
+    submitQualifierResult(this.trackData, target, target, false);
+    this.showBanner(
+      `TIME UP\nTARGET ${fmtTime(target)}\n\nENTER FOR STORY`,
+      0,
+    );
   }
 
   failTimedElimination() {
@@ -940,7 +1106,7 @@ export class GameScene extends Phaser.Scene {
       `\n${trophy}\n\nRAM FROM BEHIND OR PUSH WIDE\nX / R  RETRY`,
       0,
     );
-    this.showTrainingResultActions(false);
+    this.showTrainingResultActions();
   }
 
   rivalRoadPosition(cameraPosition = this.player.position) {
@@ -965,10 +1131,17 @@ export class GameScene extends Phaser.Scene {
     if (!pack) return;
 
     pack.setCount(this.rivalAttemptCount);
-    pack.setAggression(TUNING.rivalAggression);
+    const finiteStoryRace = this.mode === 'story' &&
+      this.storyPhase === STORY_PHASES.RIVALS &&
+      !this.trackData?.rivals?.recycleWrecks;
+    pack.setAggression(finiteStoryRace
+      ? this.trackData.rivals.aggression
+      : TUNING.rivalAggression);
     pack.t.maxSpeed = TUNING.maxSpeed;
     pack.t.segmentLength = TUNING.segmentLength;
-    pack.setBasePace(TUNING.rivalPace);
+    pack.setBasePace(finiteStoryRace
+      ? this.trackData.rivals.racePace ?? 1.08
+      : TUNING.rivalPace);
     pack.t.catchUpLimit = Math.min(0.12, Math.max(0, TUNING.rivalCatchupCap));
     pack.t.attackTellSeconds = Math.max(0.65, TUNING.rivalTelegraph);
     pack.t.contactCooldownSeconds = Math.max(0.75, TUNING.rivalContactCooldown);
@@ -1100,6 +1273,7 @@ export class GameScene extends Phaser.Scene {
             scoreTime,
           )) continue;
           this.rivalMetrics.takedowns += 1;
+          this.recordLifetimeStat('rivalsWrecked');
           if (input.boostActive) this.rivalMetrics.boostedTakedowns += 1;
           this.recordObjective('rival_takedown');
           if (!this.timedScoreAttack && this.timedElimination?.eliminate(rival.id)) {
@@ -1114,10 +1288,15 @@ export class GameScene extends Phaser.Scene {
           });
           this.startRivalFx('takedown', rival, { boosted: input.boostActive });
           this.speedLineBurst = Math.max(this.speedLineBurst, 1);
+          const finiteRivalsLeft = pack.rivals.filter((candidate) =>
+            candidate.active && !candidate.eliminated && candidate.state !== 'wrecked'
+          ).length;
           this.pushRivalHudEvent(
             this.timedScoreAttack
               ? `WRECK +1  •  ${this.timedScoreAttack.takedowns} TOTAL`
-              : `WRECKED  •  ${this.timedElimination?.carsRemaining ?? 0} LEFT`,
+              : this.timedElimination
+                ? `WRECKED  •  ${this.timedElimination.carsRemaining} LEFT`
+                : `WRECKED  •  ${finiteRivalsLeft} RACING`,
             'success',
           );
         } else {
@@ -1334,7 +1513,7 @@ export class GameScene extends Phaser.Scene {
       const segment = this.model.findSegment(
         this.player.position + TUNING.playerZ,
       ).index;
-      if (this.airtimeGapAttempt && !this.airtimeGapAttempt.resolved) {
+      if (gap && this.airtimeGapAttempt && !this.airtimeGapAttempt.resolved) {
         const outcome = airtimeGapOutcome({
           ready: this.airtimeGapAttempt.ready,
           landingSegment: segment,
@@ -1372,8 +1551,10 @@ export class GameScene extends Phaser.Scene {
     const segment = this.model.findSegment(
       this.player.position + TUNING.playerZ,
     ).index;
-    const requiredSpeed = TUNING.maxSpeed * gap.requiredSpeedMultiplier;
-    const onGapApproach = segment >= gap.approachStartSegment &&
+    const requiredSpeed = gap
+      ? TUNING.maxSpeed * gap.requiredSpeedMultiplier
+      : 0;
+    const onGapApproach = !!gap && segment >= gap.approachStartSegment &&
       segment <= gap.rockEndSegment;
     const phase = this.player.airborne
       ? 'airborne'
@@ -1384,12 +1565,15 @@ export class GameScene extends Phaser.Scene {
           : 'approach';
     return {
       phase,
+      flightAssist: Boolean(this.trackData?.flightTraining),
       currentAirSeconds: this.player.airborne ? this.player.jumpElapsed : 0,
       bestAirSeconds: this.player.bestAirtime,
       glide: this.player.glide,
       speed: this.player.speed,
       requiredSpeed,
-      gapReady: (this.boost?.tier ?? 0) > 0 && this.player.speed >= requiredSpeed,
+      gapReady: gap
+        ? (this.boost?.tier ?? 0) > 0 && this.player.speed >= requiredSpeed
+        : true,
       message: this.airtimeFeedback?.message ?? '',
       messageTone: this.airtimeFeedback?.tone ?? 'info',
     };
@@ -1413,6 +1597,15 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (!this.player.justLanded) return;
+
+    this.recordLifetimeStat('airtimeSeconds', this.player.lastAirtime);
+    if (this.player.boostedLaunch) {
+      const qualified = this.styleTracker?.recordLanding({
+        boosted: true,
+        seconds: this.player.lastAirtime,
+      }) ?? this.player.lastAirtime >= 0.85;
+      if (qualified) this.recordLifetimeStat('boostedHangtimes');
+    }
 
     const control = this.airtimeAudioHandle?.getControl?.() ?? 'neutral';
     this.airtimeAudioHandle?.stop();
@@ -1447,6 +1640,32 @@ export class GameScene extends Phaser.Scene {
     this.pendingAirtimeLanding = null;
     this.boostHoldHandle?.stop();
     this.boostHoldHandle = null;
+  }
+
+  recordLifetimeStat(stat, amount = 1) {
+    this.playerStatSequence += 1;
+    return submitPlayerStatEvent(createPlayerStatEvent(
+      this.gameplayRunId,
+      this.playerStatSequence,
+      stat,
+      amount,
+      Date.now(),
+    ));
+  }
+
+  updateHeldBoostStats(dt, held) {
+    const result = this.heldBoostStats.update(dt, held);
+    if (result.longBurn) this.recordLifetimeStat('longBurns');
+    if (result.completedSeconds > 0) {
+      this.recordLifetimeStat('heldBoostSeconds', result.completedSeconds);
+    }
+  }
+
+  flushHeldBoostStats() {
+    const result = this.heldBoostStats.breakSegment();
+    if (result.completedSeconds > 0) {
+      this.recordLifetimeStat('heldBoostSeconds', result.completedSeconds);
+    }
   }
 
   // Reacts once per frame to what Boost.update() just reported. Physics was
@@ -1513,6 +1732,10 @@ export class GameScene extends Phaser.Scene {
     // needs for variety.
     this.coneHits++;
     this.conesThisLap++;
+    const coneId = `${this.race?.lap ?? 1}:` +
+      `${sprite.trackObjectId ?? sprite.objectiveId ?? this.coneHits}`;
+    this.styleTracker?.recordCone(coneId);
+    this.recordLifetimeStat('conesSmashed');
     if (this.mode === 'training') this.trainingConeHits++;
     this.juiceConeHit(sprite, {
       index: objective ? objective.progress : this.coneHits,
@@ -1559,7 +1782,9 @@ export class GameScene extends Phaser.Scene {
     // sustained tone. The grounded policy may resume it after landing.
     this.boostHoldHandle?.stop();
     this.boostHoldHandle = null;
-    this.player.launch({ boosted });
+    const liftMultiplier = this.trackData?.flightTraining?.liftMultiplier ?? 1;
+    this.player.launch({ boosted, liftMultiplier });
+    if (liftMultiplier > 1) this.popup('LIFT WINGS ONLINE', '#00e5ff');
     this.jumpLaunchedThisFrame = true;
     this.airtimeAudioHandle?.stop();
     const speedRatio = this.player.launchSpeed / TUNING.maxSpeed;
@@ -1584,6 +1809,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   onHit(def, sprite = null) {
+    // A collision ends the current style line. Completed rewards stay banked,
+    // but partial cone/speed/hold streaks must be rebuilt cleanly.
+    this.styleTracker?.breakStreaks();
+    this.flushHeldBoostStats();
     if (this.isAirtimeGapRock(sprite)) {
       // The collision sweep covers the entire landing frame. A successful
       // flight may cross the last rock segment while airborne and touch down
@@ -1648,6 +1877,8 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.mode === 'endless') this.pop.bust();
     this.player.speed *= def.slow;       // momentum is the immediate price
+    MUSIC.playDamageImpact({ severity: Math.max(0.7, def.damage / 20) });
+    this.popup(`HULL -${def.damage}`, '#ff5555');
     const wrecked = RACER.damage(def.damage); // health is the long-term one
     this.iframes = TUNING.iframes;
     // Feedback within the same frame as the hit: shake scales with damage,
@@ -1674,6 +1905,7 @@ export class GameScene extends Phaser.Scene {
       this.garageData = {
         wrecked: true,
         retryTrackIndex: this.trackIndex,
+        storyPhase: this.storyPhase,
         receipt: 'WRECKED — NO RACE PURSE',
       };
       this.showBanner('WRECKED\n\nENTER FOR GARAGE', 0);
@@ -1733,7 +1965,11 @@ export class GameScene extends Phaser.Scene {
         ?.find((threshold) => threshold.rank === 'gold')?.minimum ?? target.total;
       const perfect = result.trophy?.rank === 'gold';
       const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
-      this.trainingAdvanceTo = nextTrack && nextTrack.status !== 'placeholder'
+      const nextNeedsStoryPlatinum = nextTrack?.unlock?.type === 'story_platinum';
+      const nextMasteryUnlocked = !nextNeedsStoryPlatinum ||
+        isStoryCampaignPlatinum(TRACKS);
+      this.trainingAdvanceTo = nextTrack &&
+        nextTrack.status !== 'placeholder' && nextMasteryUnlocked
         ? this.trackIndex + 1
         : null;
       const damageLine = metricUsage.damage && this.trainingDamageMax > 0
@@ -1760,7 +1996,9 @@ export class GameScene extends Phaser.Scene {
         : '';
       const nextLine = this.trainingAdvanceTo == null
         ? (nextTrack
-          ? `NEXT: ${nextTrack.name} — COMING SOON`
+          ? nextNeedsStoryPlatinum
+            ? `NEXT: ${nextTrack.name} — PLATINUM ALL THREE RIVAL RACES`
+            : `NEXT: ${nextTrack.name} — COMING SOON`
           : 'TRAINING TRACK COMPLETE')
         : `LEVEL ${this.trainingAdvanceTo + 1} UNLOCKED: ` +
           `${TRAINING_TRACKS[this.trainingAdvanceTo].name}`;
@@ -1777,7 +2015,20 @@ export class GameScene extends Phaser.Scene {
         0,
       );
       this.celebrateTrainingFinish(perfect, result.trophy?.stars ?? 0);
-      this.showTrainingResultActions(this.trainingAdvanceTo != null);
+      this.showTrainingResultActions();
+      return;
+    }
+    if (this.mode === 'story' && this.storyPhase === STORY_PHASES.QUALIFIER) {
+      const target = this.trackData.qualifier.targetSeconds;
+      const elapsed = this.qualifierClock?.elapsedSeconds ?? this.race.time;
+      const result = submitQualifierResult(this.trackData, elapsed, target, true);
+      if (result.qualified) this.recordLifetimeStat('qualifiersCleared');
+      this.showBanner(
+        `${result.qualified ? 'QUALIFIED!' : 'TIME MISSED'}\n` +
+          `${fmtTime(elapsed)}  •  TARGET ${fmtTime(target)}` +
+          `${result.newBest ? '\nNEW BEST' : ''}\n\nENTER FOR STORY`,
+        0,
+      );
       return;
     }
     const record = submitScore(this.trackData.id, t, 'min');
@@ -1787,19 +2038,37 @@ export class GameScene extends Phaser.Scene {
     const par = this.trackData.par ?? 120;
     const timeCash = TUNING.basePayout + Math.max(0, Math.round((par - t) * TUNING.parRate));
     RACER.money += timeCash;
-    const last = this.trackIndex >= TRACKS.length - 1;
+    const place = this.storyRaceOrder?.playerPlace(this.race.lastCrossingFraction) ?? 1;
+    const rivalResult = this.mode === 'story' && this.storyPhase === STORY_PHASES.RIVALS
+      ? submitRivalResult(this.trackData, {
+        place,
+        time: t,
+        takedowns: this.rivalMetrics.takedowns,
+      })
+      : null;
+    if (rivalResult?.won) this.recordLifetimeStat('rivalWins');
+    const campaignComplete = Boolean(rivalResult?.award) && isStoryCampaignComplete(TRACKS);
     this.garageData = {
       nextTrackIndex: this.trackIndex + 1,
-      complete: last,
+      completedTrackIndex: this.trackIndex,
+      storyPhase: this.storyPhase,
+      complete: Boolean(campaignComplete),
       receipt: `RACING +$${timeCash}   OBJECTIVES ${this.objectives.score} PTS`,
     };
+    const storyAward = rivalResult?.award?.toUpperCase() ?? null;
+    const opponentsLeft = remainingStoryOpponents(
+      this.rivalAttemptCount ?? this.trackData?.rivals?.count ?? 3,
+      this.rivalMetrics?.takedowns ?? 0,
+    );
     this.showBanner(
-      `FINISH  ${fmtTime(t)}${record ? '  NEW RECORD' : ''}\n` +
+      `${rivalResult ? `${storyAward ? `${storyAward}  •  ` : ''}${place === 1 ? 'VICTORY' : `${place}${place === 2 ? 'ND' : place === 3 ? 'RD' : 'TH'} PLACE`}  •  ` : 'FINISH  '}` +
+        `${fmtTime(t)}${record ? '  NEW RECORD' : ''}\n` +
+        `${rivalResult ? `${opponentsLeft} OPPONENT${opponentsLeft === 1 ? '' : 'S'} LEFT\n` : ''}` +
         `OBJECTIVES ${this.objectives.completedCount}/${this.objectives.views.length}` +
         `  •  ${this.objectives.score} PTS\n` +
         `RACING $${timeCash}\n` +
         `WALLET $${RACER.money}\n\n` +
-        (last ? 'CAMPAIGN COMPLETE\nENTER FOR GARAGE' : 'ENTER FOR GARAGE'),
+        (campaignComplete ? 'CAMPAIGN COMPLETE\nENTER FOR GARAGE' : 'ENTER FOR GARAGE'),
       0
     );
   }
@@ -1807,29 +2076,25 @@ export class GameScene extends Phaser.Scene {
   advance() {
     if (!this.done) return;
     if (this.mode === 'training') {
-      if (this.trainingAdvanceTo != null) {
-        this.scene.start('GameScene', {
-          mode: 'training',
-          trackIndex: this.trainingAdvanceTo,
-        });
-      } else {
-        this.scene.start('TitleScene');
-      }
+      this.returnToModeMenu();
       return;
     }
     if (this.mode === 'story' && this.garageData) {
       this.scene.start('GarageScene', this.garageData);
       return;
     }
-    const last = this.trackIndex >= TRACKS.length - 1;
-    if (this.mode === 'story' && !last) {
-      this.scene.start('GameScene', {
-        mode: 'story',
-        trackIndex: this.trackIndex + 1,
-      });
+    if (this.mode === 'story') {
+      this.returnToModeMenu();
     } else {
       this.scene.start('TitleScene');
     }
+  }
+
+  returnToModeMenu() {
+    this.scene.start(
+      'TitleScene',
+      modeMenuTarget(this.mode, this.trackIndex, this.storyPhase),
+    );
   }
 
   confirm() {
@@ -1964,7 +2229,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  showTrainingResultActions(hasNext) {
+  showTrainingResultActions() {
     const makeButton = (x, label, color, action) => {
       const button = this.add.text(x, 520, label, {
         fontSize: '15px',
@@ -1984,15 +2249,12 @@ export class GameScene extends Phaser.Scene {
       return button;
     };
 
-    makeButton(hasNext ? 190 : 285, 'X / R  RETRY', '#7a2458', () => this.retryTraining());
-    if (hasNext) {
-      makeButton(400, 'A / ENTER  NEXT', '#146b4a', () => this.advance());
-    }
+    makeButton(285, 'X / R  RETRY', '#7a2458', () => this.retryTraining());
     makeButton(
-      hasNext ? 620 : 515,
-      hasNext ? 'B / ESC  TITLE' : 'A / ENTER  TITLE',
+      515,
+      'A / ENTER  RACE SCHOOL',
       '#244c7a',
-      () => this.quitToTitle(),
+      () => this.returnToModeMenu(),
     );
   }
 
@@ -2013,11 +2275,24 @@ export class GameScene extends Phaser.Scene {
       0x0a0a14,
       0.9,
     ).setStrokeStyle(2, 0x00e5ff, 0.65).setAlpha(0).setDepth(40);
-    const title = this.add.text(centerX + 70, panelTop + 30, this.trackData.name, {
+    const storyEventLabel = this.mode === 'story'
+      ? this.storyPhase === STORY_PHASES.RIVALS
+        ? '  •  RIVAL RACE'
+        : '  •  BEAT THE CLOCK'
+      : '';
+    const title = this.add.text(
+      centerX + 70,
+      panelTop + 30,
+      `${this.trackData.name}${storyEventLabel}`,
+      {
       fontSize: '25px', color: '#ff2d95', fontStyle: 'bold',
       stroke: '#0a0a14', strokeThickness: 4,
-    }).setOrigin(0.5).setAlpha(0).setDepth(41);
-    const intro = this.add.text(centerX + 70, panelTop + 69, this.trackData.intro, {
+      },
+    ).setOrigin(0.5).setAlpha(0).setDepth(41);
+    const storyIntro = this.mode === 'story' && this.storyPhase === STORY_PHASES.QUALIFIER
+      ? `${this.trackData.intro}\nBEAT ${fmtTime(this.trackData.qualifier.targetSeconds)}`
+      : this.trackData.intro;
+    const intro = this.add.text(centerX + 70, panelTop + 69, storyIntro, {
       fontSize: '16px', color: '#ffffff', align: 'center',
       stroke: '#0a0a14', strokeThickness: 4,
       wordWrap: { width: this.scale.width - 180 },

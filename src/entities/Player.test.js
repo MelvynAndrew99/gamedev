@@ -7,6 +7,7 @@ import { RoadModel } from '../road/RoadModel.js';
 import { checkObstacleHit } from '../systems/Collision.js';
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
+import trainingFlight from '../tracks/training-flight.json' with { type: 'json' };
 import { Player } from './Player.js';
 
 function drive(piece, controls, { startX = 0, speed = 0.9 } = {}) {
@@ -107,10 +108,15 @@ const NEUTRAL_INPUT = {
   airbrakeL: false, airbrakeR: false, nitro: false,
 };
 
-function completeJump({ speed = 1, glide = 0, boosted = false } = {}) {
+function completeJump({
+  speed = 1,
+  glide = 0,
+  boosted = false,
+  liftMultiplier = 1,
+} = {}) {
   const player = new Player(TUNING);
   player.speed = TUNING.maxSpeed * speed;
-  player.launch({ boosted });
+  player.launch({ boosted, liftMultiplier });
   let landingEvents = 0;
   for (let frame = 0; frame < 300 && (player.airborne || frame === 0); frame++) {
     player.update(1 / 120, { ...NEUTRAL_INPUT, glide }, flatModel());
@@ -243,6 +249,18 @@ test('Air School teaches nose-down precision by placing boost after the short la
   assert.equal(short.collected, true);
   assert.ok(neutral.landedAt > 480);
   assert.equal(neutral.collected, false);
+});
+
+test('Flight School course lift extends the same finite controllable jump physics', () => {
+  const normal = completeJump({ speed: 1, glide: 0 });
+  const lifted = completeJump({
+    speed: 1,
+    glide: 0,
+    liftMultiplier: trainingFlight.flightTraining.liftMultiplier,
+  });
+  assert.ok(lifted.player.lastAirtime > normal.player.lastAirtime * 2);
+  assert.ok(lifted.player.lastAirtime < normal.player.lastAirtime * 3);
+  assert.equal(lifted.player.airborne, false, 'course lift must still land');
 });
 
 test('boost() gives a capped activation kick instead of teleporting to redline', () => {

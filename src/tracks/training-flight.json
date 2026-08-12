@@ -1,0 +1,102 @@
+{
+  "id": "training-flight",
+  "name": "FLIGHT SCHOOL",
+  "seed": 1106,
+  "laps": 2,
+  "finish": "laps",
+  "music": "training-loop",
+  "environment": "training-loop",
+  "intro": "Lift wings online. Launch, pull back to soar, and steer the car through its first sustained flights.",
+  "unlock": {
+    "type": "story_platinum",
+    "lockedText": "LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK"
+  },
+  "design": {
+    "focus": "A post-campaign sequel preview that turns the hover car into a lift-assisted flyer without replacing the established driving controls.",
+    "pacing": "Five broad launch windows alternate long controllable flights with generous landing straights. The first lap discovers lift; the second asks the player to chain cleaner boosted flights."
+  },
+  "flightTraining": {
+    "liftMultiplier": 2.4
+  },
+  "airtimeTraining": {
+    "objectiveUnitsPerSecond": 10
+  },
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": false
+  },
+  "objectives": [
+    {
+      "id": "flight-time",
+      "type": "count_event",
+      "event": "airtime",
+      "value": 180,
+      "label": "BANK 18.0s LIFT-ASSISTED FLIGHT",
+      "hudLabel": "FLIGHT TIME",
+      "display": { "scale": 0.1, "precision": 1, "unit": "s" },
+      "pointsPerUnit": 18
+    },
+    {
+      "id": "ramps",
+      "type": "count_event",
+      "event": "ramp_hit",
+      "value": 8,
+      "label": "LAUNCH 8 TIMES",
+      "hudLabel": "LAUNCHES",
+      "points": 800
+    },
+    {
+      "id": "finish",
+      "type": "complete_laps",
+      "value": 2,
+      "label": "FINISH 2 LAPS",
+      "hudLabel": "FINISH",
+      "points": 1000
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 1,
+    "objective": "flight-time",
+    "thresholds": [
+      { "rank": "gold", "minimum": 180, "stars": 3 },
+      { "rank": "silver", "minimum": 130, "stars": 2 },
+      { "rank": "bronze", "minimum": 80, "stars": 1 }
+    ]
+  },
+  "lapMessages": {
+    "2": "FINAL FLIGHT  •  BOOST THE LAUNCH  •  PULL BACK TO SOAR"
+  },
+  "patterns": {
+    "startClear": 90,
+    "finishClear": 90,
+    "placements": [
+      { "at": 150, "kind": "ramp" },
+      { "at": 430, "kind": "ramp" },
+      { "at": 710, "kind": "ramp" },
+      { "at": 990, "kind": "ramp" }
+    ]
+  },
+  "objects": [
+    { "id": "flight-boost-1", "at": 104, "kind": "boost", "offset": -0.55 },
+    { "id": "flight-boost-2", "at": 384, "kind": "boost", "offset": 0.55 },
+    { "id": "flight-boost-3", "at": 664, "kind": "boost", "offset": 0 },
+    { "id": "flight-boost-4", "at": 944, "kind": "boost", "offset": -0.55 }
+  ],
+  "pieces": [
+    ["straight", 48],
+    ["hill", 28, 24],
+    ["straight", 38],
+    ["curve", 42, 2],
+    ["straight", 44],
+    ["hill", 30, -20],
+    ["straight", 42],
+    ["curve", 44, -2],
+    ["straight", 46],
+    ["hill", 28, 18],
+    ["straight", 50]
+  ],
+  "obstacles": 0.01,
+  "par": 180
+}

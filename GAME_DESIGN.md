@@ -1,8 +1,8 @@
-# Destruction Racer — Track Design Brief
+# Rhythmic Ride — Track Design Brief
 
 ## Core promise
 
-Destruction Racer is a pseudo-3D, flow-first arcade racer. Controlling the
+Rhythmic Ride is a pseudo-3D, flow-first arcade racer. Controlling the
 car at speed is the main pleasure. Track objects create readable decisions
 without repeatedly stopping the player's momentum.
 
@@ -54,12 +54,11 @@ release. Do it once; repetition should come from driving, not recurring panels.
 
 ## Object language
 
-- **Cones are danger indicators in Story and Endless.** A line of ordinary
-  cones says that rocks are closing that lane. Cones never announce ramps,
-  nitro pickups, or ground zippers. They are harmless and grant no economy
-  reward. Objective-linked cones are the documented Training mode exception:
-  the HUD explicitly asks the player to hit them, and contact grants persistent
-  objective progress, points, and impact feedback. See
+- **Story and Training cones are authored targets.** Every one has a stable ID,
+  belongs to a visible objective, and rewards deliberate contact with progress,
+  points, and impact feedback. They never act as warnings. Endless alone keeps
+  ordinary warning cones: a line says rocks are closing that lane, never that a
+  ramp, nitro pickup, or ground zipper follows. See
   [training_levels.md](./training_levels.md).
 - **Rocks are momentum hazards.** They punish an unread or poorly executed
   line. They should not create unavoidable full-road walls.
@@ -87,7 +86,7 @@ release. Do it once; repetition should come from driving, not recurring panels.
 
 A strong section usually follows:
 
-1. **Read** — show geometry and cone warnings.
+1. **Read** — reveal geometry, route objects, and any Endless warning cones.
 2. **Choose** — present a safe line and a committed line.
 3. **Execute** — curve, zipper, ramp, hazard, or surface test.
 4. **Pay off** — speed, air, combo, shortcut feeling, or objective progress.
@@ -145,9 +144,24 @@ one compact ramp swoosh hands the audio mix to a single collision-resolved
 landing beat. Held-boost audio also yields at ramp contact while its physics
 continue through flight. Same-frame boost
 and ramp contact merge into one launch beat instead of stacking popups, shakes,
-or risers. Training result screens
-explicitly offer Retry and Next Track instead of treating completion as an
-automatic return to the title.
+or risers. Training result screens explicitly offer Retry and Race School.
+Completion returns to the course grid with the finished lesson selected rather
+than launching the next lesson automatically.
+
+Air School remains the fourth normal sequential lesson, followed by Rival School.
+A separate sixth course, Flight School, is the visible campaign-mastery unlock.
+It remains locked until every Story Rival Race is Platinum: the player must
+finish first and remove all three rivals on all three courses. Its focused tile
+states `LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK` until that condition is met.
+Flight School adds a course-authored 2.4× lift multiplier to the existing finite
+ramp flight, pitch, steering, airtime, and landing physics. It previews a more
+flight-focused sequel while guaranteeing that every launch still returns to road.
+
+The Trophy Room has two shoulder-tabbed pages. `L`/`R` (or keyboard `Q`/`E`)
+switch between School Trophies and Player Records. The first page contains only
+the six school results, stars, and all-Gold status. The second contains lifetime
+totals, the complete style-reward reference, and achievement progress; zeroes are
+shown explicitly rather than hiding records the player has not started.
 
 Rival School introduces the Story campaign's moving opposition as a 35-second
 base wreck score attack, not a boss or a lap-limited race. Exactly three
@@ -172,8 +186,9 @@ as distant quarry near the horizon; some approach from behind as challengers.
 Entries are separated by at least 2.2 seconds, vary lane and distance, and keep
 collision disabled during their fade. Passed rivals first chase back under
 their own wheels and are repositioned only after falling genuinely off-camera.
-Story races do not enable this training-only circulation director. Contact
-debris clears before the next driving decision.
+Story races do not enable this training-only circulation director or its
+proximity-staging fallback: passed rivals remain behind unless they drive back.
+Contact debris clears before the next driving decision.
 
 The course ribbon is a neutral loop locator showing the player and all three
 living rivals by stable shape and color. TIME and TAKEDOWNS replace the
@@ -184,10 +199,37 @@ use local windscreen feedback and a small momentum tax, never campaign hull or
 a hard wreck. The score can exceed eight; the objective display may cap at its
 authored goal, but results and persistence use the uncapped takedown count.
 
-Proving Ground is the first Story race. It uses the same geometry with campaign
-warnings, hazards, route offers, rewards, normal three-lap finish rules, and the
-Training Loop music/environment identity. Its job is to validate learned skills,
-not introduce them simultaneously for the first time.
+Proving Ground is the first Story course and the welcoming application of Race
+School skills. It is a new long-form route rather than a copy of the school
+loop. Its six boost-to-launch cycles introduce Story's authored cone targets,
+mixed surfaces, optional committed lines, and broad passing zones.
+
+Every Story course has two events on the same route. **Beat the Clock** is a
+solo one-lap qualifier whose authored target unlocks that course's **Rival
+Race**. Rival Race runs three laps and adds exactly three finite opponents:
+lap one is the read, while later laps reward optimized boost and damage-free
+lines. The player can win by
+out-driving them or remove them with takedowns. Results persist separately and
+both events return to the Story submenu instead of advancing automatically.
+Winning the race earns Gold; winning while removing all three finite opponents
+earns Platinum and marks the course 100% complete.
+The live placement chip counts opponents left rather than reporting takedowns.
+
+Story difficulty is physical rather than theatrical. Each course repeats
+thread-the-needle rock gates between its launch cycles, every gate leaves a
+traversable response, and collision avoidance matters because Story damage has
+an immediate low crash, hull callout, speed loss, shake, and car flash. Speed
+lines answer with an aerodynamic rush, screen streak bloom, camera kick, and a
+short expanding energy ring. Manual boost uses a longer filtered wind swoosh
+with a quiet rising engine bed rather than a spring or impact contour. Story
+ramps retain the live airtime timer and landing value learned in Air School.
+
+Story also names repeatable skill sequences as **Style Rewards**: five distinct
+cones, three distinct road Speed Lines, qualified boosted hangtime, a tier-three
+boost, and a sustained Long Burn. Rewards use an ordered action-sports
+celebration lane and feed versioned lifetime records shown in the Trophy Room.
+The complete trigger, persistence, accessibility, and future asynchronous
+multiplayer boundary is specified in `STYLE_REWARDS.md`.
 
 ### Neon Gulch
 
@@ -198,6 +240,8 @@ Purpose: teach momentum management across hills, dirt, and stronger curves.
   zones; its authored pattern sequence introduces the airborne combo line.
 - Downhill speed should feed a readable curve or optional committed line.
 - Alternate technical sections with fast release sections.
+- Seven boost-to-air cycles build from readable crest launches into dirt
+  transfers and linked airbrake choices.
 - Objectives can combine actions, such as maintain a speed threshold through a
   sector or chain a zipper into a ramp.
 
@@ -212,6 +256,9 @@ Purpose: test route memory and chained execution.
 - Use the sharpest curves after adequate sightline and braking room.
 - Objectives can span a lap: ramps hit, hazards avoided, or a multi-part
   speed/air chain.
+- Eight long-form cycles create one substantial finale lap; route memory comes
+  from how each landing sets up the next precision beat, not from repeating the
+  same short lap.
 
 ## Endless Mode
 
@@ -232,8 +279,9 @@ construction, decoration, and object rules live in `src/road/RoadModel.js` and
   straights, stronger terrain, and tighter pattern spacing.
 - Preserve at least one valid response to every formation, even at maximum
   difficulty.
-- Keep cone language identical to campaign mode: cones resolve into rocks,
-  never ramps or boosts.
+- Keep Endless cone language internally consistent: its ordinary warning cones
+  resolve into rocks, never ramps or boosts. Story and Training instead use
+  stable-ID objective cones as defined above.
 - Maintain the read–choose–execute–payoff–breathe rhythm. Later difficulty may
   shorten the breath, but should not delete readability.
 - Keep pickups useful and fair as the road is generated. A newly stamped
@@ -469,11 +517,13 @@ where the rule is introduced.
 
 ## Objective and persistence direction
 
-Track objectives are data, not scene-specific code. Training currently ships a
-`hit_all` objective linked to authored objects by stable IDs. Story courses use
-`complete_laps` and `count_event` goals for ramps and speed lines. Each objective
-has a point value; normal objectives contribute it only when complete. Collection
-lessons may use `pointsPerUnit` when partial progress is itself the scored result.
+Track objectives are data, not scene-specific code. Training and Story may ship
+a `hit_all` objective linked to authored cones by stable IDs. Story courses also
+use `complete_laps` and `count_event` goals for ramps, speed lines, and rival
+takedowns. Rival-only goals are hidden during the solo qualifier. Each objective
+has a point value; normal objectives contribute it only when complete.
+Collection lessons may use `pointsPerUnit` when partial progress is itself the
+scored result.
 
 ```json
 {

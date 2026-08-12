@@ -22,12 +22,25 @@ test('Story removes persistent objectives while retaining transient confirmation
   assert.equal(view.objectiveToast, true);
   assert.equal(view.boostGauge, true);
   assert.equal(view.endlessDistance, false);
+  assert.equal(view.storyEventHud, true);
+  assert.equal(view.storyRivalMarkers, true);
+  assert.equal(view.styleRewards, true);
 });
 
 test('Air School has one teaching voice instead of coach plus checklist', () => {
   const view = hudVisibilityPolicy({
     mode: 'training', hasRace: true, hasObjectives: true,
     trackId: 'training-airtime', hasBoostCapability: true,
+  });
+  assert.equal(view.airtimeCoach, true);
+  assert.equal(view.objectiveRows, false);
+  assert.equal(view.objectiveToast, true);
+});
+
+test('Flight School reuses the airtime teaching voice for its sequel preview', () => {
+  const view = hudVisibilityPolicy({
+    mode: 'training', hasRace: true, hasObjectives: true,
+    trackId: 'training-flight', hasBoostCapability: true,
   });
   assert.equal(view.airtimeCoach, true);
   assert.equal(view.objectiveRows, false);
@@ -94,6 +107,7 @@ test('persistent corner instruments stay outside the player and road corridor', 
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.objectiveToast, HUD_SAFE_LAYOUT.rivalToast), false);
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.objectiveToast, HUD_SAFE_LAYOUT.roadCorridor), false);
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.rivalToast, HUD_SAFE_LAYOUT.roadCorridor), false);
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.styleReward, HUD_SAFE_LAYOUT.roadCorridor), false);
   assert.ok(
     HUD_SAFE_LAYOUT.courseRibbon.y + HUD_SAFE_LAYOUT.courseRibbon.height <= 54,
   );
@@ -104,4 +118,6 @@ test('HudScene cannot regress to duplicate lap text or a constructed health bar'
   assert.doesNotMatch(source, /HealthBar/);
   assert.doesNotMatch(source, /`LAP \$\{/);
   assert.doesNotMatch(source, /RUN OBJECTIVE|DRIVE AS FAR AS YOU CAN/);
+  assert.doesNotMatch(source, /STYLE LINE|CRASH BREAKS THE LINE/);
+  assert.doesNotMatch(source, /styleRewardPanel/);
 });

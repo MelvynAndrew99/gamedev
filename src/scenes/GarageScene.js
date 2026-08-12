@@ -5,6 +5,7 @@ import { RACER } from '../systems/RacerState.js';
 import { applyEmergencyTow, buyRepair, repairQuote } from '../systems/Economy.js';
 import { MUSIC } from '../audio/MusicEngine.js';
 import { SHOP_THEME } from '../audio/tracks/shopTheme.js';
+import { modeMenuTarget } from '../ui/FrontEndModel.js';
 
 export class GarageScene extends Phaser.Scene {
   constructor() {
@@ -13,6 +14,8 @@ export class GarageScene extends Phaser.Scene {
 
   init(data) {
     this.nextTrackIndex = data.nextTrackIndex;
+    this.completedTrackIndex = data.completedTrackIndex;
+    this.storyPhase = data.storyPhase;
     this.retryTrackIndex = data.retryTrackIndex;
     this.complete = !!data.complete;
     this.receipt = data.receipt ?? '';
@@ -53,8 +56,7 @@ export class GarageScene extends Phaser.Scene {
           return `FULL REPAIR  $${q.cost}`;
         },
         buy: () => buyRepair(RACER, TUNING, RACER.maxHealth) },
-      { label: () => this.complete ? 'FINISH CAMPAIGN' :
-          this.wrecked ? 'RETRY RACE' : 'NEXT RACE',
+      { label: () => this.wrecked ? 'RETRY RACE' : 'RETURN TO STORY',
         continue: true },
     ];
     this.menuTexts = this.items.map((_, i) =>
@@ -108,11 +110,19 @@ export class GarageScene extends Phaser.Scene {
   activate() {
     const item = this.items[this.selected];
     if (item.continue) {
-      if (this.complete) this.scene.start('TitleScene');
-      else this.scene.start('GameScene', {
+      if (this.wrecked) this.scene.start('GameScene', {
         mode: 'story',
-        trackIndex: this.wrecked ? this.retryTrackIndex : this.nextTrackIndex,
+        trackIndex: this.retryTrackIndex,
+        storyPhase: this.storyPhase,
       });
+      else this.scene.start(
+        'TitleScene',
+        modeMenuTarget(
+          'story',
+          this.completedTrackIndex ?? this.nextTrackIndex - 1,
+          this.storyPhase,
+        ),
+      );
       return;
     }
 

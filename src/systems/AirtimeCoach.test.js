@@ -124,6 +124,17 @@ test('authored success and failure feedback takes priority without changing cont
   assert.equal(afterGap.title, 'TRY AGAIN');
 });
 
+test('Flight School names lift-assisted flight without changing its controls', () => {
+  const ready = airtimeCoachView({ flightAssist: true }, 'gamepad');
+  assert.equal(ready.title, 'LIFT WINGS READY');
+  assert.equal(ready.detail, 'HIT RAMP  •  PULL BACK TO SOAR');
+  assert.equal(ready.controls, '↑ SHORT  •  ↓ LONG');
+  const airborne = airtimeCoachView({
+    flightAssist: true, phase: 'airborne', currentAirSeconds: 1.2,
+  });
+  assert.equal(airborne.title, 'FLIGHT TIME');
+});
+
 test('every live detail fits the compact one-line coach budget', () => {
   const views = [
     airtimeCoachView(),

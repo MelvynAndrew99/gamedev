@@ -36,6 +36,7 @@ function isFailureTone(tone) {
 // flash a false failure while the course is still settling at the start line.
 export function airtimeCoachView(telemetry = {}, device = 'keyboard') {
   const phase = telemetry.phase ?? 'approach';
+  const flightAssist = telemetry.flightAssist === true;
   const current = Number.isFinite(telemetry.currentAirSeconds)
     ? Math.max(0, telemetry.currentAirSeconds)
     : 0;
@@ -70,7 +71,7 @@ export function airtimeCoachView(telemetry = {}, device = 'keyboard') {
         : COLORS.info;
     return {
       phase,
-      title: 'AIRTIME',
+      title: flightAssist ? 'FLIGHT TIME' : 'AIRTIME',
       value: formatAirtime(current),
       // Once airborne, the player's live control must win over approach
       // feedback. Otherwise a green READY message can contradict magenta
@@ -111,15 +112,15 @@ export function airtimeCoachView(telemetry = {}, device = 'keyboard') {
   const phaseTitle = phase === 'landed'
     ? isFailureTone(telemetry.messageTone)
       ? 'TRY AGAIN'
-      : 'LANDED'
-    : 'NEXT  •  GOLD RAMP';
+      : flightAssist ? 'TOUCHDOWN' : 'LANDED'
+    : flightAssist ? 'LIFT WINGS READY' : 'NEXT  •  GOLD RAMP';
   return {
     phase,
     title: phaseTitle,
     value: phase === 'landed' && best > 0 ? `BEST ${formatAirtime(best)}` : '',
     detail: feedback ?? (phase === 'landed'
-      ? 'SET UP NEXT GOLD RAMP'
-      : 'CENTER CAR  •  HIT GOLD'),
+      ? flightAssist ? 'SET UP NEXT FLIGHT' : 'SET UP NEXT GOLD RAMP'
+      : flightAssist ? 'HIT RAMP  •  PULL BACK TO SOAR' : 'CENTER CAR  •  HIT GOLD'),
     controls: phase === 'landed' ? '' : controls,
     color: feedback ? toneColor(telemetry.messageTone) : COLORS.info,
     meter: null,

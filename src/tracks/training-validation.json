@@ -4,44 +4,202 @@
   "environment": "training-loop",
   "music": "training-loop",
   "seed": 1101,
-  "laps": 3,
-  "intro": "Cones warn of rocks. Gold lanes offer ramps. Choose the fast line.",
-  "design": {
-    "focus": "Validate the steering, warning, route, and recovery skills introduced in training."
+  "storyVersion": 1,
+  "laps": 1,
+  "finish": "laps",
+  "intro": "Bank boost, launch the gold lanes, and smash every marked cone.",
+  "qualifier": {
+    "laps": 1,
+    "targetSeconds": 78
   },
-  "objectives": [
-    { "id": "finish", "type": "complete_laps", "value": 3, "label": "FINISH 3 LAPS", "points": 1000 },
-    { "id": "ramps", "type": "count_event", "event": "ramp_hit", "value": 3, "label": "HIT 3 RAMPS", "points": 750 },
-    { "id": "zippers", "type": "count_event", "event": "zipper_hit", "value": 3, "label": "CROSS 3 SPEED LINES", "points": 500 }
-  ],
-  "patterns": {
-    "startClear": 90,
-    "finishClear": 60,
-    "placements": [
-      { "at": 95, "kind": "rocks" },
-      { "at": 350, "kind": "ramp" },
-      { "at": 615, "kind": "gate" },
-      { "at": 1092, "kind": "combo" },
-      { "at": 1252, "kind": "rampRocks" }
+  "rivalRace": {
+    "laps": 3,
+    "startsLocked": true
+  },
+  "styleRewards": {
+    "coneLineSize": 5
+  },
+  "design": {
+    "focus": "Recombine Race School skills in six readable boost-to-air cycles before adding moving rivals.",
+    "pacing": "A welcoming opening grows through hills, dirt, lane-choice jumps, and airbrake precision, breathes after every technical pair, then rebuilds into a fast downhill finish.",
+    "targetTuning": "PROVISIONAL: 3342 segments create a 55.7-second theoretical floor at 12000 world units/second. The 78-second qualifier adds 40 percent for acceleration, two dirt sectors, curves, elevation, and one recoverable mistake. Replace it with the median of five clean telemetry runs plus a 10-15 percent completion allowance.",
+    "cycles": [
+      {
+        "id": "opening-sweep",
+        "from": 0,
+        "to": 494,
+        "summary": "Learn the Story rhythm on open asphalt before the first broad rival passing zone.",
+        "flow": "Long read, center boost, painted ramp, open landing, five-cone smash sweep, broad recovery.",
+        "safeLine": "Skip the boost and pass the ramp on either open shoulder, leaving the optional cone sweep for a replay.",
+        "committedLine": "Bank the center boost, launch the painted lane, settle for the cone sweep, then recenter for the fast exit."
+      },
+      {
+        "id": "crest-switch",
+        "from": 495,
+        "to": 1043,
+        "summary": "Climb into an honest straight-runway jump, then spend speed through a compact chicane.",
+        "flow": "Visible climb, boost, straight ramp, controlled landing, chicane lane switch, five-cone payoff, recovery.",
+        "safeLine": "Climb without spending boost, take the ordinary jump arc, and brake before the chicane.",
+        "committedLine": "Spend boost for the longer arc, recenter on landing, and airbrake through the chicane into the cone chain."
+      },
+      {
+        "id": "dust-release",
+        "from": 1044,
+        "to": 1583,
+        "summary": "Use a dirt launch to escape drag, then rebuild speed through a paved sweeper.",
+        "flow": "Dirt read, stored boost, ramp, air choice onto clean road, open-lane rock formation, paved curve, long breath.",
+        "safeLine": "Stay grounded beside the dirt ramp and take the left lane around the authored rocks.",
+        "committedLine": "Launch out of the dirt, hold the arc onto asphalt, and carry the recovered speed through the sweeper."
+      },
+      {
+        "id": "high-line-choice",
+        "from": 1584,
+        "to": 2138,
+        "summary": "Make the first explicit ground-versus-air choice before a stronger opposing bend.",
+        "flow": "Uphill boost, ramp-over-rocks choice, rewarding landing, broad curve, straight recovery and rival passing zone.",
+        "safeLine": "Ignore the ramp lane and keep one of the two clear ground lanes through the rock payload.",
+        "committedLine": "Boost up the painted lane, glide over its rocks, then land early enough to set the opposing curve."
+      },
+      {
+        "id": "dust-chicane",
+        "from": 2139,
+        "to": 2696,
+        "summary": "Link a loose-surface jump to the course's strongest left-right airbrake test.",
+        "flow": "Dirt bend, boost, ramp, asphalt landing reward, sharper chicane, five-cone transfer, clean release.",
+        "safeLine": "Use the outside dirt lane, skip the launch, and enter the chicane below overspeed.",
+        "committedLine": "Launch from dirt, claim the landing boost, then trade a little speed to sweep the objective cones."
+      },
+      {
+        "id": "finish-rebuild",
+        "from": 2697,
+        "to": 3341,
+        "summary": "Rebuild the music and speed through the fastest final descent without hiding the finish.",
+        "flow": "Strong curve read, boost, ramp-over-rocks choice, long downhill flight and recovery, center-lane rock thread, clean finish runway.",
+        "safeLine": "Stay outside the ramp lane, thread the open ground response, and descend under control.",
+        "committedLine": "Spend the final boost over the rock bed, hold the downhill arc, then airbrake to center for the last thread."
+      }
     ]
   },
-  "pieces": [
-    ["straight", 40],
-    ["curve", 32, -1],
-    ["straight", 22],
-    ["curve", 36, 1],
-    ["straight", 28],
-    ["curve", 36, -2],
-    ["straight", 24],
-    ["curve", 40, 2],
-    ["straight", 28],
-    ["curve", 32, 8],
-    ["straight", 32],
-    ["curve", 30, -3],
-    ["straight", 18],
-    ["curve", 28, -8],
-    ["straight", 40]
+  "rivals": {
+    "seed": 1701,
+    "count": 3,
+    "maxCount": 3,
+    "recycleWrecks": false,
+    "racePace": 1.08,
+    "aggression": 0.38,
+    "spawns": [
+      { "id": "proving-cyan", "segmentsAhead": 18, "offset": -0.58, "pace": 0.99 },
+      { "id": "proving-magenta", "segmentsAhead": 32, "offset": 0.58, "pace": 1.015 },
+      { "id": "proving-gold", "segmentsAhead": 48, "offset": 0, "pace": 1.03 }
+    ],
+    "attackZones": [
+      { "from": 360, "to": 480 },
+      { "from": 1460, "to": 1550 },
+      { "from": 2070, "to": 2120 },
+      { "from": 3160, "to": 3270 }
+    ],
+    "policy": {
+      "oneAttacker": true,
+      "productionCount": 3,
+      "minimumTellSeconds": 0.65,
+      "localPaceRadiusSegments": 18,
+      "maximumCatchUp": 0.12,
+      "maximumSlowDown": 0.08,
+      "stagingRadiusSegments": 48,
+      "stagingBehindRadiusSegments": 32,
+      "stagingTargetSegments": 28,
+      "stagingTargetSpacingSegments": 8,
+      "stagingGraceSeconds": 0.9,
+      "wreckSeconds": 0.9,
+      "airborneContact": false
+    }
+  },
+  "objectives": [
+    { "id": "finish", "type": "complete_laps", "value": 1, "label": "FINISH THE EVENT", "points": 1000 },
+    { "id": "cone-smash", "type": "hit_all", "target": "cone", "label": "SMASH ALL 15 MARKED CONES", "hudLabel": "CONE SMASH", "pointsPerUnit": 75 },
+    { "id": "ramps", "type": "count_event", "event": "ramp_hit", "value": 6, "label": "HIT 6 RAMPS", "points": 900 },
+    { "id": "zippers", "type": "count_event", "event": "zipper_hit", "value": 8, "label": "CROSS 8 SPEED LINES", "points": 700 }
   ],
-  "obstacles": 0.03,
-  "par": 150
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": true
+  },
+  "patterns": {
+    "startClear": 100,
+    "finishClear": 120,
+    "placements": [
+      { "at": 150, "kind": "ramp" },
+      { "at": 650, "kind": "ramp" },
+      { "at": 1080, "kind": "ramp" },
+      { "at": 1710, "kind": "rampRocks" },
+      { "at": 2170, "kind": "ramp" },
+      { "at": 2860, "kind": "rampRocks" }
+    ]
+  },
+  "objects": [
+    { "id": "proving-boost-opening-backup", "at": 80, "kind": "boost", "offset": 0.58 },
+    { "id": "proving-boost-01", "at": 110, "kind": "boost", "offset": 0 },
+    { "id": "proving-boost-02", "at": 330, "kind": "boost", "offset": 0.58 },
+    { "id": "proving-boost-03", "at": 605, "kind": "boost", "offset": -0.58 },
+    { "id": "proving-boost-04", "at": 1005, "kind": "boost", "offset": 0 },
+    { "id": "proving-boost-05", "at": 1190, "kind": "boost", "offset": -0.58 },
+    { "id": "proving-boost-06", "at": 1640, "kind": "boost", "offset": 0.58 },
+    { "id": "proving-boost-07", "at": 1820, "kind": "boost", "offset": 0 },
+    { "id": "proving-boost-08", "at": 2145, "kind": "boost", "offset": -0.58 },
+    { "id": "proving-boost-09", "at": 2305, "kind": "boost", "offset": 0.58 },
+    { "id": "proving-boost-10", "at": 2790, "kind": "boost", "offset": 0 },
+    { "id": "proving-cone-01", "at": 258, "kind": "cone", "offset": -0.58, "objective": "cone-smash" },
+    { "id": "proving-cone-02", "at": 267, "kind": "cone", "offset": -0.29, "objective": "cone-smash" },
+    { "id": "proving-cone-03", "at": 276, "kind": "cone", "offset": 0, "objective": "cone-smash" },
+    { "id": "proving-cone-04", "at": 285, "kind": "cone", "offset": 0.29, "objective": "cone-smash" },
+    { "id": "proving-cone-05", "at": 294, "kind": "cone", "offset": 0.58, "objective": "cone-smash" },
+    { "id": "proving-cone-06", "at": 940, "kind": "cone", "offset": 0.58, "objective": "cone-smash" },
+    { "id": "proving-cone-07", "at": 950, "kind": "cone", "offset": 0.29, "objective": "cone-smash" },
+    { "id": "proving-cone-08", "at": 960, "kind": "cone", "offset": 0, "objective": "cone-smash" },
+    { "id": "proving-cone-09", "at": 970, "kind": "cone", "offset": -0.29, "objective": "cone-smash" },
+    { "id": "proving-cone-10", "at": 980, "kind": "cone", "offset": -0.58, "objective": "cone-smash" },
+    { "id": "proving-cone-11", "at": 2580, "kind": "cone", "offset": -0.58, "objective": "cone-smash" },
+    { "id": "proving-cone-12", "at": 2590, "kind": "cone", "offset": -0.29, "objective": "cone-smash" },
+    { "id": "proving-cone-13", "at": 2600, "kind": "cone", "offset": 0, "objective": "cone-smash" },
+    { "id": "proving-cone-14", "at": 2610, "kind": "cone", "offset": 0.29, "objective": "cone-smash" },
+    { "id": "proving-cone-15", "at": 2620, "kind": "cone", "offset": 0.58, "objective": "cone-smash" },
+    { "id": "proving-rock-01", "at": 1335, "kind": "rock", "offset": 0 },
+    { "id": "proving-rock-02", "at": 1340, "kind": "rock", "offset": 0.62 },
+    { "id": "proving-rock-03", "at": 3040, "kind": "rock", "offset": -0.62 },
+    { "id": "proving-rock-04", "at": 3045, "kind": "rock", "offset": 0.62 },
+    { "id": "proving-thread-01-left", "at": 520, "kind": "rock", "offset": -0.72 },
+    { "id": "proving-thread-01-right", "at": 520, "kind": "rock", "offset": 0.72 },
+    { "id": "proving-thread-02-center", "at": 1410, "kind": "rock", "offset": 0 },
+    { "id": "proving-thread-03-left", "at": 2020, "kind": "rock", "offset": -0.7 },
+    { "id": "proving-thread-03-center", "at": 2024, "kind": "rock", "offset": 0.02 },
+    { "id": "proving-thread-04-center", "at": 3120, "kind": "rock", "offset": -0.02 }
+  ],
+  "pieces": [
+    ["straight", 70],
+    ["curve", 50, -1],
+    ["straight", 45],
+    ["hill", 50, 3],
+    ["straight", 40],
+    ["chicane", 24, 2],
+    ["straight", 45],
+    ["dirt", 35, -1],
+    ["straight", 45],
+    ["curve", 50, 3, -3],
+    ["straight", 50],
+    ["hill", 60, 4],
+    ["straight", 35],
+    ["curve", 45, -4, -4],
+    ["straight", 45],
+    ["dirt", 40, 2, 2],
+    ["straight", 40],
+    ["chicane", 28, 4, -2],
+    ["straight", 50],
+    ["curve", 50, -5, 3],
+    ["straight", 40],
+    ["hill", 55, -3],
+    ["straight", 70]
+  ],
+  "obstacles": 0.01,
+  "par": 85
 }

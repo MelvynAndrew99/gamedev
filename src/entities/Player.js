@@ -61,15 +61,16 @@ export class Player {
   }
 
   // Hit a ramp. Faster launch = longer flight = more cleared road.
-  launch({ boosted = false } = {}) {
+  launch({ boosted = false, liftMultiplier = 1 } = {}) {
     const speedPercent = Math.max(0, this.speed / this.t.maxSpeed);
+    const lift = Math.max(0.25, Math.min(4, Number(liftMultiplier) || 1));
     this.launchSpeed = this.speed;
     this.boostedLaunch = boosted;
     this.jumpElapsed = 0;
     this.justLanded = false;
     this.glide = 0;
-    this.airTotal = this.t.jumpMinAir + this.t.jumpMaxAir * speedPercent +
-      (boosted ? this.t.jumpBoostAir : 0);
+    this.airTotal = (this.t.jumpMinAir + this.t.jumpMaxAir * speedPercent +
+      (boosted ? this.t.jumpBoostAir : 0)) * lift;
     this.air = this.airTotal;
   }
 

@@ -27,6 +27,8 @@ import {
   rivalEventHudView,
 } from '../systems/RivalHud.js';
 import { nextObjectiveFeedback } from '../systems/ObjectiveFeedback.js';
+import { styleRewardView } from '../systems/StyleEvents.js';
+import { MUSIC } from '../audio/MusicEngine.js';
 import {
   objectivePanelLayout,
   objectiveRowView,
@@ -82,6 +84,12 @@ export class HudScene extends Phaser.Scene {
     this.rivalToastSequence = 0;
     this.rivalToastBusy = false;
     this.rivalEventParts = null;
+    this.storyTimerText = null;
+    this.storyStatusText = null;
+    this.storyAirtimeText = null;
+    this.storyAirtimeHoldUntil = 0;
+    this.styleRewardParts = null;
+    this.styleRewardBusy = false;
     this.boostGauge = null;
     this.airtimeCoachPanel = null;
     this.airtimeCoachParts = null;
@@ -151,6 +159,21 @@ export class HudScene extends Phaser.Scene {
     // replace its generic objective stack; the center remains a neutral loop
     // locator rather than implying lap or endpoint progress.
     if (this.hudPolicy.rivalEventHud) this.createRivalEventHud();
+    if (this.hudPolicy.storyEventHud) {
+      chip(10, 8, 144, 44);
+      chip(646, 8, 144, 44);
+      this.storyTimerText = this.add.text(82, 12, '', {
+        fontSize: '19px', fontStyle: 'bold', color: '#ffffff',
+      }).setOrigin(0.5, 0);
+      this.storyStatusText = this.add.text(718, 12, '', {
+        fontSize: '14px', fontStyle: 'bold', color: '#ffcf3f', align: 'center',
+      }).setOrigin(0.5, 0);
+      this.storyAirtimeText = this.add.text(400, 62, '', {
+        fontSize: '18px', fontStyle: 'bold', color: '#00e5ff',
+        stroke: '#080812', strokeThickness: 5,
+        backgroundColor: '#080812cc', padding: { x: 9, y: 4 },
+      }).setOrigin(0.5, 0).setDepth(95).setVisible(false);
+    }
 
     // Training lessons without a dedicated live coach retain one compact
     // checkable list in the safe left column. Story objectives are expressed
@@ -210,6 +233,7 @@ export class HudScene extends Phaser.Scene {
 
     if (this.hudPolicy.objectiveToast) this.createObjectiveToast();
     if (this.hudPolicy.rivalToast) this.createRivalToast();
+    if (this.hudPolicy.styleRewards) this.createStyleReward();
 
     // Bottom-right: the speedo. Big number, small label — read at a glance.
     chip(w - 148, h - 68, 136, 56);
@@ -266,16 +290,18 @@ export class HudScene extends Phaser.Scene {
       const raceProgress = gs.race.lap > gs.race.laps
         ? 1
         : (gs.race.lap - 1 + inLap) / gs.race.laps;
-      const rivalPublicView = gs.rivalSchoolView ?? {};
+      const rivalPublicView = gs.rivalSchoolView ?? gs.storyEventView ?? {};
       const rivals = rivalPublicView.rivals ?? gs.rivalPack?.views ?? [];
-      const markers = this.hudPolicy.rivalCourseMarkers
+      const showRivalMarkers = this.hudPolicy.rivalCourseMarkers ||
+        (this.hudPolicy.storyRivalMarkers && rivalPublicView.phase === 'rivals');
+      const markers = showRivalMarkers
         ? rivalCourseMarkers({
           rivals,
           playerPosition: gs.player.position,
           playerRaceProgress: inLap,
           trackLength: gs.model.trackLength,
-          laps: 1,
-          loop: true,
+          laps: this.hudPolicy.rivalEventHud ? 1 : gs.race.laps,
+          loop: this.hudPolicy.rivalEventHud,
           ribbonWidth: this.progressBar?.w,
         })
         : [];
@@ -285,6 +311,26 @@ export class HudScene extends Phaser.Scene {
       );
       if (this.rivalEventParts) {
         this.updateRivalEventHud(rivalPublicView, rivals, time);
+      }
+      if (this.storyTimerText) {
+        if (rivalPublicView.phase === 'qualifier') {
+          this.storyTimerText.setText(formatStoryTime(rivalPublicView.remainingSeconds));
+          this.storyStatusText.setText(
+            `TARGET\n${formatStoryTime(rivalPublicView.targetSeconds)}`,
+          );
+          this.storyTimerText.setColor(
+            rivalPublicView.remainingSeconds <= 5 ? '#ff6b6b' : '#ffffff',
+          );
+        } else {
+          this.storyTimerText.setText(formatStoryTime(gs.race.time));
+          const place = Math.max(1, rivalPublicView.place ?? 1);
+          const opponentsLeft = Math.max(0, rivalPublicView.opponentsLeft ?? 3);
+          this.storyStatusText.setText(
+            `${place}${ordinalSuffix(place)} PLACE\n` +
+            `${opponentsLeft} OPPONENT${opponentsLeft === 1 ? '' : 'S'} LEFT`,
+          );
+          this.storyTimerText.setColor('#ffffff');
+        }
       }
     } else if (this.line1) {
       this.line1.setText(`${gs.distanceM()}m`);
@@ -329,6 +375,7 @@ export class HudScene extends Phaser.Scene {
     }
     this.updateObjectiveToast();
     this.updateRivalToast();
+    this.updateStyleReward(time);
     if (this.boostGauge) {
       const maxCeiling = TUNING.boostTierCeilings[TUNING.boostTierCeilings.length - 1];
       this.boostGauge.draw({
@@ -352,7 +399,29 @@ export class HudScene extends Phaser.Scene {
     const off = !gs.player.airborne && Math.abs(gs.player.x) > 1;
     this.offTrack.setVisible(off && Math.floor(time / 250) % 2 === 0);
     this.updateAirtimeCoach(time, gs.airtimeTrainingView);
+    this.updateStoryAirtime(time, gs.player);
     this.updateAirbrakeRehearsal(time, gs.trainingTutorialView);
+  }
+
+  updateStoryAirtime(time, player) {
+    if (!this.storyAirtimeText) return;
+    if (player.airborne) {
+      this.storyAirtimeHoldUntil = time + 650;
+      this.storyAirtimeText
+        .setText(`AIR  ${player.jumpElapsed.toFixed(1)}s`)
+        .setColor('#00e5ff')
+        .setVisible(true);
+      return;
+    }
+    if (player.justLanded) {
+      this.storyAirtimeHoldUntil = time + 650;
+      this.storyAirtimeText
+        .setText(`AIR  ${player.lastAirtime.toFixed(1)}s`)
+        .setColor('#ffcf3f')
+        .setVisible(true);
+      return;
+    }
+    this.storyAirtimeText.setVisible(time < this.storyAirtimeHoldUntil);
   }
 
   createObjectiveToast() {
@@ -394,6 +463,113 @@ export class HudScene extends Phaser.Scene {
       duration: 240,
       ease: 'Quad.in',
       onComplete: () => { this.objectiveToastBusy = false; },
+    });
+  }
+
+  createStyleReward() {
+    const x = 10;
+    const y = 110;
+    const width = 230;
+    const height = 58;
+    this.styleRewardIcon = this.add.graphics().setDepth(92);
+    this.styleRewardTitle = this.add.text(x + 52, y + 5, '', {
+      fontSize: '22px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#080812', strokeThickness: 5,
+    }).setDepth(93);
+    this.styleRewardDetail = this.add.text(x + 53, y + 36, '', {
+      fontSize: '13px', fontStyle: 'bold', color: '#ffcf3f',
+      stroke: '#080812', strokeThickness: 3,
+    }).setDepth(93);
+    this.styleRewardLayout = { x, y, width, height };
+    this.styleRewardParts = [
+      this.styleRewardIcon,
+      this.styleRewardTitle,
+      this.styleRewardDetail,
+    ];
+    this.styleRewardParts.forEach((part) => part.setAlpha(0));
+    this.reducedMotion = globalThis.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    )?.matches === true;
+  }
+
+  drawStyleRewardChrome(view) {
+    const { x, y } = this.styleRewardLayout;
+    const icon = this.styleRewardIcon;
+    icon.clear();
+    icon.lineStyle(4, view.color, 1);
+    const cx = x + 30;
+    const cy = y + 29;
+    if (view.icon === 'cones') {
+      icon.strokeTriangle(cx - 10, cy + 13, cx, cy - 14, cx + 10, cy + 13);
+      icon.lineBetween(cx - 7, cy + 5, cx + 7, cy + 5);
+    } else if (view.icon === 'chevrons') {
+      [-8, 4].forEach((offset) => {
+        icon.lineBetween(cx + offset - 7, cy - 12, cx + offset + 4, cy);
+        icon.lineBetween(cx + offset + 4, cy, cx + offset - 7, cy + 12);
+      });
+    } else if (view.icon === 'wings') {
+      icon.lineBetween(cx, cy + 9, cx, cy - 12);
+      icon.lineBetween(cx, cy - 2, cx - 14, cy - 10);
+      icon.lineBetween(cx, cy - 2, cx + 14, cy - 10);
+      icon.lineBetween(cx, cy + 6, cx - 11, cy + 1);
+      icon.lineBetween(cx, cy + 6, cx + 11, cy + 1);
+    } else if (view.icon === 'triple') {
+      [-9, 0, 9].forEach((offset) => {
+        icon.lineBetween(cx + offset, cy + 12, cx + offset, cy - 12);
+        icon.lineBetween(cx + offset, cy - 12, cx + offset - 4, cy - 5);
+      });
+    } else {
+      icon.strokeTriangle(cx - 11, cy + 13, cx + 3, cy - 15, cx + 10, cy + 13);
+      icon.strokeCircle(cx + 1, cy + 6, 6);
+    }
+    icon.lineStyle(2, view.color, 0.72);
+    icon.lineBetween(x + 50, y + 56, x + 178, y + 56);
+    icon.lineBetween(x + 184, y + 56, x + 211, y + 56);
+  }
+
+  updateStyleReward() {
+    if (!this.styleRewardParts || !this.gs.styleTracker) return;
+    if (!this.styleRewardBusy && !this.criticalDamageVisible) {
+      const event = this.gs.styleTracker.takeReward();
+      const view = styleRewardView(event);
+      if (view) this.presentStyleReward(view);
+    }
+    if (this.styleRewardBusy) return;
+    this.styleRewardParts.forEach((part) => part.setAlpha(0));
+  }
+
+  presentStyleReward(view) {
+    this.styleRewardBusy = true;
+    this.drawStyleRewardChrome(view);
+    this.styleRewardTitle
+      .setText(view.title)
+      .setFontSize(view.title.length > 14 ? 19 : 22)
+      .setColor('#ffffff')
+      .setScale(this.reducedMotion ? 1 : 0.78);
+    this.styleRewardDetail.setText(view.detail).setColor(
+      `#${view.color.toString(16).padStart(6, '0')}`,
+    );
+    this.styleRewardParts.forEach((part) => part.setAlpha(1));
+    MUSIC.playStyleReward(view.styleId);
+    if (!this.reducedMotion) {
+      this.tweens.add({
+        targets: this.styleRewardTitle,
+        scale: 1.1,
+        duration: 180,
+        ease: 'Back.out',
+        yoyo: true,
+      });
+    }
+    this.tweens.add({
+      targets: this.styleRewardParts,
+      alpha: 0,
+      delay: this.reducedMotion ? 1250 : 1050,
+      duration: this.reducedMotion ? 1 : 260,
+      ease: 'Quad.in',
+      onComplete: () => {
+        this.styleRewardBusy = false;
+        this.styleRewardTitle.setScale(1);
+      },
     });
   }
 
@@ -833,4 +1009,16 @@ export class HudScene extends Phaser.Scene {
     draw(5, 0x05050a, 0.7);
     draw(2, 0xd9f7ff, 0.78);
   }
+}
+
+function formatStoryTime(seconds) {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const wholeSeconds = Math.ceil(safe);
+  const minutes = Math.floor(wholeSeconds / 60);
+  return `${minutes}:${String(wholeSeconds % 60).padStart(2, '0')}`;
+}
+
+function ordinalSuffix(place) {
+  if (place % 100 >= 11 && place % 100 <= 13) return 'TH';
+  return place % 10 === 1 ? 'ST' : place % 10 === 2 ? 'ND' : place % 10 === 3 ? 'RD' : 'TH';
 }

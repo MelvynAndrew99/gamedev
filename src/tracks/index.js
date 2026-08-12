@@ -18,6 +18,7 @@ import trainingHazardWeave from './training-hazard-weave.json' with { type: 'jso
 import trainingTopSpeed from './training-top-speed.json' with { type: 'json' };
 import trainingAirtime from './training-airtime.json' with { type: 'json' };
 import trainingRivals from './training-rivals.json' with { type: 'json' };
+import trainingFlight from './training-flight.json' with { type: 'json' };
 import trainingValidation from './training-validation.json' with { type: 'json' };
 import neonGulch from './neon-gulch.json' with { type: 'json' };
 import syndicateRun from './syndicate-run.json' with { type: 'json' };
@@ -28,5 +29,6 @@ export const TRAINING_TRACKS = [
   trainingTopSpeed,
   trainingAirtime,
   trainingRivals,
+  trainingFlight,
 ];
 export const TRACKS = [trainingValidation, neonGulch, syndicateRun];

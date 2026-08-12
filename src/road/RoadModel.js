@@ -289,7 +289,9 @@ export class RoadModel {
       // Once its rock payload has appeared, the danger warning is resolved
       // and a later boost cannot be mistaken for what the cones announced.
       if (sameLane.some((s) => s.key === 'rock')) return false;
-      if (sameLane.some((s) => s.key === 'cone')) return true;
+      // Authored Story cones are collectible objectives, not hazard signage.
+      // Only ordinary cones retain the legacy "a rock follows" meaning.
+      if (sameLane.some((s) => s.key === 'cone' && !s.objectiveId)) return true;
     }
     return false;
   }

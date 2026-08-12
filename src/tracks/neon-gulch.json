@@ -2,44 +2,252 @@
   "id": "neon-gulch",
   "name": "NEON GULCH",
   "seed": 2202,
-  "laps": 3,
-  "intro": "Carry speed over the crest. Settle the car before the next bend.",
-  "design": {
-    "focus": "Manage momentum through elevation, dirt, and medium-speed direction changes."
+  "storyVersion": 1,
+  "laps": 1,
+  "intro": "Build speed downhill. Boost the gold runways, steer the flight, then spend that speed on the next line.",
+  "qualifier": {
+    "laps": 1,
+    "targetSeconds": 76,
+    "targetStatus": "provisional-playtest-required",
+    "targetBasis": "A 3444-segment lap has a 57.4-second max-speed geometry floor. The provisional target adds 32 percent for launch acceleration, two dirt sectors, elevation, airbrake choices, and one recoverable mistake; replace it with the median of five clean telemetry runs plus 10-15 percent."
   },
-  "objectives": [
-    { "id": "finish", "type": "complete_laps", "value": 3, "label": "FINISH 3 LAPS", "points": 1000 },
-    { "id": "ramps", "type": "count_event", "event": "ramp_hit", "value": 3, "label": "HIT 3 RAMPS", "points": 750 },
-    { "id": "zippers", "type": "count_event", "event": "zipper_hit", "value": 5, "label": "CROSS 5 SPEED LINES", "points": 750 }
-  ],
-  "patterns": {
-    "startClear": 75,
-    "finishClear": 55,
-    "placements": [
-      { "at": 90, "kind": "ramp" },
-      { "at": 205, "kind": "rocks" },
-      { "at": 390, "kind": "combo" },
-      { "at": 522, "kind": "edge" },
-      { "at": 650, "kind": "rampRocks" },
-      { "at": 800, "kind": "gate" }
+  "rivalRace": {
+    "laps": 3,
+    "startsLocked": true
+  },
+  "styleRewards": {
+    "coneLineSize": 4
+  },
+  "design": {
+    "focus": "Manage downhill momentum across visible crests, loose dirt, and medium-speed direction changes while repeating a boost-to-airbrake rhythm.",
+    "surfacePlan": "Asphalt runways build and recover speed; two compact dirt descents trade grip for a straighter safe line; seven elevation changes make crests and landings readable without hiding the next required response.",
+    "cycles": [
+      {
+        "id": "gulch-01-sunset-read",
+        "from": 0,
+        "to": 617,
+        "summary": "A long opening read teaches the right-lane launch, a gentle cone sweep, and a directly visible left-side rock closure.",
+        "flow": "read -> bank boost -> broad ramp -> neutral flight -> right-to-center cone payoff -> airbrake right around visible rocks -> breathe",
+        "safeLine": "Stay center, skip the cone sweep, and pass the left-side rocks on the open right half.",
+        "committedLine": "Take the right boost and ramp, then sweep four objective cones before returning right for the rock closure."
+      },
+      {
+        "id": "gulch-02-canyon-drop",
+        "from": 618,
+        "to": 1070,
+        "summary": "A downhill right-lane jump carries speed into the first committed bend and an open-left rock response.",
+        "flow": "downhill read -> right boost -> ramp over same-lane rocks -> long flight -> cone transfer -> airbrake left through the sweeper -> breathe",
+        "safeLine": "Ignore the right runway and set up early in the open left lane for the sweeper.",
+        "committedLine": "Clear the right-lane rocks in the air, collect the descending cone line, then use the left airbrake to hold the open exit."
+      },
+      {
+        "id": "gulch-03-dust-rhythm",
+        "from": 1071,
+        "to": 1538,
+        "summary": "The first dirt beat slows the pulse before a left-lane launch, centerward cone landing, and clean asphalt chicane.",
+        "flow": "dirt read -> left boost -> dirt ramp -> glide toward center -> cone payoff -> asphalt chicane precision -> long breathe",
+        "safeLine": "Hold center through the dirt and skip the outside ramp before taking the chicane at ordinary speed.",
+        "committedLine": "Carry the left boost through loose grip, launch, and glide centerward through the cone chain before the chicane."
+      },
+      {
+        "id": "gulch-04-double-crest",
+        "from": 1539,
+        "to": 2015,
+        "summary": "Two separated crest launches form the signature call-and-response beat, followed by a leftward cone setup and the course's strongest paved sweeper.",
+        "flow": "climb read -> left boost and rock-clear ramp -> recover -> center boost and ramp -> settle -> cone transfer -> airbrake sweeper -> broad breathe",
+        "safeLine": "Climb on the right half, bypass both launch lanes, and enter the sweeper below overspeed.",
+        "committedLine": "Clear the first crest rocks, re-center during the ordinary-flight recovery, then take the second boost-ramp and its leftward cone payoff."
+      },
+      {
+        "id": "gulch-05-dust-switchback",
+        "from": 2016,
+        "to": 2474,
+        "summary": "A second dirt descent asks for a right-lane launch, a cone transfer toward center, then a deliberate return right around visible curve-side rocks.",
+        "flow": "dirt read -> right boost -> dirt ramp -> controlled flight -> cone transfer -> airbrake back right past rocks -> asphalt release",
+        "safeLine": "Keep a modest center-right line through the dirt and approach the open rock lane without launching.",
+        "committedLine": "Boost off the right dirt ramp, sweep toward center for every cone, then airbrake back to the open right lane."
+      },
+      {
+        "id": "gulch-06-brake-beat",
+        "from": 2475,
+        "to": 2912,
+        "summary": "The technical climax fires a boosted downhill rock-clear into a cone chain that hands directly to the strongest chicane, then gives a full straight to recover.",
+        "flow": "downhill reveal -> right boost -> rock-clear ramp -> long landing -> cone chain -> linked airbrake chicane -> extended breathe",
+        "safeLine": "Stay left of the runway and enter the chicane at stable speed with the entire road available.",
+        "committedLine": "Launch right over the rocks, collect the right-to-center cone chain, and preserve speed by airbraking through both chicane halves."
+      },
+      {
+        "id": "gulch-07-sunrise-rebuild",
+        "from": 2913,
+        "to": 3443,
+        "summary": "The finale rebuilds speed through a visible curve exit, a last right-lane rock-clear, an objective sweep, a center gap on the home climb, and clean finish road.",
+        "flow": "curve reveal -> right boost -> final ramp -> rewarding flight -> cone sweep -> center-line rock gap -> climb -> rival-safe finish sprint",
+        "safeLine": "Exit the curve center-left, skip the ramp, and align with the obvious center gap before the home climb.",
+        "committedLine": "Take the right boost and final rock-clear, collect the straight cone sweep, then airbrake to the center gap without surrendering the finish sprint."
+      }
     ]
   },
-  "pieces": [
-    ["straight", 28],
-    ["curve", 22, -3, 2],
-    ["straight", 12],
-    ["hill", 22, 5],
-    ["straight", 18],
-    ["curve", 28, 5, -5],
-    ["straight", 14],
-    ["dirt", 16, 2, 2],
-    ["straight", 14],
-    ["chicane", 16, 4],
-    ["straight", 16],
-    ["hill", 18, -5],
-    ["curve", 24, -5, 3],
-    ["straight", 28]
+  "rivals": {
+    "seed": 2252,
+    "count": 3,
+    "maxCount": 3,
+    "recycleWrecks": false,
+    "racePace": 1.11,
+    "aggression": 0.5,
+    "spawns": [
+      { "id": "gulch-rival-cyan", "segmentsAhead": 18, "offset": -0.55, "pace": 0.985 },
+      { "id": "gulch-rival-magenta", "segmentsAhead": 32, "offset": 0.55, "pace": 1.0 },
+      { "id": "gulch-rival-gold", "segmentsAhead": 48, "offset": 0, "pace": 1.015 }
+    ],
+    "circulation": { "enabled": false },
+    "attackZones": [
+      { "from": 540, "to": 600 },
+      { "from": 990, "to": 1050 },
+      { "from": 1430, "to": 1510 },
+      { "from": 1950, "to": 2000 },
+      { "from": 2390, "to": 2450 },
+      { "from": 2810, "to": 2880 },
+      { "from": 3290, "to": 3370 }
+    ],
+    "policy": {
+      "oneAttacker": true,
+      "productionCount": 3,
+      "minimumTellSeconds": 0.75,
+      "localPaceRadiusSegments": 60,
+      "maximumCatchUp": 0.08,
+      "maximumSlowDown": 0.05,
+      "stagingRadiusSegments": 90,
+      "stagingBehindRadiusSegments": 24,
+      "stagingTargetSegments": 24,
+      "stagingTargetSpacingSegments": 7,
+      "stagingGraceSeconds": 1,
+      "wreckSeconds": 0.7,
+      "airborneContact": false
+    }
+  },
+  "objectives": [
+    { "id": "finish", "type": "complete_laps", "value": 1, "label": "FINISH NEON GULCH", "hudLabel": "FINISH", "points": 1000 },
+    { "id": "gulch-cones", "type": "hit_all", "target": "cone", "label": "SMASH ALL 28 RHYTHM CONES", "hudLabel": "RHYTHM CONES", "pointsPerUnit": 50 },
+    { "id": "ramps", "type": "count_event", "event": "ramp_hit", "value": 8, "label": "HIT ALL 8 RAMPS", "hudLabel": "RAMPS", "points": 1000 },
+    { "id": "zippers", "type": "count_event", "event": "zipper_hit", "value": 7, "label": "CROSS 7 SPEED LINES", "hudLabel": "SPEED LINES", "points": 750 },
+    { "id": "takedowns", "type": "count_event", "event": "rival_takedown", "value": 2, "label": "WRECK 2 RIVALS", "hudLabel": "TAKEDOWNS", "points": 750 }
   ],
-  "obstacles": 0.055,
-  "par": 140
+  "decoration": {
+    "roadsidePosts": true,
+    "nitro": false,
+    "zippers": true
+  },
+  "patterns": {
+    "startClear": 120,
+    "finishClear": 70,
+    "placements": [
+      { "at": 220, "kind": "ramp" },
+      { "at": 715, "kind": "rampRocks" },
+      { "at": 1100, "kind": "ramp" },
+      { "at": 1580, "kind": "rampRocks" },
+      { "at": 1730, "kind": "ramp" },
+      { "at": 2095, "kind": "ramp" },
+      { "at": 2510, "kind": "rampRocks" },
+      { "at": 2940, "kind": "rampRocks" }
+    ]
+  },
+  "objects": [
+    { "id": "gulch-01-boost", "at": 185, "kind": "boost", "offset": 0.66 },
+    { "id": "gulch-01-cone-1", "at": 360, "kind": "cone", "offset": 0.66, "objective": "gulch-cones" },
+    { "id": "gulch-01-cone-2", "at": 372, "kind": "cone", "offset": 0.5, "objective": "gulch-cones" },
+    { "id": "gulch-01-cone-3", "at": 384, "kind": "cone", "offset": 0.34, "objective": "gulch-cones" },
+    { "id": "gulch-01-cone-4", "at": 396, "kind": "cone", "offset": 0.18, "objective": "gulch-cones" },
+    { "id": "gulch-01-rock-left", "at": 470, "kind": "rock", "offset": -0.68 },
+    { "id": "gulch-01-rock-center", "at": 474, "kind": "rock", "offset": -0.04 },
+
+    { "id": "gulch-02-boost", "at": 680, "kind": "boost", "offset": 0.66 },
+    { "id": "gulch-02-cone-1", "at": 855, "kind": "cone", "offset": 0.62, "objective": "gulch-cones" },
+    { "id": "gulch-02-cone-2", "at": 867, "kind": "cone", "offset": 0.42, "objective": "gulch-cones" },
+    { "id": "gulch-02-cone-3", "at": 879, "kind": "cone", "offset": 0.2, "objective": "gulch-cones" },
+    { "id": "gulch-02-cone-4", "at": 891, "kind": "cone", "offset": 0, "objective": "gulch-cones" },
+    { "id": "gulch-02-rock-center", "at": 960, "kind": "rock", "offset": 0.02 },
+    { "id": "gulch-02-rock-right", "at": 964, "kind": "rock", "offset": 0.7 },
+
+    { "id": "gulch-03-boost", "at": 1075, "kind": "boost", "offset": -0.66 },
+    { "id": "gulch-03-cone-1", "at": 1240, "kind": "cone", "offset": -0.62, "objective": "gulch-cones" },
+    { "id": "gulch-03-cone-2", "at": 1252, "kind": "cone", "offset": -0.42, "objective": "gulch-cones" },
+    { "id": "gulch-03-cone-3", "at": 1264, "kind": "cone", "offset": -0.2, "objective": "gulch-cones" },
+    { "id": "gulch-03-cone-4", "at": 1276, "kind": "cone", "offset": 0, "objective": "gulch-cones" },
+
+    { "id": "gulch-04-boost-a", "at": 1545, "kind": "boost", "offset": -0.66 },
+    { "id": "gulch-04-boost-b", "at": 1695, "kind": "boost", "offset": 0 },
+    { "id": "gulch-04-cone-1", "at": 1870, "kind": "cone", "offset": 0, "objective": "gulch-cones" },
+    { "id": "gulch-04-cone-2", "at": 1882, "kind": "cone", "offset": -0.2, "objective": "gulch-cones" },
+    { "id": "gulch-04-cone-3", "at": 1894, "kind": "cone", "offset": -0.4, "objective": "gulch-cones" },
+    { "id": "gulch-04-cone-4", "at": 1906, "kind": "cone", "offset": -0.58, "objective": "gulch-cones" },
+
+    { "id": "gulch-05-boost", "at": 2060, "kind": "boost", "offset": 0.66 },
+    { "id": "gulch-05-cone-1", "at": 2235, "kind": "cone", "offset": 0.62, "objective": "gulch-cones" },
+    { "id": "gulch-05-cone-2", "at": 2247, "kind": "cone", "offset": 0.42, "objective": "gulch-cones" },
+    { "id": "gulch-05-cone-3", "at": 2259, "kind": "cone", "offset": 0.2, "objective": "gulch-cones" },
+    { "id": "gulch-05-cone-4", "at": 2271, "kind": "cone", "offset": 0, "objective": "gulch-cones" },
+    { "id": "gulch-05-rock-left", "at": 2320, "kind": "rock", "offset": -0.7 },
+    { "id": "gulch-05-rock-center", "at": 2324, "kind": "rock", "offset": -0.02 },
+
+    { "id": "gulch-06-boost", "at": 2475, "kind": "boost", "offset": 0.66 },
+    { "id": "gulch-06-cone-1", "at": 2650, "kind": "cone", "offset": 0.62, "objective": "gulch-cones" },
+    { "id": "gulch-06-cone-2", "at": 2662, "kind": "cone", "offset": 0.42, "objective": "gulch-cones" },
+    { "id": "gulch-06-cone-3", "at": 2674, "kind": "cone", "offset": 0.2, "objective": "gulch-cones" },
+    { "id": "gulch-06-cone-4", "at": 2686, "kind": "cone", "offset": 0, "objective": "gulch-cones" },
+
+    { "id": "gulch-07-boost", "at": 2915, "kind": "boost", "offset": 0.66 },
+    { "id": "gulch-07-cone-1", "at": 3080, "kind": "cone", "offset": 0.62, "objective": "gulch-cones" },
+    { "id": "gulch-07-cone-2", "at": 3092, "kind": "cone", "offset": 0.42, "objective": "gulch-cones" },
+    { "id": "gulch-07-cone-3", "at": 3104, "kind": "cone", "offset": 0.2, "objective": "gulch-cones" },
+    { "id": "gulch-07-cone-4", "at": 3116, "kind": "cone", "offset": 0, "objective": "gulch-cones" },
+    { "id": "gulch-07-rock-left", "at": 3180, "kind": "rock", "offset": -0.7 },
+    { "id": "gulch-07-rock-right", "at": 3184, "kind": "rock", "offset": 0.7 },
+    { "id": "gulch-thread-01-left", "at": 610, "kind": "rock", "offset": -0.72 },
+    { "id": "gulch-thread-01-right", "at": 610, "kind": "rock", "offset": 0.72 },
+    { "id": "gulch-thread-02-center", "at": 1380, "kind": "rock", "offset": 0 },
+    { "id": "gulch-thread-03-left", "at": 1810, "kind": "rock", "offset": -0.7 },
+    { "id": "gulch-thread-03-center", "at": 1814, "kind": "rock", "offset": 0 },
+    { "id": "gulch-thread-04-left", "at": 2740, "kind": "rock", "offset": -0.72 },
+    { "id": "gulch-thread-04-right", "at": 2740, "kind": "rock", "offset": 0.72 },
+    { "id": "gulch-thread-05-center", "at": 3220, "kind": "rock", "offset": 0 }
+  ],
+  "pieces": [
+    ["straight", 55],
+    ["hill", 42, 3],
+    ["straight", 30],
+    ["curve", 44, -2, -3],
+    ["straight", 35],
+
+    ["hill", 44, -5],
+    ["straight", 35],
+    ["curve", 42, 4, -2],
+    ["straight", 30],
+
+    ["dirt", 38, -2, -1],
+    ["straight", 28],
+    ["chicane", 24, 4, 0],
+    ["straight", 42],
+
+    ["hill", 44, 6],
+    ["straight", 60],
+    ["curve", 30, -5, -5],
+    ["straight", 25],
+
+    ["dirt", 45, 3, -3],
+    ["straight", 30],
+    ["curve", 40, -4, 2],
+    ["straight", 38],
+
+    ["hill", 36, -6],
+    ["straight", 30],
+    ["chicane", 22, 5, 1],
+    ["straight", 36],
+
+    ["curve", 42, 4, 3],
+    ["straight", 30],
+    ["hill", 45, 10],
+    ["straight", 60]
+  ],
+  "obstacles": 0.04,
+  "par": 90
 }

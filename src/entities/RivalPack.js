@@ -27,6 +27,10 @@ export const DEFAULT_RIVAL_TUNING = Object.freeze({
   maximumAttackInterval: 8.5,
   attackIntervalJitter: 1.2,
   contactCooldownSeconds: 0.45,
+  // Encounter modes may keep targets nearby by re-staging cars that have
+  // fallen completely out of range. A finite race must disable this: once a
+  // rival is passed, its physical race position is authoritative.
+  stagingEnabled: true,
   stagingRadiusSegments: 90,
   stagingBehindRadiusSegments: 24,
   stagingTargetSegments: 24,
@@ -157,6 +161,7 @@ export class RivalPack {
       ),
       stability: 2,
       lastStaggerSide: 0,
+      finished: false,
       eliminated: false,
       screen: { x: 0, y: 0, width: 0, visible: false },
     };
@@ -167,7 +172,7 @@ export class RivalPack {
     this.count = next;
     let remaining = next;
     for (const rival of this.rivals) {
-      rival.active = !rival.eliminated && remaining > 0;
+      rival.active = !rival.eliminated && !rival.finished && remaining > 0;
       if (rival.active) remaining -= 1;
       if (!rival.active && rival.id === this.attackerId) this.releaseAttack(rival);
     }
@@ -246,6 +251,23 @@ export class RivalPack {
       1.75,
     );
     return { rivalId: rival.id, state: rival.state, wreckSeconds: rival.stateTime };
+  }
+
+  // Finite race finishers leave the physical field at the line. They are not
+  // eliminations and award no takedown, but must no longer collide, attack, or
+  // appear as a live ribbon marker after their result is recorded.
+  retireFinisher(id) {
+    const rival = this.rivals.find((candidate) => candidate.id === String(id));
+    if (!rival || rival.finished || rival.eliminated) return null;
+    if (rival.id === this.attackerId) this.attackerId = null;
+    rival.finished = true;
+    rival.active = false;
+    rival.state = 'finished';
+    rival.telegraph = 0;
+    rival.attackSide = 0;
+    rival.screen.visible = false;
+    this.refreshViews();
+    return { rivalId: rival.id, state: rival.state };
   }
 
   // The renderer/integration layer gets stable object identities. It should
@@ -426,6 +448,7 @@ export class RivalPack {
   // contact grace window so a long sweep can never turn the relocation into
   // a phantom impact.
   stageForProximity(rival, player, signedPlayerDistance) {
+    if (!this.t.stagingEnabled) return false;
     if (rival.state !== 'cruise' && rival.state !== 'recover') return false;
     const segmentLength = positive(this.t.segmentLength, 200);
     const distanceSegments = Math.abs(signedPlayerDistance) / segmentLength;
@@ -555,6 +578,7 @@ export class RivalPack {
       slot * positive(this.t.stagingTargetSpacingSegments, 7);
     const playerPosition = finite(player.position, rival.position);
     rival.generation += 1;
+    rival.finished = false;
     rival.eliminated = false;
     rival.active = true;
     rival.state = 'cruise';

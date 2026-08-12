@@ -1,4 +1,4 @@
-# Destruction Racer — Training Level Design
+# Rhythmic Ride — Training Level Design
 
 This document is the source of truth for building Training mode lessons. Read it
 with [GAME_DESIGN.md](./GAME_DESIGN.md): the main brief defines the driving
@@ -205,10 +205,10 @@ Weave's mastery cones — all react when struck.
 
 The finish result is the reward transition. It plays a short fanfare, bursts
 confetti, calls out a perfect clear when appropriate, and records the best
-trophy. An explicit result menu offers `Retry`, `Next Track`, and `Title` when a
-finished successor exists. The final available lesson offers `Retry` and
-`Title` while naming the next staged lesson as coming soon. Keyboard, controller,
-and pointer input must expose the same choices.
+trophy. An explicit result menu offers `Retry` and `Race School`; returning to
+Race School keeps the finished lesson selected and reveals any newly unlocked
+successor without launching it automatically. Keyboard, controller, and pointer
+input must expose the same choices.
 
 ## Lesson 3: Redline
 
@@ -374,15 +374,13 @@ only with explicit product approval; it is not the primary Training 5 design.
 
 ## Cone semantics
 
-Objective-linked cones are a Training mode exception to the campaign warning
-grammar. Their objective is explicit in the intro and HUD, and contact is
-harmless. They grant progress, objective points, and audiovisual contact
-feedback but no economy reward.
+Objective-linked cones are shared by Training and Story. Their objective is
+explicit in the intro or HUD, and contact is harmless. They grant progress,
+objective points, and audiovisual contact feedback but no economy reward.
 
-In Story and Endless modes, ordinary cones remain danger warnings that resolve
-to rocks. The Proving Ground must explicitly restate that warning meaning before
-using it. If target cones ever appear alongside warning cones in one course,
-they need a distinct visual treatment before that course can ship.
+Endless alone retains ordinary danger-warning cones that resolve to rocks.
+Story courses have zero warning cones: every cone is an authored, persistent
+target with a stable ID. A course may not mix the two meanings.
 
 ## Track data contract
 
@@ -461,6 +459,14 @@ The initial Training mode track list is fixed in this order:
 4. Air School — acquire ramp approaches and build controlled airtime.
 5. Rival School — score boosted wrecks during a 35-second base run, extending
    it by driving through green clock cones.
+6. Flight School — a post-campaign lift-wing preview with sustained, finite
+   controllable flight and generous landing recovery.
+
+Air School remains the normal fourth lesson and unlocks after Redline. Flight
+School is shown from the beginning but is locked behind Story mastery. Unlock it
+by earning Platinum on all three Rival Races (finish first and take out all three
+rivals on each track). Its locked tile and hover description state that
+requirement directly.
 
 Warning reads, zippers, surface changes, and combo lines remain future
 curriculum candidates. Proving Ground combines the completed curriculum as the

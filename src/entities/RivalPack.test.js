@@ -467,6 +467,53 @@ test('a passed rival is recycled ahead before the player has to slow down', () =
   assert.ok(pack.views[0].stagingGrace > 0, 'the relocation must remain non-colliding');
 });
 
+test('a finite race can disable staging so a passed rival stays behind', () => {
+  const pack = new RivalPack({
+    count: 1,
+    maxCount: 1,
+    aggression: 0,
+    recycleWrecks: false,
+    spawns: [{ id: 'finite-rival', position: 0, pace: 1 }],
+  }, {
+    ...tuning,
+    stagingEnabled: false,
+    stagingBehindRadiusSegments: 12,
+    stagingTargetSegments: 14,
+  }, { trackLength: 100000 });
+
+  const player = { position: 30 * 200, x: 0, speed: 12000 };
+  pack.update(1 / 60, { player });
+
+  assert.equal(pack.views[0].stagingCount, 0);
+  assert.equal(
+    pack.consumeEvents().some((event) => event.type === 'rival_staged'),
+    false,
+  );
+  assert.ok(
+    wrappedDelta(player.position, pack.views[0].position, 100000) < 0,
+    'the finite rival must remain behind after being passed',
+  );
+});
+
+test('a finite race finisher retires without counting as a takedown', () => {
+  const pack = new RivalPack({
+    count: 1,
+    maxCount: 1,
+    recycleWrecks: false,
+    spawns: [{ id: 'race-finisher', segmentsAhead: 4 }],
+  }, tuning, model);
+
+  assert.deepEqual(pack.retireFinisher('race-finisher'), {
+    rivalId: 'race-finisher', state: 'finished',
+  });
+  assert.equal(pack.views.length, 0);
+  assert.equal(pack.rivals[0].finished, true);
+  assert.equal(pack.rivals[0].eliminated, false);
+  pack.setCount(1);
+  assert.equal(pack.views.length, 0, 'count tuning cannot reactivate a finisher');
+  assert.equal(pack.takeDown('race-finisher'), null);
+});
+
 test('circulation lets passed racers pursue before any off-screen relocation', () => {
   const player = { position: 20000, x: 0, speed: 12000 };
   const pack = new RivalPack({

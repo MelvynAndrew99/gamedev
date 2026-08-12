@@ -1,4 +1,4 @@
-# Destruction Racer — Music Design Brief
+# Rhythmic Ride — Music Design Brief
 
 ## Core promise
 
@@ -240,14 +240,24 @@ changing individual patches.
 
 ## Repeated gameplay audio
 
-Frequently repeated contacts use variation pools, not one sample or patch with
-identical settings. Change at least pitch contour, filtering, timbre, level, or
-stereo position, and prevent immediate repetition. Cone destruction currently
-uses five synthetic composite-impact variants. Each one covers a broad range by
-layering a low body thump, a midrange plastic knock, and a short filtered high
-crack; variation changes the balance without turning successive contacts into
-pitched chirps. Milestones may add grounded harmony or a fanfare, but should not
-erase the physical-impact family shared by ordinary hits.
+Frequently repeated gameplay cues use variation pools, not one sample or patch
+with identical settings. Every recurring family ships with at least three
+variants and prevents immediate repetition. Variation changes pitch contour,
+filtering, envelope, timbre, and/or stereo position—not merely gain.
+
+Each cue is a composite with three perceptual jobs:
+
+- **low body** supplies weight and physical consequence;
+- **mid material** identifies plastic, chassis, engine, tire, or reward tone;
+- **high detail** supplies crack, air, debris, speed, or celebratory sparkle.
+
+Cone hits, boosts and speed lines, rival warnings/contact/takedowns, time
+bonuses, glass and hull damage, ramp takeoff/landing/misses, pickups, and
+completion cues all follow this contract. Their balances remain distinct: a
+boost favors sustained air, damage favors body and material, and rewards favor
+mid/high harmony without losing a short low anchor. The shared mix limiter is
+still only peak protection; do not compensate for weak layers by making the
+whole composite louder.
 
 ## Futuristic 16-bit palette
 

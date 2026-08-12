@@ -9,6 +9,7 @@ export const HUD_SAFE_LAYOUT = Object.freeze({
   carsRemaining: Object.freeze({ x: 646, y: 8, width: 144, height: 44 }),
   objectiveToast: Object.freeze({ x: 10, y: 68, width: 230, height: 38 }),
   rivalToast: Object.freeze({ x: 10, y: 110, width: 230, height: 38 }),
+  styleReward: Object.freeze({ x: 10, y: 110, width: 230, height: 58 }),
   leftColumn: Object.freeze({ x: 10, y: 66, width: 230 }),
   roadCorridor: Object.freeze({ x: 250, y: 170, width: 300, height: 430 }),
   speed: Object.freeze({ x: 652, y: 532, width: 136, height: 56 }),
@@ -24,8 +25,11 @@ export function hudVisibilityPolicy({
 } = {}) {
   const training = mode === 'training';
   const endless = mode === 'endless';
-  const airSchool = training && trackId === 'training-airtime';
+  const airSchool = training && (
+    trackId === 'training-airtime' || trackId === 'training-flight'
+  );
   const rivalSchool = training && trackId === 'training-rivals';
+  const story = mode === 'story';
 
   return Object.freeze({
     // The numbered START→FINISH ribbon is the sole persistent lap/position
@@ -47,6 +51,9 @@ export function hudVisibilityPolicy({
     rivalToast: rivalSchool,
     rivalEventHud: rivalSchool,
     rivalCourseMarkers: rivalSchool && hasRace,
+    storyEventHud: story && hasRace,
+    storyRivalMarkers: story && hasRace,
+    styleRewards: story && hasRace,
 
     boostGauge: hasBoostCapability,
     windshieldDamage: !training || trainingDamageMax > 0,

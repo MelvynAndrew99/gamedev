@@ -27,6 +27,14 @@ test('the grid start crossing begins the race without counting a lap', () => {
   assert.equal(race.finished, true);
 });
 
+test('race crossings expose their within-frame fraction for photo finishes', () => {
+  const race = new RaceState({ trackLength: 100 }, 1);
+  race.crossedStart = true;
+  race.prevPos = 95;
+  assert.equal(race.update(1 / 60, { position: 5 }), 'finished');
+  assert.equal(race.lastCrossingFraction, 0.5);
+});
+
 test('spawning behind the line is not misread as a wrap', () => {
   const race = new RaceState(model, 3);
   race.prevPos = 8000;
