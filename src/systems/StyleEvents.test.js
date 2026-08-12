@@ -38,7 +38,7 @@ test('cone reward follows the authored course line size and names its real count
     assert.equal(tracker.recordCone(`line-cone-${index}`), false);
   }
   assert.equal(tracker.recordCone('line-cone-3'), true);
-  assert.equal(styleRewardView(tracker.takeReward()).detail, '4 CONES');
+  assert.equal(styleRewardView(tracker.takeReward()).detail, '4 CONES  •  +$15');
   assert.equal(storyStyleRulesForTrack({ styleRewards: { coneLineSize: 1 } })
     .coneChain.count, 5, 'invalid authored sizes fall back safely');
 });
@@ -150,7 +150,7 @@ test('overflow coalesces repeat counts without losing earned rewards', () => {
   }
   assert.equal(delivered, 40);
   assert.equal(compressedView.repeats, 24);
-  assert.match(compressedView.detail, /×24$/);
+  assert.match(compressedView.detail, /×24  •  \+\$600$/);
 });
 
 test('overflowed rewards cannot be overtaken after an interleaved dequeue', () => {
@@ -249,6 +249,18 @@ test('style presentation is label-based and formats authoritative airtime', () =
   tracker.recordLanding({ boosted: true, seconds: 1.234 });
   const view = styleRewardView(tracker.takeReward());
   assert.equal(view.title, 'SKY HIGH!');
-  assert.equal(view.detail, '1.2s BOOSTED AIR');
+  assert.equal(view.detail, '1.2s BOOSTED AIR  •  +$20');
   assert.equal(view.icon, 'wings');
+});
+
+test('style cash is authored at emit time and stops at the attempt bank remainder', () => {
+  const tracker = new StoryStyleTracker({ runId: 'cash-cap', cashAvailable: 30 });
+  tracker.recordBoostTier(3);
+  tracker.recordBoostTier(3);
+  const first = tracker.takeReward();
+  const second = tracker.takeReward();
+  assert.equal(first.payload.cash, 25);
+  assert.equal(second.payload.cash, 5);
+  assert.equal(tracker.cashEarned, 30);
+  assert.equal(styleRewardView(second).detail, 'TIER 3 BOOST  •  +$5');
 });

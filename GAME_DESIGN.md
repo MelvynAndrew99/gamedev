@@ -163,6 +163,27 @@ the six school results, stars, and all-Gold status. The second contains lifetime
 totals, the complete style-reward reference, and achievement progress; zeroes are
 shown explicitly rather than hiding records the player has not started.
 
+Story uses the same shoulder-tabbed submenu pattern. `L`/`R` (keyboard `Q`/`E`)
+switches between Course Select and Pit Garage without leaving the front end.
+Both pages share the existing `Chrome & Credits` shop cue, which begins on
+entry to Story and continues uninterrupted across tab changes. Story results
+and wrecks return to this submenu with the Garage tab open; a wreck applies the
+existing emergency tow once. Repairs, wallet, and remaining hull survive the
+tab switch back to Course Select and the next Story launch; entering Story from
+a fresh title-menu session retains the normal fresh-run reset.
+
+Story hull damage persists through its Garage economy. Endless is deliberately
+isolated: every distance attempt starts at full hull, damage lasts only for that
+attempt, and returning to the title reveals the unchanged Story hull. Refreshing
+or wrecking during Endless can never overwrite the saved Story condition.
+
+Buying the Music Player opens a full soundtrack library inside the Garage.
+Discovered themes show their title and BPM; undiscovered themes remain anonymous
+locked slots. The player supports cursor/pointer selection, play, pause,
+previous/next shoulder shortcuts, and a close action. The current soundtrack is
+generated live by the tracker engine rather than loaded from external audio
+files, so choosing a theme starts its authored arrangement directly.
+
 Rival School introduces the Story campaign's moving opposition as a 35-second
 base wreck score attack, not a boss or a lap-limited race. Exactly three
 collision-capable rivals stay in circulation so the road retains passing space

@@ -38,6 +38,13 @@ import {
   trainingMetricUsage,
 } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
+import {
+  applyPitCrewService,
+  awardStoryPayout,
+  consumeRaceLoadout,
+  raceLoadout,
+  storyStyleBank,
+} from '../systems/Economy.js';
 import { Boost } from '../entities/Boost.js';
 import { RivalPack } from '../entities/RivalPack.js';
 import {
@@ -55,7 +62,11 @@ import { TimedScoreAttack } from '../systems/TimedScoreAttack.js';
 import { rivalFxSpec } from '../systems/RivalFx.js';
 import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
 import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
-import { STORY_PHASES, modeMenuTarget } from '../ui/FrontEndModel.js';
+import {
+  STORY_PAGES,
+  STORY_PHASES,
+  modeMenuTarget,
+} from '../ui/FrontEndModel.js';
 import {
   QualifierClock,
   RivalRaceOrder,
@@ -110,6 +121,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    if (this.mode === 'endless') RACER.beginEndlessRun();
+    else RACER.endEndlessRun();
     // State lives HERE, not the constructor — create() re-runs per start.
     if (this.mode === 'endless') {
       this.model = new EndlessTrack(TUNING);
@@ -141,10 +154,19 @@ export class GameScene extends Phaser.Scene {
     this.heldBoostStats = new HeldBoostAccumulator(
       STORY_STYLE_RULES.longBurn.minimumHeldSeconds,
     );
+    const styleBank = this.mode === 'story'
+      ? storyStyleBank(
+        RACER,
+        this.trackData.id,
+        this.trackData.storyVersion ?? 1,
+        this.storyPhase,
+      )
+      : null;
     this.styleTracker = this.mode === 'story'
       ? new StoryStyleTracker({
         runId: this.gameplayRunId,
         rules: storyStyleRulesForTrack(this.trackData),
+        cashAvailable: styleBank.remaining,
       })
       : null;
     this.renderer = new RoadRenderer(
@@ -175,6 +197,7 @@ export class GameScene extends Phaser.Scene {
       boostedTakedowns: 0,
       damageHits: 0,
     };
+    this.storyTakedownIds = new Set();
     this.rivalHudEvents = [];
     this.rivalHudSequence = 0;
     this.rivalAttackInput = { direction: 0, remaining: 0 };
@@ -226,7 +249,12 @@ export class GameScene extends Phaser.Scene {
       this.race.prevPos = this.player.position; // don't misread the spawn as a wrap
     }
     this.pop = new Popularity(TUNING);
-    this.boost = new Boost(TUNING); // tap-stacked/held boost gauge, see Boost.js
+    this.raceLoadout = this.mode === 'story'
+      ? raceLoadout(RACER, TUNING.nitroMax)
+      : { capacity: TUNING.nitroMax, startingSlots: 0, consumed: {} };
+    this.raceLoadoutConsumed = this.mode !== 'story';
+    this.boost = new Boost(TUNING, this.raceLoadout.capacity);
+    for (let slot = 0; slot < this.raceLoadout.startingSlots; slot++) this.boost.collect();
     this.topSpeedTier = 0; // highest boost tier reached this race, feeds the top_speed objective
     this.boostHoldHandle = null; // active sustained hold-drone SFX, if any
     this.airtimeAudioHandle = null;
@@ -404,6 +432,7 @@ export class GameScene extends Phaser.Scene {
       this.player.boost(TUNING.boostTierCeilings[this.boost.justActivated - 1]);
       if (this.boost.justActivated === 3) {
         this.styleTracker?.recordBoostTier(3);
+        if (this.mode === 'story') RACER.afterburnerEligible = true;
         this.recordLifetimeStat('tierThreeBoosts');
       }
     } else if (this.boost.justExtended) {
@@ -508,6 +537,10 @@ export class GameScene extends Phaser.Scene {
     } else {
       const event = this.race.update(dt, this.player);
       if (event === 'start') {
+        if (!this.raceLoadoutConsumed) {
+          consumeRaceLoadout(RACER, TUNING.nitroMax);
+          this.raceLoadoutConsumed = true;
+        }
         this.timedScoreAttack?.start(this.rivalPack?.elapsed ?? 0);
         this.qualifierClock?.start();
         this.showBanner('GO!', 800);
@@ -1273,6 +1306,7 @@ export class GameScene extends Phaser.Scene {
             scoreTime,
           )) continue;
           this.rivalMetrics.takedowns += 1;
+          if (this.mode === 'story') this.storyTakedownIds.add(rival.id);
           this.recordLifetimeStat('rivalsWrecked');
           if (input.boostActive) this.rivalMetrics.boostedTakedowns += 1;
           this.recordObjective('rival_takedown');
@@ -1879,7 +1913,9 @@ export class GameScene extends Phaser.Scene {
     this.player.speed *= def.slow;       // momentum is the immediate price
     MUSIC.playDamageImpact({ severity: Math.max(0.7, def.damage / 20) });
     this.popup(`HULL -${def.damage}`, '#ff5555');
-    const wrecked = RACER.damage(def.damage); // health is the long-term one
+    // Story writes the persistent garage hull; Endless is scoped by
+    // RacerState to this single distance attempt.
+    const wrecked = RACER.damage(def.damage);
     this.iframes = TUNING.iframes;
     // Feedback within the same frame as the hit: shake scales with damage,
     // car flashes red. The player should FEEL the difference between a
@@ -2023,21 +2059,36 @@ export class GameScene extends Phaser.Scene {
       const elapsed = this.qualifierClock?.elapsedSeconds ?? this.race.time;
       const result = submitQualifierResult(this.trackData, elapsed, target, true);
       if (result.qualified) this.recordLifetimeStat('qualifiersCleared');
+      const payout = awardStoryPayout(RACER, {
+        trackId: this.trackData.id,
+        version: this.trackData.storyVersion ?? 1,
+        phase: STORY_PHASES.QUALIFIER,
+        attemptNumber: result.progress.qualifierAttempts,
+        won: result.qualified,
+        styleCash: this.styleTracker?.cashEarned ?? 0,
+      });
+      const crew = result.qualified
+        ? applyPitCrewService(RACER)
+        : { level: RACER.pitCrewLevel, health: 0 };
+      this.garageData = {
+        completedTrackIndex: this.trackIndex,
+        storyPhase: this.storyPhase,
+        receipt: `${payout.claim ?? 'NO PURSE'} +$${payout.purse}   STYLE +$${payout.style}` +
+          `${payout.spending?.total > 0 ? `   GARAGE -$${payout.spending.total}` : ''}` +
+          `${crew.health > 0 ? `   PIT CREW +${crew.health} HULL` : ''}`,
+      };
       this.showBanner(
         `${result.qualified ? 'QUALIFIED!' : 'TIME MISSED'}\n` +
           `${fmtTime(elapsed)}  •  TARGET ${fmtTime(target)}` +
-          `${result.newBest ? '\nNEW BEST' : ''}\n\nENTER FOR STORY`,
+          `${result.newBest ? '\nNEW BEST' : ''}` +
+          `${result.qualified ? `\n${payout.claim} $${payout.purse}` +
+            `  •  STYLE $${payout.style}\nWALLET $${RACER.money}` : ''}` +
+          '\n\nENTER FOR GARAGE',
         0,
       );
       return;
     }
     const record = submitScore(this.trackData.id, t, 'min');
-    // Race cash remains time-based while the new course score comes from
-    // completed objectives. Objective points can be balanced independently
-    // without turning every stunt contact into currency.
-    const par = this.trackData.par ?? 120;
-    const timeCash = TUNING.basePayout + Math.max(0, Math.round((par - t) * TUNING.parRate));
-    RACER.money += timeCash;
     const place = this.storyRaceOrder?.playerPlace(this.race.lastCrossingFraction) ?? 1;
     const rivalResult = this.mode === 'story' && this.storyPhase === STORY_PHASES.RIVALS
       ? submitRivalResult(this.trackData, {
@@ -2047,13 +2098,27 @@ export class GameScene extends Phaser.Scene {
       })
       : null;
     if (rivalResult?.won) this.recordLifetimeStat('rivalWins');
+    const payout = awardStoryPayout(RACER, {
+      trackId: this.trackData.id,
+      version: this.trackData.storyVersion ?? 1,
+      phase: STORY_PHASES.RIVALS,
+      attemptNumber: rivalResult?.progress.rivalAttempts ?? 0,
+      won: rivalResult?.won,
+      fullClear: rivalResult?.fullClear,
+      styleCash: this.styleTracker?.cashEarned ?? 0,
+      rivalIds: [...this.storyTakedownIds],
+    });
+    const crew = applyPitCrewService(RACER);
     const campaignComplete = Boolean(rivalResult?.award) && isStoryCampaignComplete(TRACKS);
     this.garageData = {
       nextTrackIndex: this.trackIndex + 1,
       completedTrackIndex: this.trackIndex,
       storyPhase: this.storyPhase,
       complete: Boolean(campaignComplete),
-      receipt: `RACING +$${timeCash}   OBJECTIVES ${this.objectives.score} PTS`,
+      receipt: `${payout.claim ?? 'NO PURSE'} +$${payout.purse}` +
+        `   STYLE +$${payout.style}   TAKEDOWNS +$${payout.bounties}` +
+        `${payout.spending?.total > 0 ? `   GARAGE -$${payout.spending.total}` : ''}` +
+        `${crew.health > 0 ? `   PIT CREW +${crew.health} HULL` : ''}`,
     };
     const storyAward = rivalResult?.award?.toUpperCase() ?? null;
     const opponentsLeft = remainingStoryOpponents(
@@ -2066,7 +2131,8 @@ export class GameScene extends Phaser.Scene {
         `${rivalResult ? `${opponentsLeft} OPPONENT${opponentsLeft === 1 ? '' : 'S'} LEFT\n` : ''}` +
         `OBJECTIVES ${this.objectives.completedCount}/${this.objectives.views.length}` +
         `  •  ${this.objectives.score} PTS\n` +
-        `RACING $${timeCash}\n` +
+        `${payout.claim ?? 'NO PURSE'} $${payout.purse}` +
+        `  •  STYLE $${payout.style}  •  TAKEDOWNS $${payout.bounties}\n` +
         `WALLET $${RACER.money}\n\n` +
         (campaignComplete ? 'CAMPAIGN COMPLETE\nENTER FOR GARAGE' : 'ENTER FOR GARAGE'),
       0
@@ -2080,7 +2146,17 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (this.mode === 'story' && this.garageData) {
-      this.scene.start('GarageScene', this.garageData);
+      const focusIndex = this.garageData.completedTrackIndex ??
+        this.garageData.retryTrackIndex ?? this.trackIndex;
+      this.scene.start('TitleScene', {
+        ...modeMenuTarget(
+          'story',
+          focusIndex,
+          this.garageData.storyPhase ?? this.storyPhase,
+          STORY_PAGES.GARAGE,
+        ),
+        garageData: this.garageData,
+      });
       return;
     }
     if (this.mode === 'story') {

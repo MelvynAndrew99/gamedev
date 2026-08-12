@@ -249,7 +249,9 @@ export class HudScene extends Phaser.Scene {
     // that needs it, while Cone Control/Hazard Weave keep decoration.nitro
     // off and stay clutter-free.
     if (this.hudPolicy.boostGauge) {
-      this.boostGauge = new BoostGauge(this, w - 126, h - 92, 108, 14);
+      this.boostGauge = new BoostGauge(
+        this, w - 126, h - 92, 108, 14, this.gs.boost.capacity,
+      );
     }
 
     // Off-track flasher: its own element, impossible to miss, gone when moot.
@@ -551,6 +553,7 @@ export class HudScene extends Phaser.Scene {
     );
     this.styleRewardParts.forEach((part) => part.setAlpha(1));
     MUSIC.playStyleReward(view.styleId);
+    if (view.cash > 0) MUSIC.playCashReward();
     if (!this.reducedMotion) {
       this.tweens.add({
         targets: this.styleRewardTitle,

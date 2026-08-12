@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyEmergencyTow, buyRepair, repairQuote } from './Economy.js';
+import {
+  GARAGE_ITEMS,
+  applyEmergencyTow,
+  applyPitCrewService,
+  awardStoryPayout,
+  buyGarageItem,
+  buyRepair,
+  consumeRaceLoadout,
+  garageCatalog,
+  raceLoadout,
+  repairQuote,
+  storyStyleBank,
+} from './Economy.js';
 
 const tuning = {
   repairPackHealth: 10,
@@ -45,4 +57,137 @@ test('emergency tow restores only the minimum retry health', () => {
   const healthy = racer(40, 0);
   assert.equal(applyEmergencyTow(healthy, tuning), 0);
   assert.equal(healthy.health, 40);
+});
+
+function career(money = 0) {
+  const histories = {};
+  return {
+    ...racer(55, money),
+    pitCrewLevel: 0,
+    rivalWinCount: 0,
+    musicPlayerUnlocked: false,
+    paintBoothUnlocked: false,
+    afterburnerFxUnlocked: false,
+    afterburnerEligible: false,
+    pendingBoostPack: false,
+    pendingExtraBoostSlot: false,
+    getPayoutHistory(key) {
+      return structuredClone(histories[key] ?? {
+        qualifierWinsPaid: 0, rivalWinsPaid: 0, platinumPaid: false,
+        lastQualifierAttempt: 0, lastRivalAttempt: 0,
+        qualifierStyleCash: 0, rivalStyleCash: 0, rivalBountyIds: [],
+      });
+    },
+    setPayoutHistory(key, value) { histories[key] = structuredClone(value); },
+  };
+}
+
+test('garage catalog exposes stable purchase states and enforces upgrade gates', () => {
+  const state = career(4000);
+  assert.deepEqual(garageCatalog(state).map(({ id }) => id), GARAGE_ITEMS.map(({ id }) => id));
+  assert.equal(buyGarageItem(state, 'pit_crew_2').reason, 'REQUIRES_PIT_CREW_1');
+  assert.equal(buyGarageItem(state, 'pit_crew_1').ok, true);
+  assert.equal(buyGarageItem(state, 'pit_crew_2').reason, 'REQUIRES_RIVAL_WIN');
+  state.rivalWinCount = 1;
+  assert.equal(buyGarageItem(state, 'pit_crew_2').ok, true);
+  assert.equal(buyGarageItem(state, 'pit_crew_2').reason, 'OWNED');
+  assert.equal(state.pitCrewLevel, 2);
+});
+
+test('race prep queues once, stacks to a 2/4 start, and consumes once', () => {
+  const state = career(300);
+  assert.equal(buyGarageItem(state, 'boost_pack').ok, true);
+  assert.equal(buyGarageItem(state, 'boost_pack').reason, 'ARMED');
+  assert.equal(buyGarageItem(state, 'extra_boost_slot').ok, true);
+  assert.deepEqual(raceLoadout(state, 3), {
+    capacity: 4,
+    startingSlots: 2,
+    consumed: { boostPack: true, extraSlot: true },
+  });
+  assert.equal(state.pendingBoostPack, true, 'briefing preview does not consume prep');
+  assert.deepEqual(consumeRaceLoadout(state, 3), {
+    capacity: 4,
+    startingSlots: 2,
+    consumed: { boostPack: true, extraSlot: true },
+  });
+  assert.deepEqual(consumeRaceLoadout(state, 3), {
+    capacity: 3,
+    startingSlots: 0,
+    consumed: { boostPack: false, extraSlot: false },
+  });
+});
+
+test('Story purses pay 100/50/25 percent, then stop without consuming losses', () => {
+  const state = career();
+  const result = (attemptNumber, won = true) => awardStoryPayout(state, {
+    trackId: 'neon-gulch', phase: 'qualifier', attemptNumber, won,
+  });
+  assert.equal(result(1, false).total, 0);
+  assert.equal(result(2).purse, 450);
+  assert.equal(result(3).purse, 225);
+  assert.equal(result(4).purse, 113);
+  assert.equal(result(5).purse, 0);
+  assert.equal(result(5).duplicate, true, 'same submitted result cannot mint twice');
+  assert.equal(state.money, 788);
+});
+
+test('six first-clear event purses total 3600 without requiring style or replays', () => {
+  const state = career();
+  const tracks = ['training-validation', 'neon-gulch', 'syndicate-run'];
+  tracks.forEach((trackId) => {
+    awardStoryPayout(state, {
+      trackId, phase: 'qualifier', attemptNumber: 1, won: true,
+    });
+    awardStoryPayout(state, {
+      trackId, phase: 'rivals', attemptNumber: 1, won: true,
+    });
+  });
+  assert.equal(state.money, 3600);
+});
+
+test('style banks and stable rival-ID bounties bank only on wins and remain finite', () => {
+  const state = career();
+  const payout = (attemptNumber, won, rivalIds, styleCash = 999) =>
+    awardStoryPayout(state, {
+      trackId: 'training-validation', phase: 'rivals', attemptNumber,
+      won, rivalIds, styleCash,
+    });
+  assert.equal(payout(1, false, ['proving-cyan', 'proving-magenta']).total, 0);
+  const first = payout(2, true, ['proving-cyan', 'proving-magenta']);
+  assert.equal(first.purse, 600);
+  assert.equal(first.style, 300);
+  assert.equal(first.bounties, 100);
+  const second = payout(3, true, ['proving-cyan', 'proving-gold']);
+  assert.equal(second.style, 0);
+  assert.equal(second.bounties, 50);
+  assert.deepEqual(storyStyleBank(state, 'training-validation', 1, 'rivals'), {
+    earned: 300, cap: 300, remaining: 0,
+  });
+});
+
+test('unknown courses and forged rival IDs cannot expand the authored money supply', () => {
+  const state = career();
+  const forged = awardStoryPayout(state, {
+    trackId: 'forged-course', phase: 'rivals', attemptNumber: 1,
+    won: true, styleCash: 999, rivalIds: ['a', 'b', 'c', 'd'],
+  });
+  assert.equal(forged.total, 0);
+  assert.equal(state.money, 0);
+
+  const bounded = awardStoryPayout(state, {
+    trackId: 'neon-gulch', phase: 'rivals', attemptNumber: 1,
+    won: true,
+    rivalIds: ['gulch-rival-cyan', 'gulch-rival-magenta', 'gulch-rival-gold', 'forged'],
+  });
+  assert.equal(bounded.bounties, 150);
+});
+
+test('pit crew level one restores 15 and level two restores only missing hull', () => {
+  const state = career();
+  state.pitCrewLevel = 1;
+  assert.deepEqual(applyPitCrewService(state), { level: 1, health: 15 });
+  assert.equal(state.health, 70);
+  state.pitCrewLevel = 2;
+  assert.deepEqual(applyPitCrewService(state), { level: 2, health: 30 });
+  assert.equal(state.health, 100);
 });

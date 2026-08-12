@@ -29,23 +29,23 @@ export function storyStyleRulesForTrack(track = {}) {
 export const STYLE_REWARDS = Object.freeze({
   cone_chain: Object.freeze({
     title: 'KILLER DRIVING!', detail: 'CONE LINE', icon: 'cones',
-    attackClass: 'cone_scatter', color: 0xffcf3f,
+    attackClass: 'cone_scatter', color: 0xffcf3f, cash: 15,
   }),
   speed_line_chain: Object.freeze({
     title: 'SPEED DEMON!', detail: '3 SPEED LINES', icon: 'chevrons',
-    attackClass: 'road_pressure', color: 0x2ee56b,
+    attackClass: 'road_pressure', color: 0x2ee56b, cash: 20,
   }),
   boosted_hangtime: Object.freeze({
     title: 'SKY HIGH!', detail: 'BOOSTED HANGTIME', icon: 'wings',
-    attackClass: 'air_drop', color: 0x00e5ff,
+    attackClass: 'air_drop', color: 0x00e5ff, cash: 20,
   }),
   triple_boost: Object.freeze({
     title: 'TRIPLE THREAT!', detail: 'TIER 3 BOOST', icon: 'triple',
-    attackClass: 'speed_surge', color: 0xff2d95,
+    attackClass: 'speed_surge', color: 0xff2d95, cash: 25,
   }),
   long_burn: Object.freeze({
     title: 'LONG BURN!', detail: 'HELD BOOST', icon: 'flame',
-    attackClass: 'burn_line', color: 0xff7a3d,
+    attackClass: 'burn_line', color: 0xff7a3d, cash: 15,
   }),
 });
 
@@ -92,6 +92,9 @@ export class RewardInbox {
           ...tail.payload,
           repeatCount: tailCount + incomingCount,
           latestEventId: event.payload.latestEventId ?? event.eventId,
+          ...(event.type === 'style_reward' ? {
+            cash: (tail.payload.cash ?? 0) + (event.payload.cash ?? 0),
+          } : {}),
         },
       });
     } else {
@@ -110,7 +113,7 @@ export class RewardInbox {
 }
 
 export class StoryStyleTracker {
-  constructor({ runId = 'run', rules = STORY_STYLE_RULES } = {}) {
+  constructor({ runId = 'run', rules = STORY_STYLE_RULES, cashAvailable = Infinity } = {}) {
     this.runId = runId;
     this.rules = rules;
     this.elapsed = 0;
@@ -120,6 +123,8 @@ export class StoryStyleTracker {
     this.speedLines = { count: 0, lastAt: -Infinity, seen: new Set() };
     this.holdSeconds = 0;
     this.longBurnAwarded = false;
+    this.cashAvailable = Math.max(0, Number(cashAvailable) || 0);
+    this.cashEarned = 0;
   }
 
   update(dt, { boostHeld = false } = {}) {
@@ -204,6 +209,9 @@ export class StoryStyleTracker {
   emit(styleId, detail = {}) {
     const reward = STYLE_REWARDS[styleId];
     if (!reward) return null;
+    const cash = Math.min(reward.cash, this.cashAvailable);
+    this.cashAvailable -= cash;
+    this.cashEarned += cash;
     this.sequence += 1;
     const event = createGameplayEvent({
       eventId: `${this.runId}:style:${this.sequence}`,
@@ -214,6 +222,7 @@ export class StoryStyleTracker {
         styleId,
         attackClass: reward.attackClass,
         sequence: this.sequence,
+        cash,
         ...detail,
       },
     });
@@ -249,8 +258,10 @@ export function styleRewardView(event) {
   const repeats = Math.max(1, Math.floor(Number(event.payload.repeatCount) || 1));
   return Object.freeze({
     ...reward,
-    detail: repeats > 1 ? `${detail}  ×${repeats}` : detail,
+    detail: `${repeats > 1 ? `${detail}  ×${repeats}` : detail}` +
+      `${event.payload.cash > 0 ? `  •  +$${event.payload.cash}` : ''}`,
     repeats,
+    cash: Math.max(0, Math.floor(Number(event.payload.cash) || 0)),
     styleId: event.payload.styleId,
   });
 }

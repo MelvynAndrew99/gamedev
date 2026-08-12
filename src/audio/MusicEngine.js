@@ -132,6 +132,11 @@ const CELEBRATION_VARIATIONS = [
   { root: 123.47, ratio: 1.059, pan: 0.08 },
   { root: 98, ratio: 0.944, pan: 0 },
 ];
+const CASH_REWARD_VARIATIONS = [
+  { low: 92, mid: 740, high: 1760, ratio: 1.25, pan: -0.08 },
+  { low: 104, mid: 820, high: 1960, ratio: 1.333, pan: 0.08 },
+  { low: 86, mid: 680, high: 1560, ratio: 1.5, pan: 0 },
+];
 
 export const SFX_VARIANT_COUNTS = Object.freeze({
   cone: CONE_HIT_VARIATIONS.length,
@@ -149,6 +154,7 @@ export const SFX_VARIANT_COUNTS = Object.freeze({
   landing: LANDING_VARIATIONS.length,
   gapMiss: GAP_MISS_VARIATIONS.length,
   celebration: CELEBRATION_VARIATIONS.length,
+  cashReward: CASH_REWARD_VARIATIONS.length,
 });
 
 class MusicEngine {
@@ -179,6 +185,7 @@ class MusicEngine {
     this.lastMasteryVariation = -1;
     this.lastTrainingCompleteVariation = -1;
     this.lastStyleRewardVariation = -1;
+    this.lastCashRewardVariation = -1;
     this.lastTakeoffTime = -Infinity;
   }
 
@@ -1876,6 +1883,62 @@ class MusicEngine {
     sparkle.connect(high).connect(sparkleGain).connect(this.sfxBus);
     sparkle.start(time + 0.08);
     sparkle.stop(time + 0.31);
+  }
+
+  // Original register gesture: coin/body weight, a midrange drawer snap, then
+  // two bright confirmation notes. It is layered, subtly varied, and only
+  // called for a style reward that still has bankable cash attached.
+  playCashReward() {
+    if (!this.ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    const index = nonRepeatingIndex(
+      this.lastCashRewardVariation,
+      CASH_REWARD_VARIATIONS.length,
+    );
+    this.lastCashRewardVariation = index;
+    const v = CASH_REWARD_VARIATIONS[index];
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = v.pan;
+    pan.connect(this.sfxBus);
+
+    const coin = ctx.createOscillator();
+    coin.type = 'sine';
+    coin.frequency.setValueAtTime(v.low * 1.8, time);
+    coin.frequency.exponentialRampToValueAtTime(v.low, time + 0.1);
+    const coinGain = ctx.createGain();
+    coinGain.gain.setValueAtTime(0.055, time);
+    coinGain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    coin.connect(coinGain).connect(pan);
+    coin.start(time);
+    coin.stop(time + 0.13);
+
+    const snap = ctx.createBufferSource();
+    snap.buffer = this.noiseBuffer;
+    const mid = ctx.createBiquadFilter();
+    mid.type = 'bandpass';
+    mid.frequency.value = v.mid;
+    mid.Q.value = 1.6;
+    const snapGain = ctx.createGain();
+    snapGain.gain.setValueAtTime(0.035, time + 0.025);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, time + 0.105);
+    snap.connect(mid).connect(snapGain).connect(pan);
+    snap.start(time + 0.025);
+    snap.stop(time + 0.11);
+
+    [1, v.ratio].forEach((ratio, noteIndex) => {
+      const start = time + 0.055 + noteIndex * 0.075;
+      const note = ctx.createOscillator();
+      note.type = noteIndex ? 'sine' : 'triangle';
+      note.frequency.value = v.high * ratio;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.035, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
+      note.connect(gain).connect(pan);
+      note.start(start);
+      note.stop(start + 0.17);
+    });
   }
 
   playKick(time, level = 1) {

@@ -6,12 +6,15 @@ import {
   buildSchoolTiles,
   buildStoryCourseTiles,
   buildTrophySummary,
+  cycleStoryPage,
   cycleTrophyPage,
   moveGridSelection,
   modeMenuTarget,
   STORY_PHASES,
+  STORY_PAGES,
   TROPHY_PAGES,
   schoolTileDescription,
+  shouldResetFrontEndLaunch,
   trophyStatusLabel,
 } from './FrontEndModel.js';
 
@@ -25,6 +28,13 @@ test('completed races return to their mode submenu and retain course focus', () 
   assert.deepEqual(modeMenuTarget('story', 2, STORY_PHASES.RIVALS), {
     view: 'story', selection: 2, storyPhase: STORY_PHASES.RIVALS,
   });
+  assert.deepEqual(
+    modeMenuTarget('story', 1, STORY_PHASES.RIVALS, STORY_PAGES.GARAGE),
+    {
+      view: 'story', selection: 1, storyPhase: STORY_PHASES.RIVALS,
+      storyPage: STORY_PAGES.GARAGE,
+    },
+  );
   assert.deepEqual(modeMenuTarget('endless', 9), {
     view: 'main', selection: 0,
   });
@@ -76,6 +86,19 @@ test('L/R trophy navigation alternates between school and player records', () =>
   assert.equal(cycleTrophyPage(TROPHY_PAGES.SCHOOL, 'right'), TROPHY_PAGES.RECORDS);
   assert.equal(cycleTrophyPage(TROPHY_PAGES.RECORDS, 'right'), TROPHY_PAGES.SCHOOL);
   assert.equal(cycleTrophyPage(TROPHY_PAGES.RECORDS, 'left'), TROPHY_PAGES.SCHOOL);
+});
+
+test('L/R Story navigation alternates between courses and garage', () => {
+  assert.equal(cycleStoryPage(STORY_PAGES.COURSES, 'right'), STORY_PAGES.GARAGE);
+  assert.equal(cycleStoryPage(STORY_PAGES.GARAGE, 'left'), STORY_PAGES.COURSES);
+  assert.equal(cycleStoryPage(STORY_PAGES.GARAGE, 'right'), STORY_PAGES.COURSES);
+});
+
+test('garage continuation preserves repairs while fresh launches reset', () => {
+  assert.equal(shouldResetFrontEndLaunch({ mode: 'story' }, false), true);
+  assert.equal(shouldResetFrontEndLaunch({ mode: 'story' }, true), false);
+  assert.equal(shouldResetFrontEndLaunch({ mode: 'training' }, true), true);
+  assert.equal(shouldResetFrontEndLaunch({ mode: 'endless' }, true), true);
 });
 
 test('school view models preserve sequential locks and saved trophy results', () => {

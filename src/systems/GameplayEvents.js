@@ -75,13 +75,13 @@ export function validGameplayEvent(event, type = null) {
   if (event.type === 'style_reward') {
     const allowed = new Set([
       'styleId', 'attackClass', 'sequence', 'count', 'tier', 'seconds',
-      'heldSeconds', 'repeatCount', 'latestEventId',
+      'heldSeconds', 'cash', 'repeatCount', 'latestEventId',
     ]);
     if (!hasOnlyKeys(payload, allowed) ||
         !STYLE_IDS.has(payload.styleId) ||
         !ATTACK_CLASSES.has(payload.attackClass) ||
         !validPositiveInteger(payload.sequence)) return false;
-    const optionalNumbers = ['count', 'tier', 'seconds', 'heldSeconds'];
+    const optionalNumbers = ['count', 'tier', 'seconds', 'heldSeconds', 'cash'];
     if (optionalNumbers.some((key) => payload[key] != null &&
         (!Number.isFinite(payload[key]) || payload[key] < 0))) return false;
     return validCompressionMetadata(payload);

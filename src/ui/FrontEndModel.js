@@ -37,6 +37,25 @@ export const STORY_PHASES = Object.freeze({
   RIVALS: 'rivals',
 });
 
+export const STORY_PAGES = Object.freeze({
+  COURSES: 'courses',
+  GARAGE: 'garage',
+});
+
+export function cycleStoryPage(page, direction) {
+  if (direction === 'left') {
+    return page === STORY_PAGES.GARAGE ? STORY_PAGES.COURSES : STORY_PAGES.GARAGE;
+  }
+  if (direction === 'right') {
+    return page === STORY_PAGES.COURSES ? STORY_PAGES.GARAGE : STORY_PAGES.COURSES;
+  }
+  return page;
+}
+
+export function shouldResetFrontEndLaunch(data, hasGarageData = false) {
+  return !(data?.mode === 'story' && hasGarageData);
+}
+
 export const TROPHY_PAGES = Object.freeze({
   SCHOOL: 'school',
   RECORDS: 'records',
@@ -90,7 +109,7 @@ export function buildStoryCourseTiles(tracks, resultForTrack) {
   });
 }
 
-export function modeMenuTarget(mode, trackIndex = 0, phase = null) {
+export function modeMenuTarget(mode, trackIndex = 0, phase = null, storyPage = null) {
   const selection = Number.isInteger(trackIndex) && trackIndex >= 0
     ? trackIndex
     : 0;
@@ -102,6 +121,7 @@ export function modeMenuTarget(mode, trackIndex = 0, phase = null) {
       view: FRONT_END_VIEWS.STORY,
       selection,
       storyPhase: phase ?? STORY_PHASES.QUALIFIER,
+      ...(storyPage == null ? {} : { storyPage }),
     });
   }
   return Object.freeze({ view: FRONT_END_VIEWS.MAIN, selection: 0 });
