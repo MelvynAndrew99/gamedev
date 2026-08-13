@@ -39,7 +39,7 @@ export class Controls {
     return getPrimaryPad(this.scene.input.gamepad);
   }
 
-  read(tuning) {
+  read(tuning, options = {}) {
     let steer = 0, glide = 0, throttle = 0, brake = 0;
     let abL = false, abR = false, nitro = false;
 
@@ -59,6 +59,9 @@ export class Controls {
       abL = buttonDown(pad, 4, 'L1');
       abR = buttonDown(pad, 5, 'R1');
       nitro = buttonDown(pad, 2, 'X'); // Square on PlayStation, X on Xbox
+      // Circle / B becomes an intuitive aerial brake only in the isolated
+      // Flight School event. It remains a menu/back action everywhere else.
+      if (options.flight) brake = Math.max(brake, buttonValue(pad, 1, 'B'));
       if (dpadDown(pad, 'left')) steer = -1;
       if (dpadDown(pad, 'right')) steer = 1;
       if (buttonDown(pad, 0, 'A')) throttle = Math.max(throttle, 1); // Cross / A

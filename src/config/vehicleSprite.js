@@ -18,7 +18,7 @@ export const VEHICLE_HULL_FRAME_RATIO =
   VEHICLE_NEUTRAL_HULL_WIDTH / VEHICLE_FRAME_WIDTH;
 export const VEHICLE_FRAME_ASPECT = VEHICLE_FRAME_HEIGHT / VEHICLE_FRAME_WIDTH;
 export const VEHICLE_GAMEPLAY_SCALE = 1.4;
-export const VEHICLE_TITLE_SCALE = 1.12;
+export const VEHICLE_TITLE_SCALE = 0.98;
 
 export const VEHICLE_TEXTURES = Object.freeze({
   composite: 'car',
@@ -34,6 +34,26 @@ export const VEHICLE_LIVERIES = Object.freeze([
   0xb978ff,
   0xff6b5c,
 ]);
+
+export const VEHICLE_LIVERY_NAMES = Object.freeze([
+  'PULSE BLUE',
+  'NEON PINK',
+  'GOLD RUSH',
+  'LASER GREEN',
+  'VIOLET DRIVE',
+  'HEAT CORAL',
+]);
+
+export function vehicleLiveryIndex(color) {
+  const index = VEHICLE_LIVERIES.indexOf(Number(color));
+  return index >= 0 ? index : 0;
+}
+
+export function nextVehicleLivery(color, direction = 1) {
+  const index = vehicleLiveryIndex(color);
+  const step = direction < 0 ? -1 : 1;
+  return VEHICLE_LIVERIES[(index + step + VEHICLE_LIVERIES.length) % VEHICLE_LIVERIES.length];
+}
 
 export function loadVehicleSheets(scene) {
   const frameConfig = {

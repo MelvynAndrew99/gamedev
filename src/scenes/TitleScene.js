@@ -3,8 +3,12 @@
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
 import {
+  VEHICLE_LIVERIES,
+  VEHICLE_LIVERY_NAMES,
   VEHICLE_TITLE_SCALE,
   loadVehicleSheets,
+  nextVehicleLivery,
+  vehicleLiveryIndex,
 } from '../config/vehicleSprite.js';
 import { createVehicleSprite } from '../entities/VehicleSprite.js';
 import {
@@ -35,6 +39,7 @@ import { PROVING_GROUND_THEME } from '../audio/tracks/provingGroundTheme.js';
 import { REDLINE_GAUNTLET_THEME } from '../audio/tracks/redlineGauntletTheme.js';
 import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
 import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
+import { FLIGHT_SCHOOL_THEME } from '../audio/tracks/flightSchoolTheme.js';
 import { TITLE_THEME } from '../audio/tracks/titleTheme.js';
 import { garageActionBlocked, garageItemBadge } from '../ui/GarageModel.js';
 import { rumbleGamepad } from '../systems/Haptics.js';
@@ -53,6 +58,7 @@ import {
   buildSchoolTiles,
   buildStoryCourseTiles,
   buildTrophySummary,
+  carouselWindow,
   cycleTrophyPage,
   cycleStoryPage,
   moveGridSelection,
@@ -60,6 +66,12 @@ import {
   shouldResetFrontEndLaunch,
   trophyStatusLabel,
 } from '../ui/FrontEndModel.js';
+import {
+  compileCustomTrack,
+  customBuilderUnlocked,
+  deleteCustomTrack,
+  loadCustomTracks,
+} from '../systems/CustomTracks.js';
 
 export const GAME_TITLE = 'RHYTHMIC RIDE';
 
@@ -81,6 +93,18 @@ const COLORS = Object.freeze({
   silver: 0xc9d4e6,
 });
 
+// Generated carousel emblems share the title city's navy/pearl/gold materials
+// and cyan/magenta rim light. Their individual display boxes preserve each
+// silhouette at the small neighbour scales instead of forcing every subject
+// through one generic square icon treatment.
+const CAROUSEL_ICONS = Object.freeze({
+  [FRONT_END_VIEWS.SCHOOL]: Object.freeze({ key: 'menu-icon-school', width: 102, height: 96 }),
+  [FRONT_END_VIEWS.STORY]: Object.freeze({ key: 'menu-icon-story', width: 108, height: 110 }),
+  [FRONT_END_VIEWS.TROPHIES]: Object.freeze({ key: 'menu-icon-trophies', width: 110, height: 100 }),
+  endless: Object.freeze({ key: 'menu-icon-endless', width: 126, height: 70 }),
+  [FRONT_END_VIEWS.CUSTOM]: Object.freeze({ key: 'menu-icon-custom', width: 106, height: 108 }),
+});
+
 const VIEW_META = Object.freeze({
   [FRONT_END_VIEWS.SCHOOL]: {
     eyebrow: 'RACE SCHOOL',
@@ -97,6 +121,21 @@ const VIEW_META = Object.freeze({
     title: 'TROPHY ROOM',
     help: 'L / R (Q / E) PAGE   ARROWS INSPECT   B / ESC BACK',
   },
+  [FRONT_END_VIEWS.CUSTOM]: {
+    eyebrow: 'COMPLETION REWARD',
+    title: 'CUSTOM TRACKS',
+    help: 'ARROWS SELECT   A / ENTER RACE   X / SPACE EDIT   B / ESC BACK',
+  },
+});
+
+// Opening the carousel must not disturb the box-art composition. One shared
+// pose makes that invariant explicit: the car stays the grounded foreground
+// arrow while navigation occupies the empty perspective corridor above it.
+const TITLE_POSE = Object.freeze({
+  logoY: 168,
+  logoScale: 1.08,
+  carY: 558,
+  carScale: 1.38,
 });
 
 const STYLE_RECORDS = Object.freeze([
@@ -122,6 +161,8 @@ const GARAGE_PLAYLIST = Object.freeze([
     discovered: (scene) => scene.storyTiles.some((tile) => tile.rivals.complete) }),
   Object.freeze({ label: 'RACE SCHOOL', track: TRAINING_LOOP_THEME,
     discovered: (scene) => scene.schoolTiles.some((tile) => tile.completed) }),
+  Object.freeze({ label: 'CLOUDLINE PROMISE', track: FLIGHT_SCHOOL_THEME,
+    discovered: () => true }),
 ]);
 
 const GARAGE_ITEM_UI = Object.freeze({
@@ -183,6 +224,13 @@ function shortPlace(place) {
   return `${place}${suffix}`;
 }
 
+function shortEarnedDate(timestamp) {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 'LEGACY SAVE';
+  return `EARNED ${new Date(timestamp).toLocaleDateString(undefined, {
+    month: 'numeric', day: 'numeric', year: '2-digit',
+  })}`;
+}
+
 export class TitleScene extends Phaser.Scene {
   constructor() {
     super({ key: 'TitleScene' });
@@ -199,10 +247,13 @@ export class TitleScene extends Phaser.Scene {
     this.entryStoryPhase = data.storyPhase === STORY_PHASES.RIVALS
       ? STORY_PHASES.RIVALS
       : STORY_PHASES.QUALIFIER;
-    this.entryStoryPage = data.storyPage === STORY_PAGES.GARAGE
-      ? STORY_PAGES.GARAGE
+    this.entryStoryPage = Object.values(STORY_PAGES).includes(data.storyPage)
+      ? data.storyPage
       : STORY_PAGES.COURSES;
     this.entryGarageData = data.garageData ?? null;
+    // A cold boot begins as an uncluttered box-art title. Returning from a
+    // race or builder carries menuOpen so players land directly on navigation.
+    this.entryMenuOpen = data.menuOpen === true || this.entryView !== FRONT_END_VIEWS.MAIN;
   }
 
   preload() {
@@ -213,6 +264,12 @@ export class TitleScene extends Phaser.Scene {
     this.load.image('ramp', 'assets/ramp.png');
     this.load.image('boost', 'assets/boost.png');
     this.load.image('title-city-bg', 'assets/title-city-bg-v2.png');
+    this.load.image('flight-school-city', 'assets/flight-school-city-v2.png');
+    this.load.image('menu-icon-school', 'assets/menu-icon-school-v1.png');
+    this.load.image('menu-icon-story', 'assets/menu-icon-story-v1.png');
+    this.load.image('menu-icon-trophies', 'assets/menu-icon-trophies-v1.png');
+    this.load.image('menu-icon-endless', 'assets/menu-icon-endless-v1.png');
+    this.load.image('menu-icon-custom', 'assets/menu-icon-custom-v1.png');
     this.load.spritesheet('trophy-atlas', 'assets/trophy-atlas-v1.png', {
       frameWidth: 627,
       frameHeight: 627,
@@ -224,17 +281,20 @@ export class TitleScene extends Phaser.Scene {
     // persistent Story hull before any garage/tow logic reads it.
     RACER.endEndlessRun();
     this.view = this.entryView;
+    this.menuOpen = this.entryMenuOpen;
     this.selectionByView = {
       [FRONT_END_VIEWS.MAIN]: 0,
       [FRONT_END_VIEWS.SCHOOL]: 0,
       [FRONT_END_VIEWS.STORY]: 0,
       [FRONT_END_VIEWS.TROPHIES]: 0,
+      [FRONT_END_VIEWS.CUSTOM]: 0,
     };
     this.launching = false;
     this.prevPad = null;
     this.trophyPage = TROPHY_PAGES.SCHOOL;
     this.storyPage = this.entryStoryPage;
     this.garageSelection = 0;
+    this.customSelection = 0;
     this.garageMessage = '';
     this.garageTrackIndex = 0;
     this.garageNowPlaying = GARAGE_PLAYLIST[0].label;
@@ -268,7 +328,7 @@ export class TitleScene extends Phaser.Scene {
     this.keys = this.input.keyboard.addKeys({
       up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT',
       enter: 'ENTER', space: 'SPACE', escape: 'ESC', backspace: 'BACKSPACE',
-      tabLeft: 'Q', tabRight: 'E', pauseMusic: 'P',
+      tabLeft: 'Q', tabRight: 'E', pauseMusic: 'P', delete: 'DELETE',
     });
 
     this.padText = this.add.text(WIDTH - SAFE, HEIGHT - 11, '', {
@@ -302,7 +362,8 @@ export class TitleScene extends Phaser.Scene {
     };
     this.titleRoadMotion = this.add.graphics().setDepth(5);
 
-    this.logoExtrusion = this.add.text(WIDTH / 2 + 7, 82, GAME_TITLE.replace(' ', '\n'), {
+    const pose = TITLE_POSE;
+    this.logoExtrusion = this.add.text(WIDTH / 2 + 7, pose.logoY + 8, GAME_TITLE.replace(' ', '\n'), {
       fontFamily: 'Arial Black, Impact, sans-serif',
       fontSize: '55px',
       fontStyle: 'bold italic',
@@ -311,8 +372,8 @@ export class TitleScene extends Phaser.Scene {
       lineSpacing: -14,
       stroke: colorCss(COLORS.ink),
       strokeThickness: 12,
-    }).setOrigin(0.5).setDepth(7).setScale(0.86).setAlpha(0);
-    this.logo = this.add.text(WIDTH / 2, 74, GAME_TITLE.replace(' ', '\n'), {
+    }).setOrigin(0.5).setDepth(7).setScale(pose.logoScale).setAlpha(0);
+    this.logo = this.add.text(WIDTH / 2, pose.logoY, GAME_TITLE.replace(' ', '\n'), {
       fontFamily: 'Arial Black, Impact, sans-serif',
       fontSize: '55px',
       fontStyle: 'bold italic',
@@ -322,15 +383,24 @@ export class TitleScene extends Phaser.Scene {
       stroke: colorCss(COLORS.magenta),
       strokeThickness: 7,
       shadow: { offsetX: 4, offsetY: 5, color: '#08031c', blur: 0, fill: true },
-    }).setOrigin(0.5).setDepth(8).setScale(0.86).setAlpha(0);
+    }).setOrigin(0.5).setDepth(8).setScale(pose.logoScale).setAlpha(0);
     this.logo.setData('cyanStroke', true);
+    const logoTargetX = WIDTH / 2;
+    this.logo.setX(-190);
+    this.logoExtrusion.setX(-183);
     this.tweens.add({
-      targets: [this.logo, this.logoExtrusion],
+      targets: this.logo,
       alpha: 1,
-      scaleX: 1,
-      scaleY: 1,
+      x: logoTargetX,
       duration: 440,
-      ease: 'Back.out',
+      ease: 'Cubic.out',
+    });
+    this.tweens.add({
+      targets: this.logoExtrusion,
+      alpha: 1,
+      x: logoTargetX + 7,
+      duration: 440,
+      ease: 'Cubic.out',
     });
     this.logoAccent = this.add.graphics().setDepth(7);
 
@@ -340,12 +410,23 @@ export class TitleScene extends Phaser.Scene {
     // wheels onto an anti-gravity vehicle.
     this.carGrounding = this.add.graphics().setDepth(5);
     this.carGrounding.fillStyle(0x03020d, 0.72);
-    this.carGrounding.fillEllipse(WIDTH / 2, 422, 122, 18);
+    this.carGrounding.fillEllipse(WIDTH / 2, TITLE_POSE.carY - 2, 108, 16);
     this.carGrounding.lineStyle(2, COLORS.magenta, 0.34);
-    this.carGrounding.strokeEllipse(WIDTH / 2, 422, 112, 12);
-    this.car = createVehicleSprite(this, WIDTH / 2, 424, carSpriteFrame(2, 0))
-      .setScale(VEHICLE_TITLE_SCALE)
+    this.carGrounding.strokeEllipse(WIDTH / 2, TITLE_POSE.carY - 2, 100, 11);
+    this.car = createVehicleSprite(
+      this,
+      WIDTH / 2,
+      pose.carY,
+      carSpriteFrame(2, 0),
+      RACER.carColor,
+    )
+      .setScale(pose.carScale)
       .setDepth(6);
+    this.startTitleCarIdle();
+  }
+
+  startTitleCarIdle() {
+    this.tweens.killTweensOf(this.car);
     this.tweens.add({
       targets: this.car,
       y: '+=1',
@@ -370,8 +451,17 @@ export class TitleScene extends Phaser.Scene {
       { storyPlatinum: this.storyPlatinum },
     );
     this.trophySummary = buildTrophySummary(this.schoolTiles);
+    if (this.trophySummary.drivingAllGold && !RACER.paintBoothUnlocked) {
+      RACER.paintBoothUnlocked = true;
+    }
     this.playerProfile = getPlayerProfile();
     this.playerAchievements = achievementViews(this.playerProfile);
+    this.customTracks = loadCustomTracks();
+    this.customUnlocked = customBuilderUnlocked(this.schoolTiles, this.storyTiles);
+    this.customSelection = Math.min(
+      this.customSelection ?? 0,
+      Math.max(0, this.customActions().length - 1),
+    );
   }
 
   update(time) {
@@ -405,12 +495,21 @@ export class TitleScene extends Phaser.Scene {
         row % 2 ? COLORS.magenta : 0xa76cff,
         alpha * (0.35 + depth * 0.65),
       );
-      this.titleRoadMotion.lineBetween(
-        WIDTH / 2 - halfWidth,
-        y,
-        WIDTH / 2 + halfWidth,
-        y,
-      );
+      const left = WIDTH / 2 - halfWidth;
+      const right = WIDTH / 2 + halfWidth;
+      // The title craft owns a clean hero silhouette. Crossbars remain
+      // connected to the road on either side, but never scroll through the
+      // transparent engine/underbody gaps and make the vehicle look textured.
+      const carTop = this.car.y - 112 * Math.abs(this.car.scaleY);
+      const carHalfWidth = 64 * Math.abs(this.car.scaleX);
+      const clearLeft = this.car.x - carHalfWidth;
+      const clearRight = this.car.x + carHalfWidth;
+      if (y >= carTop && y <= this.car.y && right > clearLeft && left < clearRight) {
+        if (left < clearLeft) this.titleRoadMotion.lineBetween(left, y, clearLeft, y);
+        if (right > clearRight) this.titleRoadMotion.lineBetween(clearRight, y, right, y);
+      } else {
+        this.titleRoadMotion.lineBetween(left, y, right, y);
+      }
     }
   }
 
@@ -436,7 +535,15 @@ export class TitleScene extends Phaser.Scene {
     if (justDown(this.keys.down)) this.navigate('down');
     if (justDown(this.keys.left)) this.navigate('left');
     if (justDown(this.keys.right)) this.navigate('right');
-    if (justDown(this.keys.enter) || justDown(this.keys.space)) this.activate();
+    if (justDown(this.keys.enter)) this.activate();
+    if (justDown(this.keys.space)) {
+      if (this.view === FRONT_END_VIEWS.CUSTOM) {
+        this.editSelectedCustom();
+      } else this.activate();
+    }
+    if (justDown(this.keys.delete) && this.view === FRONT_END_VIEWS.CUSTOM) {
+      this.deleteSelectedCustom();
+    }
     if (justDown(this.keys.escape) || justDown(this.keys.backspace)) this.back();
   }
 
@@ -456,12 +563,13 @@ export class TitleScene extends Phaser.Scene {
       a: buttonDown(pad, 0, 'A'),
       b: buttonDown(pad, 1, 'B'),
       x: buttonDown(pad, 2, 'X'),
+      y: buttonDown(pad, 3, 'Y'),
       l: buttonDown(pad, 4, 'L1') || buttonDown(pad, 6, 'L2'),
       r: buttonDown(pad, 5, 'R1') || buttonDown(pad, 7, 'R2'),
     };
     const prev = this.prevPad ?? {
       up: false, down: false, left: false, right: false,
-      a: true, b: true, x: true, l: true, r: true,
+      a: true, b: true, x: true, y: true, l: true, r: true,
     };
     if (this.musicPlayerOpen) {
       if (now.up && !prev.up) this.navigate('up', pad);
@@ -490,6 +598,12 @@ export class TitleScene extends Phaser.Scene {
       rumbleGamepad(pad, { duration: 55, strong: 0.12, weak: 0.3 });
       this.activate();
     }
+    if (now.x && !prev.x && this.view === FRONT_END_VIEWS.CUSTOM) {
+      this.editSelectedCustom();
+    }
+    if (now.y && !prev.y && this.view === FRONT_END_VIEWS.CUSTOM) {
+      this.deleteSelectedCustom();
+    }
     if (now.b && !prev.b) {
       rumbleGamepad(pad, { duration: 45, strong: 0.08, weak: 0.2 });
       this.back();
@@ -508,11 +622,12 @@ export class TitleScene extends Phaser.Scene {
     if (this.view === FRONT_END_VIEWS.SCHOOL) return this.schoolTiles.length;
     if (this.view === FRONT_END_VIEWS.STORY) return this.storyTiles.length;
     if (this.view === FRONT_END_VIEWS.TROPHIES) return this.schoolTiles.length;
+    if (this.view === FRONT_END_VIEWS.CUSTOM) return this.customActions().length;
     return 0;
   }
 
   columnsForView() {
-    if (this.view === FRONT_END_VIEWS.MAIN) return 2;
+    if (this.view === FRONT_END_VIEWS.MAIN) return MAIN_DESTINATIONS.length;
     if (this.view === FRONT_END_VIEWS.STORY) return 3;
     return 3;
   }
@@ -526,6 +641,7 @@ export class TitleScene extends Phaser.Scene {
 
   move(direction) {
     if (this.transitioning) return false;
+    if (this.view === FRONT_END_VIEWS.MAIN && !this.menuOpen) return false;
     if (this.musicPlayerOpen) {
       this.moveMusicPlayer(direction);
       return true;
@@ -535,6 +651,13 @@ export class TitleScene extends Phaser.Scene {
       const delta = direction === 'left' || direction === 'up' ? -1 : 1;
       this.garageSelection = (this.garageSelection + delta + count) % count;
       this.garageMessage = '';
+      this.renderView();
+      return true;
+    }
+    if (this.view === FRONT_END_VIEWS.CUSTOM) {
+      const count = this.customActions().length;
+      const delta = direction === 'left' || direction === 'up' ? -1 : 1;
+      this.customSelection = (this.customSelection + delta + count) % count;
       this.renderView();
       return true;
     }
@@ -609,12 +732,16 @@ export class TitleScene extends Phaser.Scene {
     if (this.launching || this.transitioning) return;
     const selected = this.selection();
     if (this.view === FRONT_END_VIEWS.MAIN) {
-      const destination = MAIN_DESTINATIONS[selected];
-      if (destination.id === 'endless') {
-        this.launch({ mode: 'endless' });
-      } else {
-        this.openView(destination.id);
+      if (!this.menuOpen) {
+        this.revealMainMenu();
+        return;
       }
+      const destination = MAIN_DESTINATIONS[selected];
+      if (destination.id === FRONT_END_VIEWS.CUSTOM && !this.customUnlocked) {
+        this.renderView();
+        return;
+      }
+      this.raceIntoDestination(destination);
       return;
     }
     if (this.view === FRONT_END_VIEWS.SCHOOL) {
@@ -642,7 +769,9 @@ export class TitleScene extends Phaser.Scene {
         trackIndex: tile.trackIndex,
         storyPhase: phase,
       });
+      return;
     }
+    if (this.view === FRONT_END_VIEWS.CUSTOM) this.activateCustom();
   }
 
   launch(data) {
@@ -654,6 +783,41 @@ export class TitleScene extends Phaser.Scene {
     this.scene.start('GameScene', data);
   }
 
+  raceIntoDestination(destination) {
+    if (!destination || this.transitioning) return;
+    this.transitioning = true;
+    this.ui?.setAlpha(0);
+    this.tweens.killTweensOf(this.car);
+    this.tweens.killTweensOf(this.carGrounding);
+    MUSIC.playBoostApply(3);
+    this.tweens.add({
+      targets: this.carGrounding,
+      alpha: 0,
+      scaleX: 0.18,
+      scaleY: 0.18,
+      y: -24,
+      duration: 430,
+      ease: 'Cubic.in',
+    });
+    this.tweens.add({
+      targets: this.car,
+      y: 394,
+      scaleX: 0.08,
+      scaleY: 0.08,
+      alpha: 0.35,
+      duration: 430,
+      ease: 'Cubic.in',
+      onComplete: () => {
+        this.transitioning = false;
+        this.car.setPosition(WIDTH / 2, TITLE_POSE.carY)
+          .setScale(TITLE_POSE.carScale).setAlpha(1);
+        this.carGrounding.setPosition(0, 0).setScale(1).setAlpha(1);
+        if (destination.id === 'endless') this.launch({ mode: 'endless' });
+        else this.openView(destination.id);
+      },
+    });
+  }
+
   openView(view) {
     this.view = view;
     this.musicPlayerOpen = false;
@@ -661,23 +825,39 @@ export class TitleScene extends Phaser.Scene {
     this.renderView(true);
   }
 
+  revealMainMenu() {
+    if (this.menuOpen || this.transitioning) return;
+    this.menuOpen = true;
+    this.renderView(true);
+  }
+
+  hideMainMenu() {
+    if (!this.menuOpen || this.transitioning) return;
+    this.menuOpen = false;
+    this.renderView(true);
+  }
+
   back() {
-    if (this.transitioning || this.view === FRONT_END_VIEWS.MAIN) return;
+    if (this.transitioning) return;
+    if (this.view === FRONT_END_VIEWS.MAIN) {
+      if (this.menuOpen) this.hideMainMenu();
+      return;
+    }
     if (this.musicPlayerOpen) {
       this.musicPlayerOpen = false;
       this.musicPlayerMessage = '';
       this.renderView(true);
       return;
     }
-    // The garage is a sibling of Course Select inside Story, not a dead-end
-    // destination. B / Escape and the visible Back action therefore return
-    // to the course cards first; a second Back leaves Story for the title.
-    if (this.view === FRONT_END_VIEWS.STORY && this.storyPage === STORY_PAGES.GARAGE) {
+    // The garage is a sibling of Course Select inside Story. B / Escape and
+    // the visible Back action therefore return to the course cards first.
+    if (this.view === FRONT_END_VIEWS.STORY && this.storyPage !== STORY_PAGES.COURSES) {
       this.storyPage = STORY_PAGES.COURSES;
       this.renderView(true);
       return;
     }
     this.view = FRONT_END_VIEWS.MAIN;
+    this.menuOpen = true;
     this.renderView(true);
   }
 
@@ -691,14 +871,21 @@ export class TitleScene extends Phaser.Scene {
     this.logoExtrusion.setVisible(main);
     this.logoAccent.setVisible(main);
     this.carGrounding.setAlpha(main ? 1 : 0.12);
-    this.car.setAlpha(main ? 1 : 0.18).setScale(
-      main ? VEHICLE_TITLE_SCALE : VEHICLE_TITLE_SCALE * 0.94,
-    );
+    this.car.setAlpha(main ? 1 : 0.18);
+    if (main) {
+      this.car.setScale(TITLE_POSE.carScale);
+    } else this.car.setScale(VEHICLE_TITLE_SCALE * 0.94);
 
-    if (main) this.renderMain();
+    if (main && !this.menuOpen) this.renderTitlePrompt();
+    else if (main) this.renderMain();
     else if (this.view === FRONT_END_VIEWS.SCHOOL) this.renderSchool();
     else if (this.view === FRONT_END_VIEWS.STORY) this.renderStory();
     else if (this.view === FRONT_END_VIEWS.TROPHIES) this.renderTrophies();
+    else if (this.view === FRONT_END_VIEWS.CUSTOM) {
+      this.renderSubmenuHeader();
+      this.renderCustomTracks();
+      this.renderBackAction();
+    }
 
     this.transitioning = transition;
     if (transition) {
@@ -759,17 +946,24 @@ export class TitleScene extends Phaser.Scene {
   }
 
   renderMain() {
-    MAIN_DESTINATIONS.forEach((item, index) => {
-      const column = index % 2;
-      const row = Math.floor(index / 2);
-      const x = 42 + column * 374;
-      const y = 434 + row * 70;
-      this.drawMainCard(x, y, 342, 62, item, index, index === this.selection());
+    const selectedIndex = this.selection();
+    const count = MAIN_DESTINATIONS.length;
+    const g = this.graphics();
+
+    // The city, sun, vehicle, and carousel share one vanishing axis. Mode art
+    // floats in that negative space without panels or descriptive title copy;
+    // details belong inside each destination's own submenu.
+    carouselWindow(count, selectedIndex).forEach(({ offset, index }) => {
+      const item = MAIN_DESTINATIONS[index];
+      const x = offset === -2 ? 92 : offset === -1 ? 242
+        : offset === 1 ? 558 : offset === 2 ? 708 : WIDTH / 2;
+      const scale = offset === 0 ? 1 : Math.abs(offset) === 1 ? 0.66 : 0.4;
+      this.drawCarouselMode(g, x, 320, item, index, scale, offset === 0);
     });
 
-    this.text(WIDTH / 2, 582, 'ARROWS / D-PAD MOVE   A / ENTER SELECT', {
+    this.text(WIDTH / 2, 587, '← / → CHOOSE     A / ENTER SELECT', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '13px',
+      fontSize: '11px',
       fontStyle: 'bold',
       color: colorCss(COLORS.white),
       stroke: colorCss(COLORS.ink),
@@ -777,31 +971,64 @@ export class TitleScene extends Phaser.Scene {
     }).setOrigin(0.5);
   }
 
-  drawMainCard(x, y, width, height, item, index, selected) {
-    const g = this.graphics();
-    this.drawPanel(g, x, y, width, height, selected);
-    this.drawModeIcon(g, x + 36, y + height / 2, item.id, selected);
-    this.text(x + 70, y + 12, item.kicker, {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '10px',
-      color: colorCss(selected ? COLORS.gold : COLORS.muted),
-    });
-    this.text(x + 70, y + 27, item.label, {
-      fontSize: '20px',
-      color: colorCss(selected ? COLORS.white : COLORS.silver),
-    });
+  renderTitlePrompt() {
+    this.text(WIDTH / 2, 576, 'PRESS ENTER / A', {
+      fontFamily: 'Arial, sans-serif', fontSize: '15px', fontStyle: 'bold',
+      color: colorCss(COLORS.white), stroke: colorCss(COLORS.ink), strokeThickness: 5,
+    }).setOrigin(0.5);
+    this.text(WIDTH / 2, 595, 'START YOUR RIDE', {
+      fontFamily: 'Arial, sans-serif', fontSize: '9px',
+      color: colorCss(COLORS.cyan), stroke: colorCss(COLORS.ink), strokeThickness: 3,
+    }).setOrigin(0.5, 1);
+    this.zone(WIDTH / 2, 574, 260, 46, () => this.revealMainMenu());
+  }
+
+  drawCarouselMode(g, x, y, item, index, scale, selected) {
+    const locked = item.id === FRONT_END_VIEWS.CUSTOM && !this.customUnlocked;
+    const tone = locked ? COLORS.muted : selected ? COLORS.white : 0xc4b9db;
     if (selected) {
-      this.drawSelectionChevrons(g, x, y, width, height);
-      this.pulseSelection(g);
+      g.fillStyle(COLORS.gold, 1);
+      g.fillTriangle(x - 76, y, x - 63, y - 9, x - 63, y + 9);
+      g.fillTriangle(x + 76, y, x + 63, y - 9, x + 63, y + 9);
+      g.lineStyle(3, locked ? 0x756a85 : COLORS.cyan, 0.88);
+      g.lineBetween(x - 53, y + 49, x + 53, y + 49);
+      g.lineStyle(2, COLORS.magenta, locked ? 0.25 : 0.72);
+      g.lineBetween(x - 40, y + 53, x + 40, y + 53);
     }
-    this.zone(
-      x + width / 2,
-      y + height / 2,
-      width,
-      height,
-      () => { this.selectionByView[this.view] = index; this.activate(); },
-      () => this.select(index),
-    );
+    this.drawCarouselModeArt(x, y, item.id, scale, locked, selected);
+    const label = item.id === FRONT_END_VIEWS.SCHOOL ? 'SCHOOL'
+      : item.id === FRONT_END_VIEWS.TROPHIES ? 'TROPHIES'
+        : item.label;
+    this.text(x, y + 58 * scale, label, {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: selected ? (label.length > 12 ? '15px' : '18px') : '10px',
+      fontStyle: 'bold',
+      color: colorCss(locked ? COLORS.muted : selected ? COLORS.white : COLORS.silver),
+      stroke: colorCss(COLORS.ink),
+      strokeThickness: selected ? 5 : 3,
+    }).setOrigin(0.5, 0);
+    if (selected && locked) {
+      this.text(x, y + 76, 'LOCKED', {
+        fontFamily: 'Arial, sans-serif', fontSize: '10px', fontStyle: 'bold',
+        color: colorCss(COLORS.gold), stroke: colorCss(COLORS.ink), strokeThickness: 4,
+      }).setOrigin(0.5, 0);
+    }
+    const hitWidth = selected ? 156 : 112 * scale;
+    const hitHeight = selected ? 120 : 100 * scale;
+    this.zone(x, y + 18 * scale, hitWidth, hitHeight, () => {
+      this.selectionByView[FRONT_END_VIEWS.MAIN] = index;
+      if (selected) this.activate();
+      else this.select(index);
+    }, () => this.select(index));
+  }
+
+  drawCarouselModeArt(x, y, mode, scale, locked, selected) {
+    const icon = CAROUSEL_ICONS[mode];
+    if (!icon) return;
+    const image = this.uiAdd(this.add.image(x, y - 8 * scale, icon.key))
+      .setDisplaySize(icon.width * scale, icon.height * scale)
+      .setAlpha(locked ? 0.68 : selected ? 1 : 0.76);
+    if (locked) image.setTint(0x978da8);
   }
 
   renderSubmenuHeader() {
@@ -841,33 +1068,37 @@ export class TitleScene extends Phaser.Scene {
     this.text(x + 14, y + 11, `COURSE ${index + 1}`, {
       fontFamily: 'Arial, sans-serif',
       fontSize: '10px',
-      color: colorCss(tile.locked ? COLORS.muted : COLORS.gold),
+      color: colorCss(tile.comingSoon ? COLORS.gold : tile.locked ? COLORS.muted : COLORS.gold),
     });
     this.text(x + 14, y + 29, tile.name, {
       fontSize: tile.name.length > 15 ? '16px' : '18px',
-      color: colorCss(tile.locked ? COLORS.muted : COLORS.white),
+      color: colorCss(tile.comingSoon ? COLORS.white : tile.locked ? COLORS.muted : COLORS.white),
       wordWrap: { width: width - 28 },
     });
     this.drawSchoolIllustration(g, x + 14, y + 59, width - 28, 40, index, tile.locked);
-    const status = tile.locked
-      ? '■ LOCKED'
-      : tile.trophy
-        ? `${tile.trophy.toUpperCase()} TROPHY  ${'★'.repeat(tile.stars)}`
-        : tile.completed
-          ? 'COMPLETE  •  NO TROPHY'
-          : 'OPEN  •  UNPLAYED';
+    const status = tile.comingSoon
+      ? '◆ SOON'
+      : tile.locked
+        ? '■ LOCKED'
+        : tile.trophy
+          ? `${tile.trophy.toUpperCase()} TROPHY  ${'★'.repeat(tile.stars)}`
+          : tile.completed
+            ? 'COMPLETE  •  NO TROPHY'
+            : 'OPEN  •  UNPLAYED';
     this.text(x + 14, y + 104, status, {
       fontFamily: 'Arial, sans-serif',
       fontStyle: 'bold',
       fontSize: '10px',
       color: colorCss(
-        tile.locked
-          ? COLORS.muted
-          : tile.trophy
-            ? trophyColor(tile.trophy)
-            : tile.completed
-              ? COLORS.silver
-              : COLORS.white,
+        tile.comingSoon
+          ? COLORS.gold
+          : tile.locked
+            ? COLORS.muted
+            : tile.trophy
+              ? trophyColor(tile.trophy)
+              : tile.completed
+                ? COLORS.silver
+                : COLORS.white,
       ),
     });
     if (selected) {
@@ -914,28 +1145,166 @@ export class TitleScene extends Phaser.Scene {
 
   renderStoryTabs() {
     const pages = [
-      { id: STORY_PAGES.COURSES, x: 430, label: 'COURSE SELECT', cue: 'L' },
-      { id: STORY_PAGES.GARAGE, x: 600, label: 'PIT GARAGE', cue: 'R' },
+      { id: STORY_PAGES.COURSES, x: 458, label: 'COURSES' },
+      { id: STORY_PAGES.GARAGE, x: 614, label: 'PIT GARAGE' },
     ];
     const g = this.graphics();
     pages.forEach((page) => {
       const active = this.storyPage === page.id;
       g.fillStyle(active ? COLORS.panelAlt : COLORS.ink, 0.94);
-      g.fillRect(page.x, 45, 158, 34);
+      g.fillRect(page.x, 45, 146, 34);
       g.lineStyle(active ? 3 : 1, active ? COLORS.cyan : 0x5c5577, 1);
-      g.strokeRect(page.x, 45, 158, 34);
-      this.text(page.x + 79, 55, `${page.cue}  ${active ? '▶ ' : ''}${page.label}`, {
+      g.strokeRect(page.x, 45, 146, 34);
+      this.text(page.x + 73, 55, `${active ? '▶ ' : ''}${page.label}`, {
         fontFamily: 'Arial, sans-serif',
         fontSize: '10px',
         fontStyle: 'bold',
         color: colorCss(active ? COLORS.white : COLORS.muted),
       }).setOrigin(0.5, 0);
-      this.zone(page.x + 79, 62, 158, 34, () => {
+      this.zone(page.x + 73, 62, 146, 34, () => {
         if (this.storyPage === page.id) return;
         this.storyPage = page.id;
         this.renderView(true);
       });
     });
+  }
+
+  customActions() {
+    return [
+      { id: 'new', kind: 'new', label: 'BUILD A NEW TRACK' },
+      ...(this.customTracks ?? []).map((track) => ({
+        id: track.id, kind: 'track', label: track.name, track,
+      })),
+    ];
+  }
+
+  activateCustom() {
+    if (!this.customUnlocked) {
+      this.renderView();
+      return;
+    }
+    const action = this.customActions()[this.customSelection];
+    if (!action || action.kind === 'new') {
+      this.scene.start('TrackBuilderScene');
+      return;
+    }
+    this.launch({
+      mode: 'custom',
+      customTrack: compileCustomTrack(action.track),
+      customDraftId: action.track.id,
+    });
+  }
+
+  editSelectedCustom() {
+    if (!this.customUnlocked) return;
+    const action = this.customActions()[this.customSelection];
+    this.scene.start('TrackBuilderScene', action?.kind === 'track'
+      ? { trackId: action.track.id }
+      : {});
+  }
+
+  deleteSelectedCustom() {
+    if (!this.customUnlocked) return;
+    const action = this.customActions()[this.customSelection];
+    if (action?.kind !== 'track') return;
+    if (typeof globalThis.confirm === 'function' &&
+      !globalThis.confirm(`Delete ${action.track.name}?`)) return;
+    this.customTracks = deleteCustomTrack(action.track.id);
+    this.customSelection = Math.min(this.customSelection, this.customActions().length - 1);
+    this.renderView();
+  }
+
+  renderCustomTracks() {
+    if (!this.customUnlocked) {
+      const g = this.graphics();
+      this.drawPanel(g, 28, 112, 744, 310, false, true);
+      this.text(400, 154, 'TRACK BUILDER LOCKED', {
+        fontSize: '27px', color: colorCss(COLORS.white),
+        stroke: colorCss(COLORS.magenta), strokeThickness: 5,
+      }).setOrigin(0.5, 0);
+      this.text(400, 208,
+        'FINISH ALL FIVE RACE SCHOOL COURSES\nAND BOTH STORY EVENTS ON ALL THREE TRACKS', {
+          fontFamily: 'Arial, sans-serif', fontSize: '15px', fontStyle: 'bold',
+          align: 'center', color: colorCss(COLORS.gold), lineSpacing: 9,
+        }).setOrigin(0.5, 0);
+      const schoolDone = this.schoolTiles.filter(
+        (tile) => !tile.comingSoon && tile.completed,
+      ).length;
+      const storyDone = this.storyTiles.reduce((total, tile) =>
+        total + Number(tile.qualifier.attempted) + Number(tile.rivals.attempted), 0);
+      this.text(400, 304, `SCHOOL ${schoolDone}/5    STORY EVENTS ${storyDone}/6`, {
+        fontSize: '20px', color: colorCss(COLORS.cyan),
+      }).setOrigin(0.5);
+      this.text(400, 352, 'SCORE DOES NOT MATTER — COMPLETION UNLOCKS CREATION', {
+        fontFamily: 'Arial, sans-serif', fontSize: '11px', color: colorCss(COLORS.muted),
+      }).setOrigin(0.5);
+      return;
+    }
+
+    const actions = this.customActions();
+    const g = this.graphics();
+    this.text(28, 101, 'SAVED TRACKS', {
+      fontFamily: 'Arial, sans-serif', fontSize: '10px', color: colorCss(COLORS.gold),
+    });
+    actions.forEach((action, index) => {
+      const selected = index === this.customSelection;
+      const y = 121 + index * 50;
+      g.fillStyle(selected ? COLORS.panelAlt : COLORS.ink, 0.97);
+      g.fillRect(28, y, 420, 42);
+      g.lineStyle(selected ? 3 : 1, selected ? COLORS.cyan : 0x554f70, 1);
+      g.strokeRect(28, y, 420, 42);
+      g.fillStyle(action.kind === 'new'
+        ? COLORS.green
+        : index % 2 ? COLORS.magenta : COLORS.cyan, 1);
+      g.fillRect(28, y, 6, 42);
+      this.text(48, y + 9, action.label, {
+        fontSize: '15px', color: colorCss(COLORS.white),
+      });
+      if (action.track) {
+        this.text(434, y + 13,
+          `${action.track.roads.length} TILES  •  ${action.track.objects.length} PROPS`, {
+            fontFamily: 'Arial, sans-serif', fontSize: '9px', color: colorCss(COLORS.muted),
+          }).setOrigin(1, 0);
+      }
+      this.zone(238, y + 21, 420, 42, () => {
+        this.customSelection = index;
+        this.activateCustom();
+      }, () => {
+        if (this.customSelection === index) return;
+        this.customSelection = index;
+        this.renderView();
+      });
+    });
+
+    const selected = actions[this.customSelection];
+    this.drawPanel(g, 470, 121, 302, 300, false, false);
+    this.text(621, 148, selected.kind === 'new' ? 'CREATE A CIRCUIT' : selected.label, {
+      fontSize: '20px', color: colorCss(COLORS.white), align: 'center',
+      wordWrap: { width: 260 },
+    }).setOrigin(0.5, 0);
+    this.text(621, 205, selected.kind === 'new'
+      ? 'DRAG ROAD PIECES INTO A CONNECTED TOP-DOWN ROUTE, THEN LAYER CONES, ROCKS, BOOSTS, AND RAMPS.'
+      : `${selected.track.roads.length} ROAD TILES\n` +
+        `${selected.track.objects.length} PLACED OBJECTS\n` +
+        `${selected.track.environment.replaceAll('-', ' ').toUpperCase()}`, {
+        fontFamily: 'Arial, sans-serif', fontSize: '12px', color: colorCss(COLORS.silver),
+        align: 'center', lineSpacing: 8, wordWrap: { width: 258 },
+      }).setOrigin(0.5, 0);
+    this.text(621, 304, selected.kind === 'new'
+      ? 'A / ENTER  OPEN BUILDER'
+      : 'A / ENTER  RACE\nX / SPACE  EDIT\nY / DELETE  REMOVE', {
+        fontFamily: 'Arial, sans-serif', fontSize: '12px', fontStyle: 'bold',
+        color: colorCss(COLORS.gold), align: 'center', lineSpacing: 9,
+      }).setOrigin(0.5, 0);
+    if (selected.kind === 'track') {
+      this.text(532, 384, '▶ RACE', { fontSize: '10px' }).setOrigin(0.5, 0);
+      this.text(621, 384, '✎ EDIT', { fontSize: '10px' }).setOrigin(0.5, 0);
+      this.text(710, 384, '× DELETE', { fontSize: '10px', color: colorCss(COLORS.red) })
+        .setOrigin(0.5, 0);
+      this.zone(532, 392, 76, 36, () => this.activateCustom());
+      this.zone(621, 392, 76, 36, () => this.editSelectedCustom());
+      this.zone(710, 392, 76, 36, () => this.deleteSelectedCustom());
+    }
   }
 
   garageActions() {
@@ -979,6 +1348,21 @@ export class TitleScene extends Phaser.Scene {
         buy: () => buyGarageItem(RACER, item.id),
       });
     });
+    const colorIndex = vehicleLiveryIndex(RACER.carColor);
+    actions.push({
+      id: 'car_color',
+      category: 'CUSTOMIZE',
+      label: 'CAR COLOR EDITOR',
+      cost: null,
+      icon: 'paint',
+      paintEditor: true,
+      locked: !RACER.paintBoothUnlocked,
+      lockReason: 'EARN GOLD IN RACE SCHOOL COURSES 1–5',
+      badge: RACER.paintBoothUnlocked ? VEHICLE_LIVERY_NAMES[colorIndex] : undefined,
+      description: RACER.paintBoothUnlocked
+        ? 'Cycle the Pulsewing hull color. Glass, engines, lights, and trim stay original.'
+        : 'Gold the five driving lessons to unlock paint customization.',
+    });
     if (this.garageData?.wrecked) {
       actions.push({
         id: 'retry',
@@ -997,6 +1381,17 @@ export class TitleScene extends Phaser.Scene {
   activateGarage() {
     const action = this.garageActions()[this.garageSelection];
     if (!action) return;
+    if (action.paintEditor) {
+      if (action.locked) {
+        this.garageMessage = `LOCKED  •  ${action.lockReason}`;
+      } else {
+        RACER.carColor = nextVehicleLivery(RACER.carColor);
+        this.car.setLivery(RACER.carColor);
+        this.garageMessage = `${VEHICLE_LIVERY_NAMES[vehicleLiveryIndex(RACER.carColor)]} EQUIPPED`;
+      }
+      this.renderView();
+      return;
+    }
     if (action.jukebox && action.owned) {
       this.musicPlayerOpen = true;
       this.musicPlayerMessage = '';
@@ -1430,6 +1825,8 @@ export class TitleScene extends Phaser.Scene {
     const canAfford = action.cost == null || RACER.money >= action.cost;
     const prompt = action.retry
       ? 'A / ENTER  RACE AGAIN'
+      : action.paintEditor && !action.locked
+        ? 'A / ENTER  CHANGE COLOR'
       : action.jukebox && action.owned
         ? `A / ENTER  OPEN PLAYER  •  ${this.garageNowPlaying}`
       : blocked
@@ -1463,6 +1860,12 @@ export class TitleScene extends Phaser.Scene {
       g.lineBetween(x - 5 * scale, y - 12 * scale, x + 10 * scale, y - 16 * scale);
       g.strokeCircle(x - 11 * scale, y + 10 * scale, 6 * scale);
       g.strokeCircle(x + 5 * scale, y + 6 * scale, 6 * scale);
+    } else if (action.icon === 'paint') {
+      g.strokeCircle(x, y, 14 * scale);
+      g.lineBetween(x - 10 * scale, y + 10 * scale, x + 10 * scale, y - 10 * scale);
+      g.fillStyle(color, 1);
+      g.fillCircle(x - 5 * scale, y - 5 * scale, 3 * scale);
+      g.fillCircle(x + 5 * scale, y + 5 * scale, 3 * scale);
     } else {
       g.lineBetween(x - 12 * scale, y, x + 12 * scale, y);
       g.lineBetween(x, y - 12 * scale, x, y + 12 * scale);
@@ -1470,6 +1873,32 @@ export class TitleScene extends Phaser.Scene {
   }
 
   drawGarageItemPreview(g, x, y, action) {
+    if (action.paintEditor) {
+      const preview = this.uiAdd(createVehicleSprite(
+        this,
+        x,
+        y + 26,
+        carSpriteFrame(2, 0),
+        RACER.carColor,
+      )).setScale(0.95);
+      VEHICLE_LIVERIES.forEach((color, index) => {
+        const swatchX = x - 75 + index * 30;
+        const selected = index === vehicleLiveryIndex(RACER.carColor);
+        g.fillStyle(color, action.locked ? 0.24 : 1);
+        g.fillRect(swatchX - 9, y + 46, 18, 12);
+        g.lineStyle(selected ? 3 : 1, selected ? COLORS.white : 0x655a86, 1);
+        g.strokeRect(swatchX - 10, y + 45, 20, 14);
+        if (!action.locked) {
+          this.zone(swatchX, y + 52, 26, 24, () => {
+            RACER.carColor = color;
+            this.car.setLivery(color);
+            this.garageMessage = `${VEHICLE_LIVERY_NAMES[index]} EQUIPPED`;
+            this.renderView();
+          });
+        }
+      });
+      return;
+    }
     this.drawGarageItemIcon(g, x, y - 7, action, 2.1);
     if (action.icon === 'crew') {
       // Tool arms flanking the car turn pit-crew levels into a visible bay
@@ -1675,13 +2104,13 @@ export class TitleScene extends Phaser.Scene {
       28, 376, 744, 54,
     );
 
-    const rewardText = this.trophySummary.allGold
-      ? 'ALL-GOLD REWARD READY'
-      : 'LOCKED — EARN GOLD IN EVERY COURSE';
+    const rewardText = this.trophySummary.drivingAllGold
+      ? 'CAR COLOR EDITOR UNLOCKED IN THE PIT GARAGE'
+      : 'LOCKED — GOLD RACE SCHOOL COURSES 1–5 FOR CAR COLORS';
     const g = this.graphics();
     g.fillStyle(COLORS.ink, 0.92);
     g.fillRect(28, 440, 744, 78);
-    g.lineStyle(3, this.trophySummary.allGold ? COLORS.gold : 0x5c5577, 1);
+    g.lineStyle(3, this.trophySummary.drivingAllGold ? COLORS.gold : 0x5c5577, 1);
     g.strokeRect(28, 440, 744, 78);
     this.text(42, 451, 'RACE SCHOOL COLLECTION', {
       fontFamily: 'Arial, sans-serif',
@@ -1696,7 +2125,7 @@ export class TitleScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif',
       fontSize: '10px',
       fontStyle: 'bold',
-      color: colorCss(this.trophySummary.allGold ? COLORS.green : COLORS.muted),
+      color: colorCss(this.trophySummary.drivingAllGold ? COLORS.green : COLORS.muted),
     });
     ['bronze', 'silver', 'gold'].forEach((rank, index) => {
       const earned = this.schoolTiles.some((tile) => tile.trophy === rank);
@@ -1837,16 +2266,28 @@ export class TitleScene extends Phaser.Scene {
       wordWrap: { width: width - 94 },
       color: colorCss(tile.locked ? COLORS.muted : tile.trophy ? COLORS.white : COLORS.muted),
     });
-    this.text(x + 82, y + 63, trophyStatusLabel(tile), {
+    this.text(x + 82, y + 61, trophyStatusLabel(tile), {
       fontFamily: 'Arial, sans-serif',
       fontSize: tile.completed && !tile.trophy ? '9px' : '11px',
       fontStyle: 'bold',
       color: colorCss(tile.locked ? COLORS.muted : tile.trophy ? trophyColor(tile.trophy) : COLORS.muted),
     });
-    this.text(x + 82, y + 84, `${'★'.repeat(tile.stars)}${'☆'.repeat(tile.maxStars - tile.stars)}`, {
+    if (tile.trophy) {
+      this.text(x + 82, y + 78, shortEarnedDate(tile.earnedAt), {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '8px',
+        fontStyle: 'bold',
+        color: colorCss(tile.earnedAt ? COLORS.gold : COLORS.muted),
+      });
+    }
+    this.text(x + 82, y + 94, tile.comingSoon
+      ? 'POST-JAM PREVIEW'
+      : `${'★'.repeat(tile.stars)}${'☆'.repeat(tile.maxStars - tile.stars)}`, {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
-      color: colorCss(tile.locked ? COLORS.muted : tile.trophy ? trophyColor(tile.trophy) : COLORS.muted),
+      fontSize: tile.comingSoon ? '8px' : '14px',
+      color: colorCss(tile.comingSoon
+        ? COLORS.gold
+        : tile.locked ? COLORS.muted : tile.trophy ? trophyColor(tile.trophy) : COLORS.muted),
     });
     if (selected) {
       this.drawSelectionChevrons(g, x, y, width, height);
@@ -1882,11 +2323,14 @@ export class TitleScene extends Phaser.Scene {
     this.zone(718, 553, 108, 37, () => this.back());
   }
 
-  drawPanel(g, x, y, width, height, selected, locked = false) {
+  drawPanel(g, x, y, width, height, selected, locked = false, panelAlpha = 0.97) {
     const lift = selected ? -4 : 0;
-    g.fillStyle(COLORS.ink, 0.72);
+    g.fillStyle(COLORS.ink, Math.min(0.72, panelAlpha * 0.68));
     g.fillRect(x + 7, y + 8 + lift, width, height);
-    g.fillStyle(locked ? 0x121024 : selected ? COLORS.panelAlt : COLORS.panel, 0.97);
+    g.fillStyle(
+      locked ? 0x121024 : selected ? COLORS.panelAlt : COLORS.panel,
+      panelAlpha,
+    );
     g.fillRect(x, y + lift, width, height);
     g.lineStyle(selected ? 5 : 2, selected ? COLORS.cyan : 0x655a86, 1);
     g.strokeRect(x, y + lift, width, height);
@@ -1945,6 +2389,14 @@ export class TitleScene extends Phaser.Scene {
     }
     if (mode === FRONT_END_VIEWS.TROPHIES) {
       this.drawTrophyIcon(g, x, y, selected ? 'gold' : 'silver', 0.46);
+      return;
+    }
+    if (mode === FRONT_END_VIEWS.CUSTOM) {
+      g.strokeRect(x - 13, y - 13, 26, 26);
+      g.lineBetween(x - 13, y, x + 13, y);
+      g.lineBetween(x, y - 13, x, y + 13);
+      g.fillStyle(color, 1);
+      g.fillRect(x - 3, y - 3, 6, 6);
       return;
     }
     this.text(x, y, '∞', {

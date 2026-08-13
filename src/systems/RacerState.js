@@ -5,6 +5,8 @@
 // not erase career purchases or repair the hull. This keeps TitleScene from
 // quietly deleting progression or granting free service.
 
+import { VEHICLE_LIVERIES } from '../config/vehicleSprite.js';
+
 const KEY = 'rhythmic-ride.garage.v1';
 export const RACER_PROFILE_VERSION = 1;
 
@@ -21,6 +23,7 @@ function emptyProfile() {
     pitCrewLevel: 0,
     musicPlayerUnlocked: false,
     paintBoothUnlocked: false,
+    carColor: VEHICLE_LIVERIES[0],
     afterburnerFxUnlocked: false,
     afterburnerEligible: false,
     rivalWinCount: 0,
@@ -39,6 +42,9 @@ export function sanitizeRacerProfile(value) {
   clean.pitCrewLevel = Math.min(2, nonnegativeInt(value.pitCrewLevel));
   clean.musicPlayerUnlocked = value.musicPlayerUnlocked === true;
   clean.paintBoothUnlocked = value.paintBoothUnlocked === true;
+  clean.carColor = VEHICLE_LIVERIES.includes(Number(value.carColor))
+    ? Number(value.carColor)
+    : VEHICLE_LIVERIES[0];
   clean.afterburnerFxUnlocked = value.afterburnerFxUnlocked === true;
   clean.afterburnerEligible = value.afterburnerEligible === true;
   clean.rivalWinCount = nonnegativeInt(value.rivalWinCount);
@@ -144,6 +150,14 @@ export const RACER = {
   get paintBoothUnlocked() { return profile.paintBoothUnlocked; },
   set paintBoothUnlocked(value) {
     profile.paintBoothUnlocked = value === true;
+    saveProfile();
+  },
+
+  get carColor() { return profile.carColor; },
+  set carColor(value) {
+    profile.carColor = VEHICLE_LIVERIES.includes(Number(value))
+      ? Number(value)
+      : VEHICLE_LIVERIES[0];
     saveProfile();
   },
 

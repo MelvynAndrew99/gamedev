@@ -10,11 +10,30 @@ import { RoadModel } from './RoadModel.js';
 import {
   backgroundPitchOffset,
   blendEnvironmentColors,
+  flightArchitectureFrame,
   rivalRenderAlpha,
   rivalSpriteFrameSize,
   rivalSpriteMode,
   RoadRenderer,
 } from './RoadRenderer.js';
+
+test('Flight School concourse opens around the viewport instead of framing the city', () => {
+  const section = { from: 1180, to: 1660 };
+  const approach = flightArchitectureFrame(1030, section);
+  const entrance = flightArchitectureFrame(1180, section);
+  const middle = flightArchitectureFrame(1420, section);
+  const nearExit = flightArchitectureFrame(1650, section);
+
+  assert.equal(approach.phase, 'approach');
+  assert.ok(approach.opacity < entrance.opacity);
+  assert.equal(entrance.phase, 'inside');
+  assert.ok(entrance.apertureWidth >= 800 * 0.84);
+  assert.ok(middle.apertureWidth >= 800 * 0.95);
+  assert.ok(middle.apertureHeight >= 600 * 0.89);
+  assert.ok(nearExit.apertureWidth >= 800 * 0.84);
+  assert.equal(flightArchitectureFrame(900, section), null);
+  assert.equal(flightArchitectureFrame(1800, section), null);
+});
 
 test('environment palette blend reaches each endpoint without abrupt channel jumps', () => {
   const from = { road: 0x000000, grass: 0x204060, skyBands: [0x000000] };

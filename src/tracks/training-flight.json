@@ -2,101 +2,100 @@
   "id": "training-flight",
   "name": "FLIGHT SCHOOL",
   "seed": 1106,
-  "laps": 2,
+  "laps": 1,
   "finish": "laps",
   "music": "training-loop",
-  "environment": "training-loop",
-  "intro": "Lift wings online. Launch, pull back to soar, and steer the car through its first sustained flights.",
+  "environment": "flight-school",
+  "status": "coming_soon",
+  "startFinish": false,
+  "intro": "One final lesson. You are already airborne—bank, climb, brake, and boost through the academy ring route.",
   "unlock": {
     "type": "story_platinum",
-    "lockedText": "LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK"
+    "lockedText": "COMING SOON — FLIGHT SCHOOL IS A POST-JAM PREVIEW"
   },
   "design": {
-    "focus": "A post-campaign sequel preview that turns the hover car into a lift-assisted flyer without replacing the established driving controls.",
-    "pacing": "Five broad launch windows alternate long controllable flights with generous landing straights. The first lap discovers lift; the second asks the player to chain cleaner boosted flights."
+    "focus": "A self-contained post-game sequel preview that begins in flight and teaches aerial precision without a racing launch ritual.",
+    "pacing": "Ten rings alternate broad confidence beats with lateral and vertical threading before a celebratory finish.",
+    "scope": "Flight controls, rings, and sustained lift never appear in Air School, Story, or Endless."
   },
   "flightTraining": {
-    "liftMultiplier": 2.4
-  },
-  "airtimeTraining": {
-    "objectiveUnitsPerSecond": 10
+    "airborneStart": true,
+    "initialAltitude": 0.42,
+    "initialCruiseSpeedMultiplier": 0.78,
+    "startingBoostSlots": 3,
+    "minimumAltitude": 0.12,
+    "maximumAltitude": 0.92,
+    "climbSpeed": 0.66,
+    "verticalResponse": 4.8,
+    "pitchResponse": 8.5,
+    "bankResponse": 10.5,
+    "ringCount": 10,
+    "architecturalFlyThroughs": [
+      {
+        "id": "aurora-concourse",
+        "from": 1180,
+        "to": 1660,
+        "ringIds": ["flight-ring-5", "flight-ring-6"],
+        "style": "open-atrium",
+        "design": "A broad, visibly open transit-hall route. Both target rings sit fully inside the aperture; missing either ring leaves a safe exterior line rather than causing an instant failure."
+      }
+    ]
   },
   "decoration": {
-    "roadsidePosts": true,
+    "roadsidePosts": false,
     "nitro": false,
     "zippers": false
   },
   "objectives": [
     {
-      "id": "flight-time",
-      "type": "count_event",
-      "event": "airtime",
-      "value": 180,
-      "label": "BANK 18.0s LIFT-ASSISTED FLIGHT",
-      "hudLabel": "FLIGHT TIME",
-      "display": { "scale": 0.1, "precision": 1, "unit": "s" },
-      "pointsPerUnit": 18
-    },
-    {
-      "id": "ramps",
-      "type": "count_event",
-      "event": "ramp_hit",
-      "value": 8,
-      "label": "LAUNCH 8 TIMES",
-      "hudLabel": "LAUNCHES",
-      "points": 800
-    },
-    {
-      "id": "finish",
-      "type": "complete_laps",
-      "value": 2,
-      "label": "FINISH 2 LAPS",
-      "hudLabel": "FINISH",
-      "points": 1000
+      "id": "flight-rings",
+      "type": "hit_all",
+      "target": "flight-ring",
+      "label": "FLY THROUGH 10 RINGS",
+      "hudLabel": "RINGS",
+      "pointsPerUnit": 250
     }
   ],
   "scoring": {
     "type": "trophy",
-    "version": 1,
-    "objective": "flight-time",
+    "version": 2,
+    "objective": "flight-rings",
     "thresholds": [
-      { "rank": "gold", "minimum": 180, "stars": 3 },
-      { "rank": "silver", "minimum": 130, "stars": 2 },
-      { "rank": "bronze", "minimum": 80, "stars": 1 }
+      { "rank": "gold", "minimum": 10, "stars": 3 },
+      { "rank": "silver", "minimum": 8, "stars": 2 },
+      { "rank": "bronze", "minimum": 6, "stars": 1 }
     ]
-  },
-  "lapMessages": {
-    "2": "FINAL FLIGHT  •  BOOST THE LAUNCH  •  PULL BACK TO SOAR"
   },
   "patterns": {
     "startClear": 90,
-    "finishClear": 90,
-    "placements": [
-      { "at": 150, "kind": "ramp" },
-      { "at": 430, "kind": "ramp" },
-      { "at": 710, "kind": "ramp" },
-      { "at": 990, "kind": "ramp" }
-    ]
+    "finishClear": 120,
+    "placements": []
   },
   "objects": [
-    { "id": "flight-boost-1", "at": 104, "kind": "boost", "offset": -0.55 },
-    { "id": "flight-boost-2", "at": 384, "kind": "boost", "offset": 0.55 },
-    { "id": "flight-boost-3", "at": 664, "kind": "boost", "offset": 0 },
-    { "id": "flight-boost-4", "at": 944, "kind": "boost", "offset": -0.55 }
+    { "id": "flight-ring-1", "at": 280, "kind": "flightRing", "objective": "flight-rings", "offset": 0, "altitude": 0.3, "radiusX": 0.62, "radiusY": 0.3 },
+    { "id": "flight-ring-2", "at": 520, "kind": "flightRing", "objective": "flight-rings", "offset": -0.25, "altitude": 0.44, "radiusX": 0.46, "radiusY": 0.24 },
+    { "id": "flight-ring-3", "at": 790, "kind": "flightRing", "objective": "flight-rings", "offset": 0.42, "altitude": 0.62, "radiusX": 0.34, "radiusY": 0.2 },
+    { "id": "flight-ring-4", "at": 1020, "kind": "flightRing", "objective": "flight-rings", "offset": -0.5, "altitude": 0.38, "radiusX": 0.31, "radiusY": 0.19 },
+    { "id": "flight-ring-5", "at": 1260, "kind": "flightRing", "objective": "flight-rings", "offset": 0.18, "altitude": 0.72, "radiusX": 0.38, "radiusY": 0.22 },
+    { "id": "flight-ring-6", "at": 1510, "kind": "flightRing", "objective": "flight-rings", "offset": 0.42, "altitude": 0.54, "radiusX": 0.34, "radiusY": 0.2 },
+    { "id": "flight-ring-7", "at": 1770, "kind": "flightRing", "objective": "flight-rings", "offset": -0.38, "altitude": 0.85, "radiusX": 0.28, "radiusY": 0.17 },
+    { "id": "flight-ring-8", "at": 2030, "kind": "flightRing", "objective": "flight-rings", "offset": -0.58, "altitude": 0.43, "radiusX": 0.28, "radiusY": 0.17 },
+    { "id": "flight-ring-9", "at": 2300, "kind": "flightRing", "objective": "flight-rings", "offset": 0.46, "altitude": 0.7, "radiusX": 0.27, "radiusY": 0.17 },
+    { "id": "flight-ring-10", "at": 2610, "kind": "flightRing", "objective": "flight-rings", "offset": 0, "altitude": 0.5, "radiusX": 0.34, "radiusY": 0.2 }
   ],
   "pieces": [
-    ["straight", 48],
-    ["hill", 28, 24],
-    ["straight", 38],
-    ["curve", 42, 2],
-    ["straight", 44],
-    ["hill", 30, -20],
-    ["straight", 42],
-    ["curve", 44, -2],
-    ["straight", 46],
-    ["hill", 28, 18],
-    ["straight", 50]
+    ["hill", 70, -55],
+    ["curve", 70, 1.5, -20],
+    ["straight", 80],
+    ["curve", 90, -2, 30],
+    ["hill", 80, 45],
+    ["chicane", 55, 1.8, -20],
+    ["curve", 100, 2.3, 25],
+    ["hill", 90, -25],
+    ["curve", 100, -2.4, 20],
+    ["chicane", 60, 1.6, 0],
+    ["straight", 90]
   ],
-  "obstacles": 0.01,
-  "par": 180
+  "obstacles": 0,
+  "par": 70
 }

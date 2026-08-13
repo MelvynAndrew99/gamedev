@@ -143,6 +143,9 @@ export function submitTrainingResult(track, progress, time, metrics = {}) {
     time,
   });
   const stars = trophy?.stars ?? 0;
+  const earnedAt = Number.isFinite(metrics.timestamp) && metrics.timestamp > 0
+    ? Math.floor(metrics.timestamp)
+    : Date.now();
   const newBest = previous == null ||
     stars > (previous.stars ?? 0) ||
     (
@@ -180,6 +183,11 @@ export function submitTrainingResult(track, progress, time, metrics = {}) {
       offTrackEvents,
       boostedTakedowns,
       trophy: trophy?.rank ?? null,
+      trophyEarnedAt: trophy
+        ? previous?.trophy === trophy.rank
+          ? previous.trophyEarnedAt ?? null
+          : earnedAt
+        : null,
       stars,
     };
     save(results);
@@ -201,7 +209,11 @@ export function highestUnlockedTrainingIndex(tracks) {
     const track = tracks[index];
     const nextTrack = tracks[index + 1];
     const result = getTrainingResult(track.id, track.scoring?.version ?? 1);
-    if (!result?.completed || nextTrack?.status === 'placeholder') break;
+    if (
+      !result?.completed ||
+      nextTrack?.status === 'placeholder' ||
+      nextTrack?.status === 'coming_soon'
+    ) break;
     unlocked = index + 1;
   }
   return unlocked;

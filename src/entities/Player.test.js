@@ -7,7 +7,6 @@ import { RoadModel } from '../road/RoadModel.js';
 import { checkObstacleHit } from '../systems/Collision.js';
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
-import trainingFlight from '../tracks/training-flight.json' with { type: 'json' };
 import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
 import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
 import { Player } from './Player.js';
@@ -253,16 +252,77 @@ test('Air School teaches nose-down precision by placing boost after the short la
   assert.equal(neutral.collected, false);
 });
 
-test('Flight School course lift extends the same finite controllable jump physics', () => {
+test('Flight School sustained flight is explicit and does not alter ordinary jumps', () => {
   const normal = completeJump({ speed: 1, glide: 0 });
-  const lifted = completeJump({
-    speed: 1,
-    glide: 0,
-    liftMultiplier: trainingFlight.flightTraining.liftMultiplier,
-  });
-  assert.ok(lifted.player.lastAirtime > normal.player.lastAirtime * 2);
-  assert.ok(lifted.player.lastAirtime < normal.player.lastAirtime * 3);
-  assert.equal(lifted.player.airborne, false, 'course lift must still land');
+  assert.equal(normal.player.airborne, false, 'ordinary jump still lands');
+
+  const player = new Player(TUNING);
+  player.speed = TUNING.maxSpeed;
+  player.beginSustainedFlight({ boosted: true });
+  for (let frame = 0; frame < 600; frame++) {
+    player.update(
+      1 / 60,
+      { ...NEUTRAL_INPUT, glide: frame < 300 ? 1 : -1 },
+      flatModel(),
+    );
+  }
+  assert.equal(player.airborne, true, 'sequel preview remains in flight');
+  assert.equal(player.sustainedFlight, true);
+  assert.equal(player.jumpElapsed > 9.9, true);
+});
+
+test('Flight School aircraft is not centrifugally pushed by the road below', () => {
+  const curved = {
+    trackLength: 1e9,
+    findSegment: () => ({
+      curve: 8,
+      surface: 'road',
+      p1: { world: { y: 0 } },
+      p2: { world: { y: 0 } },
+    }),
+  };
+  const flight = new Player(TUNING);
+  flight.speed = TUNING.maxSpeed;
+  flight.beginSustainedFlight();
+  flight.update(1 / 60, { ...NEUTRAL_INPUT, throttle: 1 }, curved);
+  assert.equal(flight.x, 0);
+
+  const jump = new Player(TUNING);
+  jump.speed = TUNING.maxSpeed;
+  jump.launch();
+  jump.update(1 / 60, { ...NEUTRAL_INPUT, throttle: 1 }, curved);
+  assert.notEqual(jump.x, 0, 'ordinary racing jumps still inherit course pressure');
+});
+
+test('Flight School preserves racer inputs as useful arcade flight tools', () => {
+  const model = flatModel();
+  const neutral = new Player(TUNING);
+  const controlled = new Player(TUNING);
+  for (const player of [neutral, controlled]) {
+    player.speed = TUNING.maxSpeed;
+    player.beginSustainedFlight();
+  }
+
+  neutral.update(0.25, { ...NEUTRAL_INPUT, throttle: 1 }, model);
+  controlled.update(0.25, {
+    ...NEUTRAL_INPUT,
+    steer: 1,
+    brake: 1,
+    airbrakeR: true,
+    boostActive: false,
+  }, model);
+  assert.ok(controlled.x > 0.7, 'steer plus airbrake commits to a fast bank');
+  assert.ok(controlled.speed < neutral.speed, 'aerial brake buys setup time with speed');
+
+  const boosted = new Player(TUNING);
+  boosted.speed = TUNING.maxSpeed;
+  boosted.beginSustainedFlight({ boosted: true });
+  boosted.update(0.25, {
+    ...NEUTRAL_INPUT,
+    boostActive: true,
+    boostCeiling: TUNING.boostTierCeilings[0],
+  }, model);
+  assert.ok(boosted.speed > neutral.speed, 'familiar boost remains useful in flight');
 });
 
 test('boost() gives a capped activation kick instead of teleporting to redline', () => {

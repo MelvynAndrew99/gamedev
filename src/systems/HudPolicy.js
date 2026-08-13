@@ -26,16 +26,15 @@ export function hudVisibilityPolicy({
 } = {}) {
   const training = mode === 'training';
   const endless = mode === 'endless';
-  const airSchool = training && (
-    trackId === 'training-airtime' || trackId === 'training-flight'
-  );
+  const airSchool = training && trackId === 'training-airtime';
+  const flightSchool = training && trackId === 'training-flight';
   const rivalSchool = training && trackId === 'training-rivals';
   const story = mode === 'story';
 
   return Object.freeze({
     // The numbered START→FINISH ribbon is the sole persistent lap/position
     // read. There is deliberately no second LAP x/y chip.
-    courseProgress: hasRace,
+    courseProgress: hasRace && !flightSchool,
     endlessDistance: endless,
     lapChip: false,
     healthBar: false,
@@ -43,12 +42,13 @@ export function hudVisibilityPolicy({
 
     // Training may retain a small checklist until a lesson has a dedicated
     // live coach. Story relies on authored objects and brief edge feedback.
-    objectiveRows: training && hasObjectives && !airSchool && !rivalSchool,
+    objectiveRows: training && hasObjectives && !airSchool && !flightSchool && !rivalSchool,
     // Rival School has a mode-specific combat toast with cars-remaining
     // context. Do not repeat its final takedown through the generic objective
     // channel at the same time.
     objectiveToast: hasObjectives && (!training || airSchool),
     airtimeCoach: airSchool,
+    flightHud: flightSchool,
     rivalToast: rivalSchool,
     rivalEventHud: rivalSchool,
     rivalCourseMarkers: rivalSchool && hasRace,
@@ -56,7 +56,7 @@ export function hudVisibilityPolicy({
     storyRivalMarkers: story && hasRace,
     styleRewards: (story && hasRace) || endless,
 
-    boostGauge: hasBoostCapability,
+    boostGauge: hasBoostCapability && !flightSchool,
     windshieldDamage: !training || trainingDamageMax > 0,
   });
 }

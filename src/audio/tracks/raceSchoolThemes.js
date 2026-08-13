@@ -5,6 +5,7 @@
 // mutated and remains the version exposed by the Music Player.
 
 import { TRAINING_LOOP_THEME } from './trainingLoopTheme.js';
+import { FLIGHT_SCHOOL_THEME } from './flightSchoolTheme.js';
 
 const semitoneRatio = (semitones) => Math.pow(2, semitones / 12);
 const ALL_16THS = Object.freeze(Array.from({ length: 16 }, (_, index) => index));
@@ -99,7 +100,10 @@ function makeVariant(spec) {
 }
 
 export const RACE_SCHOOL_THEMES = Object.freeze(Object.fromEntries(
-  Object.entries(RACE_SCHOOL_VARIANTS).map(([trackId, spec]) => [trackId, makeVariant(spec)]),
+  Object.entries(RACE_SCHOOL_VARIANTS).map(([trackId, spec]) => [
+    trackId,
+    trackId === 'training-flight' ? FLIGHT_SCHOOL_THEME : makeVariant(spec),
+  ]),
 ));
 
 export function raceSchoolThemeForTrack(trackId) {

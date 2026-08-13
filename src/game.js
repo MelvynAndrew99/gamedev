@@ -7,6 +7,7 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { GarageScene } from './scenes/GarageScene.js';
+import { TrackBuilderScene } from './scenes/TrackBuilderScene.js';
 import { TRACKS, TRAINING_TRACKS } from './tracks/index.js';
 import { RACER } from './systems/RacerState.js';
 import { presentationFpsLimit } from './systems/FrameRatePolicy.js';
@@ -32,7 +33,7 @@ const config = {
     limit: fpsLimit,
   },
   input: { gamepad: true },
-  scene: [TitleScene, GameScene, GarageScene, HudScene], // first boots; Hud is launched by GameScene
+  scene: [TitleScene, GameScene, GarageScene, TrackBuilderScene, HudScene],
   backgroundColor: '#0b0630',
 };
 
@@ -51,7 +52,11 @@ if (trackSelect) {
     const opt = document.createElement('option');
     opt.value = `training:${i}`;
     opt.textContent = `TRAINING — ${track.name}` +
-      (track.status === 'placeholder' ? ' [STAGED]' : '');
+      (track.status === 'placeholder'
+        ? ' [STAGED]'
+        : track.status === 'coming_soon'
+          ? ' [WIP — LAB ONLY]'
+          : '');
     trackSelect.appendChild(opt);
   });
   TRACKS.forEach((track, i) => {

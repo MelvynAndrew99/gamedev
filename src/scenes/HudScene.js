@@ -33,6 +33,7 @@ import {
   objectivePanelLayout,
   objectiveRowView,
 } from '../systems/ObjectivePresentation.js';
+import { flightHudView } from '../systems/FlightPresentation.js';
 
 const CAMERA_CRACKS = [
   [
@@ -91,6 +92,8 @@ export class HudScene extends Phaser.Scene {
     this.styleRewardParts = null;
     this.styleRewardBusy = false;
     this.boostGauge = null;
+    this.flightHudParts = null;
+    this.flightHudGraphics = null;
     this.airtimeCoachPanel = null;
     this.airtimeCoachParts = null;
     this.airtimeCoachLayout = null;
@@ -239,14 +242,18 @@ export class HudScene extends Phaser.Scene {
     if (this.hudPolicy.rivalToast) this.createRivalToast();
     if (this.hudPolicy.styleRewards) this.createStyleReward();
 
-    // Bottom-right: the speedo. Big number, small label — read at a glance.
-    chip(w - 148, h - 68, 136, 56);
-    this.speedText = this.add
-      .text(w - 26, h - 60, '', { fontSize: '30px', fontStyle: 'bold', color: '#ffffff' })
-      .setOrigin(1, 0);
-    this.add
-      .text(w - 26, h - 28, 'SPEED', { fontSize: '11px', color: '#00e5ff' })
-      .setOrigin(1, 0);
+    if (this.hudPolicy.flightHud) {
+      this.createFlightHud();
+    } else {
+      // Bottom-right: the speedo. Big number, small label — read at a glance.
+      chip(w - 148, h - 68, 136, 56);
+      this.speedText = this.add
+        .text(w - 26, h - 60, '', { fontSize: '30px', fontStyle: 'bold', color: '#ffffff' })
+        .setOrigin(1, 0);
+      this.add
+        .text(w - 26, h - 28, 'SPEED', { fontSize: '11px', color: '#00e5ff' })
+        .setOrigin(1, 0);
+    }
 
     // Boost gauge: shown on any track that actually places pickups, not just
     // non-training modes — Redline (Training 3) is the first training track
@@ -315,6 +322,7 @@ export class HudScene extends Phaser.Scene {
         this.hudPolicy.rivalEventHud ? inLap : raceProgress,
         markers,
       );
+      if (this.flightHudParts) this.updateFlightHud(time, raceProgress);
       if (this.rivalEventParts) {
         this.updateRivalEventHud(rivalPublicView, rivals, time);
       }
@@ -401,10 +409,10 @@ export class HudScene extends Phaser.Scene {
 
     // The medal-relevant read IS the speed number: an active boost tiers its
     // color (green/cyan/gold) over the plain "past the engine's ceiling" cyan.
-    this.speedText.setText(`${Math.round(gs.player.speed / 100)}`);
+    this.speedText?.setText(`${Math.round(gs.player.speed / 100)}`);
     const tier = gs.boost?.tier ?? 0;
     const tierColor = tier === 3 ? '#ffcf3f' : tier === 2 ? '#00e5ff' : tier === 1 ? '#2ee56b' : null;
-    this.speedText.setColor(
+    this.speedText?.setColor(
       tierColor ?? (gs.player.speed > TUNING.maxSpeed ? '#00e5ff' : '#ffffff'),
     );
 
@@ -434,6 +442,131 @@ export class HudScene extends Phaser.Scene {
       return;
     }
     this.storyAirtimeText.setVisible(time < this.storyAirtimeHoldUntil);
+  }
+
+  createFlightHud() {
+    const cyan = 0x22d8ff;
+    const dark = 0x05111f;
+    this.flightHudGraphics = this.add.graphics().setDepth(82);
+    this.flightControlsHideAt = this.time.now + 6000;
+
+    // Chamfered left instrument bay. A single grouped read replaces Air
+    // School's jump card and the generic objective list.
+    const left = this.add.graphics().setDepth(82);
+    left.fillStyle(dark, 0.76);
+    left.lineStyle(1, cyan, 0.72);
+    left.beginPath();
+    left.moveTo(16, 16);
+    left.lineTo(184, 16);
+    left.lineTo(202, 34);
+    left.lineTo(202, 152);
+    left.lineTo(184, 170);
+    left.lineTo(16, 170);
+    left.closePath();
+    left.fillPath();
+    left.strokePath();
+
+    this.flightModeText = this.add.text(32, 30, 'FLIGHT MODE', {
+      fontFamily: 'Arial Black, Impact, sans-serif',
+      fontSize: '17px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#05111f', strokeThickness: 4,
+    }).setDepth(84);
+    this.flightRingsText = this.add.text(32, 58, 'RINGS', {
+      fontSize: '11px', fontStyle: 'bold', color: '#67e8ff',
+      stroke: '#05111f', strokeThickness: 3,
+    }).setDepth(84);
+    this.flightRingsValue = this.add.text(184, 51, '0/10', {
+      fontSize: '23px', fontStyle: 'bold', color: '#67e8ff',
+      stroke: '#05111f', strokeThickness: 4,
+    }).setOrigin(1, 0).setDepth(84);
+    this.flightObjectiveLabel = this.add.text(32, 88, 'OBJECTIVE', {
+      fontSize: '9px', fontStyle: 'bold', color: '#7897ab',
+    }).setDepth(84);
+    this.flightObjectiveText = this.add.text(32, 105, '', {
+      fontFamily: 'Arial Black, Impact, sans-serif',
+      fontSize: '15px', fontStyle: 'bold', color: '#ffffff', lineSpacing: -2,
+      stroke: '#05111f', strokeThickness: 3,
+    }).setDepth(84);
+    this.flightAltitudeText = this.add.text(32, 146, 'ALT 00', {
+      fontSize: '11px', fontStyle: 'bold', color: '#67e8ff',
+      stroke: '#05111f', strokeThickness: 3,
+    }).setDepth(84);
+
+    this.flightProgressValue = this.add.text(400, 42, '0%', {
+      fontSize: '9px', fontStyle: 'bold', color: '#67e8ff',
+      stroke: '#05111f', strokeThickness: 3,
+    }).setOrigin(0.5, 0).setDepth(84);
+
+    this.flightSpeedText = this.add.text(736, 510, '0', {
+      fontFamily: 'Arial Black, Impact, sans-serif',
+      fontSize: '38px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#05111f', strokeThickness: 5,
+    }).setOrigin(0.5, 0).setDepth(84);
+    this.flightSpeedLabel = this.add.text(736, 554, 'SPEED', {
+      fontSize: '10px', fontStyle: 'bold', color: '#67e8ff',
+      stroke: '#05111f', strokeThickness: 3,
+    }).setOrigin(0.5, 0).setDepth(84);
+    this.flightControlsText = this.add.text(400, 576, '', {
+      fontSize: '9px', fontStyle: 'bold', color: '#b5cad6',
+      stroke: '#05111f', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(84);
+    this.flightHudParts = [
+      left, this.flightHudGraphics,
+      this.flightModeText, this.flightRingsText, this.flightRingsValue,
+      this.flightObjectiveLabel, this.flightObjectiveText,
+      this.flightAltitudeText, this.flightProgressValue,
+      this.flightSpeedText, this.flightSpeedLabel, this.flightControlsText,
+    ];
+    this.speedText = this.flightSpeedText;
+  }
+
+  updateFlightHud(time, progress) {
+    const gs = this.gs;
+    const device = gs.controls?.pad ? 'gamepad' : 'keyboard';
+    const view = flightHudView({
+      state: gs.flightSchool,
+      progress,
+      speed: gs.player.speed,
+      maxSpeed: TUNING.maxSpeed,
+      device,
+    });
+    this.flightRingsValue.setText(view.rings);
+    this.flightObjectiveText.setText(view.objective);
+    this.flightAltitudeText.setText(view.altitude);
+    this.flightProgressValue.setText(view.progressLabel);
+    this.flightControlsText
+      .setText(view.controls)
+      .setAlpha(view.showControls && time < this.flightControlsHideAt ? 1 : 0);
+
+    const g = this.flightHudGraphics;
+    g.clear();
+    // Top transit ribbon: clipped-corner glass and a luminous navigation rail.
+    g.fillStyle(0x05111f, 0.7);
+    g.fillRoundedRect(210, 14, 380, 36, 7);
+    g.lineStyle(1, 0x22d8ff, 0.62);
+    g.strokeRoundedRect(210, 14, 380, 36, 7);
+    g.fillStyle(0x102a3b, 0.94);
+    g.fillRect(224, 25, 352, 8);
+    g.fillStyle(0x22d8ff, 0.28);
+    g.fillRect(224, 23, 352 * view.progress, 12);
+    g.fillStyle(0x67e8ff, 1);
+    g.fillRect(224, 25, 352 * view.progress, 8);
+
+    // The circular speed read echoes the concept without eating the route.
+    const cx = 736;
+    const cy = 542;
+    const pulse = view.phase === 'flight' ? 0.74 + Math.sin(time / 130) * 0.12 : 0.58;
+    g.fillStyle(0x05111f, 0.68);
+    g.fillCircle(cx, cy, 51);
+    g.lineStyle(7, 0x0e3852, 0.82);
+    g.strokeCircle(cx, cy, 45);
+    g.lineStyle(3, 0x22d8ff, pulse);
+    g.beginPath();
+    g.arc(cx, cy, 45, Math.PI * 0.68,
+      Math.PI * (0.68 + Math.min(1, view.speedRatio / 1.35) * 1.64));
+    g.strokePath();
+    g.lineStyle(1, 0x67e8ff, 0.5);
+    g.strokeCircle(cx, cy, 51);
   }
 
   createObjectiveToast() {

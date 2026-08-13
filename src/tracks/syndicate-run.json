@@ -102,12 +102,12 @@
     "count": 3,
     "maxCount": 3,
     "recycleWrecks": false,
-    "racePace": 1.14,
+    "racePace": 1.04,
     "aggression": 0.62,
     "spawns": [
-      { "id": "rival-cyan", "segmentsAhead": 18, "offset": -0.55, "pace": 0.99 },
-      { "id": "rival-magenta", "segmentsAhead": 30, "offset": 0.55, "pace": 1.015 },
-      { "id": "rival-gold", "segmentsAhead": 44, "offset": 0, "pace": 1.035 }
+      { "id": "rival-cyan", "segmentsAhead": 12, "offset": -0.55, "pace": 0.97 },
+      { "id": "rival-magenta", "segmentsAhead": 22, "offset": 0.55, "pace": 0.995 },
+      { "id": "rival-gold", "segmentsAhead": 32, "offset": 0, "pace": 1.015 }
     ],
     "attackZones": [
       { "from": 295, "to": 360 },
@@ -167,6 +167,10 @@
     { "id": "boost-cycle-7", "at": 2715, "kind": "boost", "offset": 0.55 },
     { "id": "boost-cycle-8-backup", "at": 3220, "kind": "boost", "offset": -0.55 },
     { "id": "boost-cycle-8", "at": 3270, "kind": "boost", "offset": 0.55 },
+    { "id": "rival-hunt-1", "at": 250, "kind": "boost", "offset": 0.45 },
+    { "id": "rival-hunt-2", "at": 1015, "kind": "boost", "offset": -0.45 },
+    { "id": "rival-hunt-3", "at": 1950, "kind": "boost", "offset": 0.45 },
+    { "id": "rival-hunt-4", "at": 2918, "kind": "boost", "offset": -0.45 },
 
     { "id": "rock-c1-left-a", "at": 390, "kind": "rock", "offset": -0.68 },
     { "id": "rock-c1-left-b", "at": 397, "kind": "rock", "offset": -0.62 },

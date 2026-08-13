@@ -32,5 +32,6 @@ export function rivalRaceSpeedBudget(track, tuning, trackLength) {
     perfectPlayerSeconds,
     marginSeconds: fastestRivalSeconds - perfectPlayerSeconds,
     requiredCeilingFraction: requiredAverageSpeed / speedLineCeiling,
+    requiredBaseSpeedFraction: requiredAverageSpeed / maxSpeed,
   });
 }

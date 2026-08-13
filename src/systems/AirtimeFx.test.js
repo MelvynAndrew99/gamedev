@@ -7,6 +7,7 @@ import {
   airtimeFxFrame,
   airtimeTier,
   carSpriteFrame,
+  chaseSteerFrame,
   landingFxColor,
   landingFxStrength,
   nextAirtimePitch,
@@ -31,13 +32,22 @@ test('pitch policy selects authored nose rows without changing steering bucket',
   assert.equal(airtimePitchPose(-0.2), 'down');
   assert.equal(airtimePitchPose(0.2), 'up');
 
-  // Sheet rows: nose-down 0..4, neutral 5..9, nose-up 10..14.
-  assert.equal(carSpriteFrame(0, -1), 0);
-  assert.equal(carSpriteFrame(4, -1), 4);
+  // The runtime view is flipped vertically from the source-sheet naming:
+  // pushing the nose down must show the lower-row silhouette on screen.
+  assert.equal(carSpriteFrame(0, -1), 10);
+  assert.equal(carSpriteFrame(4, -1), 14);
   assert.equal(carSpriteFrame(2, 0), 7);
-  assert.equal(carSpriteFrame(0, 1), 10);
-  assert.equal(carSpriteFrame(4, 1), 14);
+  assert.equal(carSpriteFrame(0, 1), 0);
+  assert.equal(carSpriteFrame(4, 1), 4);
   assert.equal(carSpriteFrame(99, 0), 9);
+});
+
+test('rear chase steering mirrors the authored viewpoint so movement and pose agree', () => {
+  assert.equal(chaseSteerFrame(-1), 4);
+  assert.equal(chaseSteerFrame(-0.4), 3);
+  assert.equal(chaseSteerFrame(0), 2);
+  assert.equal(chaseSteerFrame(0.4), 1);
+  assert.equal(chaseSteerFrame(1), 0);
 });
 
 test('glide silhouette uses hysteresis instead of flickering around neutral', () => {

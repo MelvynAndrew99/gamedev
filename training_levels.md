@@ -459,14 +459,14 @@ The initial Training mode track list is fixed in this order:
 4. Air School — acquire ramp approaches and build controlled airtime.
 5. Rival School — score boosted wrecks during a 35-second base run, extending
    it by driving through green clock cones.
-6. Flight School — a post-campaign lift-wing preview with sustained, finite
-   controllable flight and generous landing recovery.
+6. Flight School — a visible `SOON` tile for a post-jam sustained-flight
+   preview. It is retained in Projection Lab but unavailable in the jam build.
 
 Air School remains the normal fourth lesson and unlocks after Redline. Flight
-School is shown from the beginning but is locked behind Story mastery. Unlock it
-by earning Platinum on all three Rival Races (finish first and take out all three
-rivals on each track). Its locked tile and hover description state that
-requirement directly.
+School is shown from the beginning as `SOON`, cannot launch from Race School,
+and does not count toward School trophy totals. Its former Platinum-all-rivals
+gate is retained in the course data for post-jam restoration; the complete
+handoff lives in `FLIGHT_SCHOOL_README.md`.
 
 Warning reads, zippers, surface changes, and combo lines remain future
 curriculum candidates. Proving Ground combines the completed curriculum as the
@@ -474,6 +474,16 @@ first Story race; it is not a Training track.
 
 Later lessons may add optional mastery targets, but their required objective
 should still teach one new verb. Combining skills is validation, not introduction.
+
+## Custom Track Builder unlock
+
+After finishing all five released lessons and attempting both Story events on
+all three courses, the Story submenu's third L/R page opens the Custom Track
+Builder. Scores and trophies do not gate it. The editor uses a connected
+top-down ribbon because the runtime road remains a linear pseudo-3D spline; its
+six road tiles compile directly to the normal track-data pieces. Players may
+layer cones, rocks, boosts, and ramps, apply one of four released environments,
+save six local tracks, edit them, and launch a two-lap Test Drive.
 
 ## Definition of done
 

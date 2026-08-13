@@ -172,7 +172,7 @@ test('Story courses sustain long boost-launch-precision flow with recovery', () 
     assert.equal(track.rivals.maxCount, 3);
     assert.equal(track.rivals.spawns.length, 3);
     assert.equal(track.rivals.recycleWrecks, false);
-    assert.ok(track.rivals.racePace >= 1.08 && track.rivals.racePace <= 1.16);
+    assert.ok(track.rivals.racePace >= 1.04 && track.rivals.racePace <= 1.16);
     assert.ok(track.rivals.aggression >= 0.38 && track.rivals.aggression <= 0.65);
     assert.equal(new Set(track.rivals.spawns.map((rival) => rival.id)).size, 3);
 
@@ -593,18 +593,29 @@ test('Air School preserves the shared loop and authors a safe speed-gated gap', 
   }
 });
 
-test('Flight School is the sixth finite lift course with four readable launches', () => {
+test('Flight School begins airborne with only ten authored aerial rings', () => {
   const flight = TRAINING_TRACKS[5];
   assert.equal(flight.id, 'training-flight');
   assert.equal(flight.unlock.type, 'story_platinum');
-  assert.ok(flight.flightTraining.liftMultiplier > 2);
-  assert.equal(flight.laps, 2);
+  assert.equal(flight.laps, 1);
+  assert.equal(flight.flightTraining.ringCount, 10);
+  assert.equal(flight.flightTraining.airborneStart, true);
+  assert.equal(flight.startFinish, false);
+  assert.equal(flight.decoration.roadsidePosts, false);
   const model = new RoadModel(TUNING);
   model.buildFromData(flight);
   const ramps = model.segments.flatMap((segment) => segment.sprites)
     .filter((sprite) => sprite.key === 'ramp');
-  assert.equal(ramps.length, 4);
-  assert.ok(model.segments.length > 900);
+  const rings = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.key === 'flight-ring');
+  assert.equal(ramps.length, 0);
+  assert.equal(rings.length, 10);
+  assert.equal(model.segments.some((segment) => segment.gate), false);
+  assert.equal(model.segments.some((segment) => segment.startLine), false);
+  assert.ok(flight.objects.every((object) => object.kind === 'flightRing'));
+  assert.ok(rings.every((ring) => ring.objectiveId === 'flight-rings'));
+  assert.ok(rings.every((ring) => ring.altitude >= 0.3 && ring.altitude <= 0.85));
+  assert.ok(model.segments.length > 2800);
 });
 
 test('Redline preserves the shared loop geometry and is no longer a placeholder', () => {

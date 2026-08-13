@@ -27,11 +27,23 @@ The Music Player ships one strongest production mix per composition.
 Superseded arrangements are removed from the runtime library so players do not
 have to distinguish near-duplicate versions during a jam-sized campaign.
 
-Race School is one composition with six lesson mixes, not six unrelated
+The five ordinary Race School lessons use one composition with five lesson mixes,
+not five unrelated
 songs. Course variants may shift tempo by at most 8 BPM and transpose the
 motif by at most four semitones; arrangement changes should identify the skill
-(clearer collision space, acceleration pulse, airy register, rival breakbeat,
-or flight lift) while `Open Circuit` remains recognizable within one phrase.
+(clearer collision space, acceleration pulse, airy register, or rival breakbeat)
+while `Open Circuit` remains recognizable within one phrase.
+
+Flight School is the deliberate exception because it is a separate post-game
+location and sequel preview rather than another driving lesson. Its original
+theme, `Cloudline Promise`, uses a D-major I–V–vi–IV synth-pop lift at 140 BPM,
+with syncopated octave bass, glassy keys, a gated supporting arp, and a chorus
+that grows from eighth-note motion into a 16th-note payoff. It must not reuse
+Open Circuit's A-minor harmony or hook. The distinct song tells the player that
+the rules and the world have changed before the flight mechanic fully opens.
+For the jam build, the Flight School course remains a non-launchable `SOON`
+preview, but `Cloudline Promise` is deliberately available in the unlocked
+Music Player so the finished audio is not hidden with the work-in-progress map.
 
 ## Reference standards: “Night Drive” and “Controlled Burn”
 

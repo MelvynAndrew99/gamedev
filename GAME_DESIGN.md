@@ -149,13 +149,78 @@ Completion returns to the course grid with the finished lesson selected rather
 than launching the next lesson automatically.
 
 Air School remains the fourth normal sequential lesson, followed by Rival School.
-A separate sixth course, Flight School, is the visible campaign-mastery unlock.
-It remains locked until every Story Rival Race is Platinum: the player must
-finish first and remove all three rivals on all three courses. Its focused tile
-states `LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK` until that condition is met.
-Flight School adds a course-authored 2.4× lift multiplier to the existing finite
-ramp flight, pitch, steering, airtime, and landing physics. It previews a more
-flight-focused sequel while guaranteeing that every launch still returns to road.
+A separate sixth course, Flight School, remains visible in the jam build as a
+`SOON` preview tile. It cannot be launched from the player-facing Race School
+menu and is excluded from School trophy totals even when every Story Rival Race
+is Platinum. Its implementation remains available through Projection Lab for
+development, and its `Cloudline Promise` theme remains playable in the unlocked
+Music Player. See `FLIGHT_SCHOOL_README.md` for the post-jam handoff and the
+steps required to restore its original Story-Platinum release gate.
+Flight School is not an extension of Air School and is never added to Endless,
+Story, or the ordinary Race School courses. It is a self-contained post-game
+thank-you and a playable preview of the paid sequel. The familiar car, boost,
+music, precision language, and existing 5×3 steering/pitch sprite sheet carry
+forward, but the player begins Flight School already airborne at cruise speed.
+There is no downhill launch run, ramp, chasm, road-surface lesson, or missed-
+takeoff restart. The course teaches flight from its first controllable frame.
+
+Steering banks left/right, W/S or the vertical stick controls pitch and altitude,
+Circle/B (or the normal brake input) scrubs airspeed, and the existing boost adds
+afterburner thrust. The lesson begins with a full three-slot boost bank rather
+than placing ground pickups before flight. Forward flight is automatic, so
+throttle is not an extra lesson requirement. Ten large neon flight rings form the
+complete objective route. Their early placements teach altitude gently before
+later rings ask for combined vertical and lateral precision. A ring miss lowers
+the result but does not destroy the player: Bronze requires six, Silver eight,
+and Gold all ten.
+
+Flight response is deliberately arcade-readable rather than simulated. Pitch
+quickly commands a bounded climb or dive rate, then self-levels when released;
+bank follows the horizontal input with stronger shoulder-airbrake commitment.
+The craft retains forward momentum, familiar boost adds afterburner speed, and
+the aerial brake trades that speed for setup time. The middle route passes
+through Aurora Concourse, a wide open-atrium building with target rings fully
+inside its entrance and exit. Flying through is the showcase line, while a
+missed ring leaves a safe exterior route and costs only trophy progress.
+
+Flight School takes place at Aurora Skyport, canonically separate from Race
+School's coastal proving ground. It is an inhabited highland academy district,
+not an open-sky race course: dark steel towers, habitat terraces, skybridges,
+misty green terrain, and a narrow cyan transit spine all belong to the same
+physical location. Aurora Concourse spans that route as a monumental open
+atrium; the craft approaches, enters, and exits its solid projected frame while
+following rings five and six. That transit spine exists only in the environment
+art: Flight School draws no procedural road, translucent guide channel, roadside
+posts, checkered line, or start/finish gantry over it.
+
+The visual hierarchy uses near-black navy, graphite, steel blue, electric cyan,
+ice white, and restrained amber windows. Violet, magenta, and coral are not the
+level's dominant atmosphere. The project-owned generated plate is stored as
+`public/assets/flight-school-city-v2.png`. It was generated with the two local
+concept paintings as palette, architecture, and composition references while
+explicitly excluding vehicles, HUD, text, rings, logos, floating light strips,
+and recognizable third-party locations or trade dress. Live road projection,
+architectural occlusion, rings, vehicle, motion, and HUD remain separate game
+layers rather than being baked into the image.
+
+Flight School has its own modern instrument layout instead of inheriting Air
+School's coach card. A chamfered upper-left mode/ring read, thin top course
+progress rail, and compact lower-right speed read keep the center flight
+corridor open. The authored rings themselves are the flight targets; no central
+crosshair or targeting reticle is drawn. During sustained flight, the existing atlas
+bank and pitch poses plus continuous engine thrust communicate motion. Finite
+jump squash/stretch, arc lift, ground shadow, apex halo, hang-time tiers,
+active-aero vanes, landing burst, and `AIRTIME`/`LANDED` copy remain exclusive
+to ordinary jumps and Air School.
+
+When Flight School is restored after the jam, completing the one-run course
+completes the game and displays a thank-you/sendoff
+for *Rhythmic Ride*, followed by the original teaser: “THE ROAD WAS ONLY THE
+BEGINNING… FLIGHT RETURNS IN RHYTHMIC RIDE 2.” Flight School awards its normal
+training trophy but adds no repeatable economy payout and unlocks no further
+content. Its purpose is to end this free game on a new mechanical promise and
+leave players interested in the sequel, not to silently change the base game's
+racing or Endless rules.
 
 The Trophy Room has two shoulder-tabbed pages. `L`/`R` (or keyboard `Q`/`E`)
 switch between School Trophies and Player Records. The first page contains only
@@ -368,6 +433,11 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
   landmarks repeat consistently each lap; Endless scenery cadence survives
   segment trimming. These objects are non-collidable and render below all
   gameplay props.
+- Each environment combines two scales: frequent small infrastructure supplies
+  peripheral speed cues, while rarer signature silhouettes provide memorable
+  route identity. Signature objects stay farther outside the shoulders and
+  may never obscure the driving line. Race School uses the same vocabulary at
+  lower density and scale so it continues to read as a controlled lesson site.
 - Near-future landmarks favor recognizable infrastructure—renewables, power
   lines, commuter or freight corridors, and evolving city edges—over fantasy
   megastructures. The world should feel plausibly one generation ahead.
@@ -380,7 +450,9 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
   mirrors, anchors, and separates it into the synchronized runtime atlases
   `car-v2.png`, `car-v2-paint.png`, and `car-v2-detail.png`.
 - Each runtime sheet is an exact `640x336`: three rows of five `128x112`
-  frames. Rows are nose-down, neutral, and nose-up; columns remain hard left,
+  frames. Source rows remain stable for deterministic generation; the runtime
+  maps the visually verified upper/lower silhouettes to nose-up/nose-down so
+  controller pitch agrees with the chase view. Columns remain hard left,
   soft left, straight, soft right, and hard right. Opposite steering poses are
   exact mirrors of one authored side, and all fifteen poses share one center
   and bottom contact anchor. Airtime pitch returns through neutral after
@@ -415,6 +487,37 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
   Their values persist through scene and track changes for the current session.
 - Keep control defaults synchronized with `TUNING`; a lab value must not silently
   change production behavior just because a race scene initializes its hooks.
+
+### Custom Track Builder
+
+- The Story front end has three shoulder pages: Course Select, Pit Garage, and
+  Custom Tracks. Custom Tracks unlocks after the player finishes all five
+  released Race School lessons and has completed at least one attempt of both
+  Story event types on all three courses. Trophy rank, finish position, and
+  takedown count do not affect this unlock. Endless and the `SOON` Flight School
+  preview are deliberately excluded because neither has a normal completion.
+- The builder is a top-down tile deck over an 8×8 canvas. Road tiles are dragged
+  onto the one pulsing open connection, guaranteeing a single bounded route the
+  pseudo-3D renderer can race without intersections or branching. Straight,
+  left bend, right bend, hill, dirt, and chicane tiles compile into the existing
+  `pieces` schema; this is presentation over the established linear road model,
+  not a second incompatible track engine.
+- Cones, rocks, boost pickups, and ramps layer onto any placed road tile. The
+  horizontal drop point selects left, center, or right lane. One gameplay prop
+  occupies a tile so every result stays readable at racing speed.
+- Authors choose Coastal School, Midnight Circuit, Neon Gulch, or Freight Belt
+  independently from geometry. The selected environment supplies scenery,
+  palette, and compatible music while gameplay colors retain their standard
+  meaning.
+- A route needs 6–18 road tiles. Up to six sanitized, versioned drafts persist
+  locally. Saved tracks may be raced, reopened for editing, renamed, or deleted;
+  Test Drive saves first and immediately launches an isolated two-lap custom
+  race. Custom damage never changes the Story garage hull, and custom races
+  award no campaign money, trophies, or progression.
+- The freeform map is intentionally a jam scope boundary. Intersections,
+  branches, reverse routes, online sharing, enemy placement, and arbitrary
+  terrain sculpting would require new runtime systems and are not implied by
+  the top-down editor.
 
 ### Roadside speed pylons
 

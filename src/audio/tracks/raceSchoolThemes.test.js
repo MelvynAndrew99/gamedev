@@ -24,7 +24,11 @@ test('every Race School course has a distinct tempo, register, and arrangement i
   assert.equal(new Set(IDS.map((id) => RACE_SCHOOL_THEMES[id].arrangement)).size, IDS.length);
   for (const id of IDS) {
     const variant = RACE_SCHOOL_VARIANTS[id];
-    assert.ok(Math.abs(variant.bpm - TRAINING_LOOP_THEME.bpm) <= 8, `${id} tempo stays subtle`);
+    if (id === 'training-flight') {
+      assert.equal(RACE_SCHOOL_THEMES[id].arrangement, 'synth-pop-flight');
+    } else {
+      assert.ok(Math.abs(variant.bpm - TRAINING_LOOP_THEME.bpm) <= 8, `${id} tempo stays subtle`);
+    }
     assert.ok(Math.abs(variant.transpose) <= 4, `${id} pitch stays near the school motif`);
   }
 });
@@ -56,6 +60,8 @@ test('course arrangement fingerprints alter musical behavior, not just metadata'
   assert.equal(air.bars[8].leadSynth, 'chip');
   assert.ok(rivals.bars[8].kick.length > cone.bars[8].kick.length);
   assert.ok(flight.bars[8].arp?.length > 0);
+  assert.equal(flight.title, 'CLOUDLINE PROMISE');
+  assert.notDeepEqual(flight.bars[8].lead, cone.bars[8].lead);
 });
 
 test('building lesson variants preserves the original Music Player arrangement', () => {

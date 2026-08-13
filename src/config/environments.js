@@ -27,6 +27,10 @@ const ENVIRONMENTS = {
       cadence: 24,
       offset: [1.55, 2.75],
       kinds: ['sensor', 'light', 'service'],
+      signature: {
+        cadence: 631, offset: [2.65, 3.25], size: [1.75, 2.15],
+        kinds: ['service', 'sensor'],
+      },
       structure: 0x17223d,
       highlight: 0x7187b8,
       light: 0x6ee7ff,
@@ -77,6 +81,10 @@ const ENVIRONMENTS = {
       cadence: 31,
       offset: [1.65, 2.8],
       kinds: ['turbine', 'sensor', 'tree'],
+      signature: {
+        cadence: 887, offset: [2.75, 3.3], size: [1.45, 1.7],
+        kinds: ['turbine'],
+      },
       structure: 0x294a47,
       highlight: 0x91aaa0,
       light: 0xe6ba72,
@@ -106,6 +114,51 @@ const ENVIRONMENTS = {
     ],
   },
 
+  'flight-school': {
+    name: 'Aurora Concourse',
+    seed: 6606,
+    backgroundAsset: 'flight-school-city',
+    colors: {
+      skyBands: [0x07111d, 0x0c1b2b, 0x14283c, 0x24394d, 0x4a6070, 0x91a0a9],
+      fog: 0x233b50,
+      groundLight: 0x11202b,
+      groundDark: 0x0c1822,
+      roadLight: 0x263b50,
+      roadDark: 0x1d3042,
+      dirtLight: 0x243528,
+      dirtDark: 0x1b2a20,
+      dirtEdgeA: 0x355243,
+      dirtEdgeB: 0x2b4438,
+    },
+    celestial: {
+      x: 0.5, y: 0.43, radius: 0,
+      color: 0xffc66d, glow: 0x66d9ff,
+    },
+    stars: 0,
+    trackside: {
+      cadence: 26,
+      offset: [1.65, 2.9],
+      kinds: ['sensor', 'light', 'signal'],
+      signature: {
+        cadence: 619, offset: [2.75, 3.3], size: [1.8, 2.2],
+        kinds: ['sensor', 'signal'],
+      },
+      structure: 0x102235,
+      highlight: 0x8aa1b3,
+      light: 0x22d8ff,
+    },
+    layers: [
+      {
+        kind: 'ridge', color: 0x142b37, alpha: 0.18, baseY: 0.535, amplitude: 5,
+        tileWidth: 700, curveFactor: 0.18, travelFactor: 0.012,
+      },
+      {
+        kind: 'ridge', color: 0x0a1924, alpha: 0.25, baseY: 0.545, amplitude: 8,
+        tileWidth: 760, curveFactor: 0.56, travelFactor: 0.07,
+      },
+    ],
+  },
+
   'neon-gulch': {
     name: 'High-desert energy corridor',
     seed: 2202,
@@ -127,6 +180,10 @@ const ENVIRONMENTS = {
       cadence: 27,
       offset: [1.6, 3.0],
       kinds: ['rock', 'solar', 'power'],
+      signature: {
+        cadence: 571, offset: [2.7, 3.4], size: [1.9, 2.3],
+        kinds: ['rock', 'power'],
+      },
       structure: 0x3c2b30,
       highlight: 0x936849,
       light: 0xe7ab67,
@@ -176,6 +233,10 @@ const ENVIRONMENTS = {
       cadence: 22,
       offset: [1.55, 2.65],
       kinds: ['cargo', 'light', 'signal'],
+      signature: {
+        cadence: 523, offset: [2.65, 3.25], size: [1.85, 2.25],
+        kinds: ['cargo', 'signal'],
+      },
       structure: 0x17262d,
       highlight: 0x5f6c6d,
       light: 0xe0a15e,
@@ -227,6 +288,10 @@ const ENVIRONMENTS = {
       cadence: 28,
       offset: [1.6, 2.9],
       kinds: ['turbine', 'power', 'service'],
+      signature: {
+        cadence: 613, offset: [2.7, 3.35], size: [1.8, 2.2],
+        kinds: ['power', 'service'],
+      },
       structure: 0x243b3d,
       highlight: 0x718985,
       light: 0xd6aa6b,

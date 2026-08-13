@@ -28,6 +28,7 @@ import {
   airtimeFxFrame,
   airtimeTier,
   carSpriteFrame,
+  chaseSteerFrame,
   landingFxColor,
   landingFxStrength,
   nextAirtimePitch,
@@ -107,12 +108,22 @@ import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
 import { PROVING_GROUND_THEME } from '../audio/tracks/provingGroundTheme.js';
 import { raceSchoolThemeForTrack } from '../audio/tracks/raceSchoolThemes.js';
 import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
+import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
 import {
   PAUSE_ACTIONS,
   canPauseRace,
   movePauseSelection,
 } from '../ui/PauseMenuModel.js';
 import { rumbleGamepad } from '../systems/Haptics.js';
+import {
+  createFlightSchoolState,
+  flightRingHit,
+  flightRouteCue,
+  flightSchoolView,
+  isFlightSchoolEvent,
+  updateFlight,
+} from '../systems/FlightSchool.js';
+import { flightCraftVisual } from '../systems/FlightPresentation.js';
 
 // Theme identities can be shared by geometry variants (Training Loop and its
 // Story validation race). Endless keeps the original high-speed score.
@@ -139,6 +150,8 @@ export class GameScene extends Phaser.Scene {
   init(data) {
     this.mode = data.mode ?? 'story';
     this.trackIndex = data.trackIndex ?? 0;
+    this.customTrack = data.customTrack ?? null;
+    this.customDraftId = data.customDraftId ?? data.customTrack?.customDraftId ?? null;
     this.storyPhase = this.mode === 'story'
       ? data.storyPhase ?? STORY_PHASES.QUALIFIER
       : null;
@@ -146,7 +159,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    if (this.mode === 'endless') RACER.beginEndlessRun();
+    if (this.mode === 'endless' || this.mode === 'custom') RACER.beginEndlessRun();
     else RACER.endEndlessRun();
     // State lives HERE, not the constructor — create() re-runs per start.
     if (this.mode === 'endless') {
@@ -156,7 +169,11 @@ export class GameScene extends Phaser.Scene {
       this.endlessStage = endlessStageForDistance(0);
     } else {
       const trackList = this.mode === 'training' ? TRAINING_TRACKS : TRACKS;
-      this.trackData = trackList[this.trackIndex];
+      this.trackData = this.mode === 'custom' ? this.customTrack : trackList[this.trackIndex];
+      if (!this.trackData) {
+        this.scene.start('TitleScene', modeMenuTarget('custom'));
+        return;
+      }
       this.model = new RoadModel(TUNING);
       this.model.buildFromData(this.trackData);
       const storyEvent = this.mode === 'story'
@@ -172,6 +189,12 @@ export class GameScene extends Phaser.Scene {
       ? objectivesForStoryPhase(this.trackData?.objectives, this.storyPhase, this.race.laps)
       : this.trackData?.objectives;
     this.objectives = new ObjectiveState(objectiveDefinitions, this.model);
+    this.flightSchool = isFlightSchoolEvent(this.mode, this.trackData?.id)
+      ? createFlightSchoolState(this.trackData.flightTraining)
+      : null;
+    this.flightSchoolView = this.flightSchool
+      ? flightSchoolView(this.flightSchool)
+      : null;
     this.objectiveHudSequence = 0;
     this.objectiveHudEvents = [];
     runSequence += 1;
@@ -279,13 +302,23 @@ export class GameScene extends Phaser.Scene {
     // so background drift remains continuous rather than snapping each lap.
     this.sceneryDistance = 0;
 
-    // Rolling grid start: sit the car behind the start/finish line so the
-    // gantry is ahead and visible at the lights, then drive THROUGH it to
-    // begin. The line stays at position 0 (the lap-count wrap boundary), so
-    // crossing it and completing a lap are the same event on the same gate.
+    // Ordinary races use a rolling grid behind the lap line. Flight School
+    // starts in open air at route zero: there is no ramp, launch run, or
+    // visible start/finish structure in the sequel-preview lesson.
     if (this.race) {
-      this.player.position = this.model.trackLength - TUNING.gridSetback;
-      this.race.prevPos = this.player.position; // don't misread the spawn as a wrap
+      if (this.flightSchool?.phase === 'flight') {
+        this.player.position = 0;
+        this.player.beginSustainedFlight();
+        this.player.speed = TUNING.maxSpeed * Math.max(
+          0.5,
+          Number(this.trackData.flightTraining.initialCruiseSpeedMultiplier) || 0.78,
+        );
+        this.race.prevPos = 0;
+        this.race.crossedStart = true;
+      } else {
+        this.player.position = this.model.trackLength - TUNING.gridSetback;
+        this.race.prevPos = this.player.position; // don't misread the spawn as a wrap
+      }
     }
     this.pop = new Popularity(TUNING);
     this.raceLoadout = this.mode === 'story'
@@ -294,6 +327,12 @@ export class GameScene extends Phaser.Scene {
     this.raceLoadoutConsumed = this.mode !== 'story';
     this.boost = new Boost(TUNING, this.raceLoadout.capacity);
     for (let slot = 0; slot < this.raceLoadout.startingSlots; slot++) this.boost.collect();
+    const flightStartingBoosts = this.flightSchool
+      ? Math.max(0, Math.floor(
+        Number(this.trackData.flightTraining.startingBoostSlots) || 0,
+      ))
+      : 0;
+    for (let slot = 0; slot < flightStartingBoosts; slot++) this.boost.collect();
     this.topSpeedTier = 0; // highest boost tier reached this race, feeds the top_speed objective
     this.boostHoldHandle = null; // active sustained hold-drone SFX, if any
     this.airtimeAudioHandle = null;
@@ -318,7 +357,7 @@ export class GameScene extends Phaser.Scene {
     // Air School telemetry is intentionally public/pull-based: HudScene reads
     // one small view model without owning physics or training decisions.
     this.airtimeTrainingConfig = this.mode === 'training'
-      ? this.trackData?.airtimeTraining ?? null
+      ? this.trackData?.airtimeTraining ?? (this.flightSchool ? {} : null)
       : null;
     this.airtimeGapAttempt = null;
     this.airtimeFeedback = null;
@@ -347,6 +386,7 @@ export class GameScene extends Phaser.Scene {
       this.scale.width / 2,
       this.carBaselineY,
       carSpriteFrame(2, 0),
+      RACER.carColor,
     )
       .setScale(TUNING.carScale)
       .setDepth(10);
@@ -417,6 +457,8 @@ export class GameScene extends Phaser.Scene {
       ? ENDLESS_THEMES[this.endlessStage.music]
       : this.mode === 'training'
         ? raceSchoolThemeForTrack(this.trackData?.id)
+      : this.mode === 'custom'
+        ? CAMPAIGN_THEMES[themeId] ?? TRAINING_LOOP_THEME
       : this.trackData
         ? CAMPAIGN_THEMES[themeId] ?? HIGH_SPEED_THEME
         : HIGH_SPEED_THEME;
@@ -504,7 +546,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     const dt = Math.min(delta, 50) / 1000;
-    const input = this.controls.read(TUNING);
+    const input = this.controls.read(TUNING, {
+      flight: this.flightSchool?.phase === 'flight',
+    });
+    // Flight School is an on-rails lesson: forward motion is automatic while
+    // brake and boost remain meaningful speed choices. Other modes retain
+    // their normal throttle contract.
+    if (this.flightSchool?.phase === 'flight') input.throttle = 1;
     this.jumpLaunchedThisFrame = false;
     const previousPlayer = {
       position: this.player.position,
@@ -539,6 +587,16 @@ export class GameScene extends Phaser.Scene {
     input.boostActive = this.boost.tier > 0;
 
     this.player.update(dt, input, this.model);
+    if (this.updateFlightSchool(dt, input, previousPlayer)) {
+      this.renderer.render(
+        this.model,
+        this.player,
+        this.player.speed / TUNING.maxSpeed,
+        this.speedLineBurst,
+        this.sceneryDistance,
+      );
+      return;
+    }
     this.updateRivals(dt, input, previousRivalPlayer);
     const storyFinishers = this.storyRaceOrder?.update(this.rivalPack?.rivals ?? []) ?? [];
     storyFinishers.forEach((id) => this.rivalPack?.retireFinisher(id));
@@ -719,14 +777,23 @@ export class GameScene extends Phaser.Scene {
       this.rivalPack?.renderViews,
     );
 
-    // Steering FRAMES: 0=hard-left, 1=left, 2=straight, 3=right, 4=hard-right.
+    const sustainedFlight = this.flightSchool?.phase === 'flight';
     // Five buckets instead of three — needed once airbrakes are in the mix:
     // a shoulder-button bank needs to look visibly harder than a light stick
     // correction, and player.steer already blends stick + airbrake (see
-    // Player.update), so one signal drives the whole 5-way read.
-    const s = this.player.steer;
-    const steerFrame = s < -0.6 ? 0 : s < -0.2 ? 1 : s <= 0.2 ? 2 : s <= 0.6 ? 3 : 4;
-    this.carSprite.setFrame(carSpriteFrame(steerFrame, this.airVisual.pitch));
+    // Player.update), so one signal drives the whole 5-way read. The rear-view
+    // atlas lookup is mirrored so the visible bank follows screen movement.
+    const bank = sustainedFlight
+      ? this.flightSchool.bank
+      : this.player.steer;
+    const steerFrame = chaseSteerFrame(bank);
+    const flightVisual = sustainedFlight
+      ? flightCraftVisual(this.flightSchool, this.player.x)
+      : null;
+    this.carSprite.setFrame(carSpriteFrame(
+      steerFrame,
+      flightVisual?.pitch ?? this.airVisual.pitch,
+    ));
     // Physics supplies the arc; the visual policy adds readable compression,
     // pitch silhouette, and landing squash without rotating this rear-view
     // sprite into a steering-bank pose.
@@ -740,23 +807,59 @@ export class GameScene extends Phaser.Scene {
       landing: this.airVisual.landingKick,
       landingStrength: this.airVisual.landingStrength,
     });
-    this.carSprite.setScale(
-      TUNING.carScale * airFx.scaleX,
-      TUNING.carScale * airFx.scaleY,
-    );
-    this.carSprite.y = this.carBaselineY - airFx.liftPx;
-    this.carSprite.x =
-      this.scale.width / 2 + this.player.steer * 6 * speedPercent;
-    const shadow = vehicleShadowFrame({
-      liftPx: airFx.liftPx,
-      airScaleX: airFx.scaleX,
-    });
-    this.carShadow
-      .setPosition(this.carSprite.x, this.carBaselineY - 2)
-      .setScale(shadow.scaleX, shadow.scaleY)
-      .setAlpha(shadow.alpha);
-    this.renderAirtimeVisuals(time, airFx);
+    if (flightVisual) {
+      this.carSprite.setScale(
+        TUNING.carScale * flightVisual.scaleX,
+        TUNING.carScale * flightVisual.scaleY,
+      );
+      this.carSprite.x = this.scale.width / 2 + flightVisual.xOffset;
+      this.carSprite.y = this.carBaselineY - flightVisual.liftPx;
+      this.carShadow.setAlpha(0);
+      this.renderFlightVisuals(time, flightVisual);
+    } else {
+      this.carSprite.setScale(
+        TUNING.carScale * airFx.scaleX,
+        TUNING.carScale * airFx.scaleY,
+      );
+      this.carSprite.y = this.carBaselineY - airFx.liftPx;
+      this.carSprite.x =
+        this.scale.width / 2 + this.player.steer * 6 * speedPercent;
+      const shadow = vehicleShadowFrame({
+        liftPx: airFx.liftPx,
+        airScaleX: airFx.scaleX,
+      });
+      this.carShadow
+        .setPosition(this.carSprite.x, this.carBaselineY - 2)
+        .setScale(shadow.scaleX, shadow.scaleY)
+        .setAlpha(shadow.alpha);
+      this.renderAirtimeVisuals(time, airFx);
+    }
     this.renderSpeedPadFx();
+  }
+
+  renderFlightVisuals(time, visual) {
+    const trail = this.airTrailGraphics;
+    this.airAuraGraphics.clear();
+    this.airAeroGraphics.clear();
+    trail.clear();
+    if (this.done || !visual.airborne) return;
+
+    // Aircraft exhaust is continuous thrust, not the Air School trajectory
+    // streak. Two tight engine plumes preserve speed without implying an arc.
+    const pulse = 0.84 + Math.sin(time / 42) * 0.12;
+    const bottom = this.carSprite.y - 4;
+    const spread = Math.min(34, this.carSprite.displayWidth * 0.18);
+    const burn = Math.max(0.2, visual.engineIntensity) *
+      (this.flightSchool.afterburner > 0.1 ? 54 : 34);
+    for (const side of [-1, 1]) {
+      const x = this.carSprite.x + side * spread;
+      trail.lineStyle(8, 0x1269a8, 0.18 * pulse);
+      trail.lineBetween(x, bottom, x + side * 2, bottom + burn);
+      trail.lineStyle(3, 0x64efff, 0.82 * pulse);
+      trail.lineBetween(x, bottom, x + side * 2, bottom + burn * 0.82);
+      trail.lineStyle(1, 0xffffff, 0.94);
+      trail.lineBetween(x, bottom, x, bottom + burn * 0.42);
+    }
   }
 
   renderSpeedPadFx() {
@@ -1637,7 +1740,7 @@ export class GameScene extends Phaser.Scene {
         this.carSprite.setFrame(carSpriteFrame(2, 0));
       }
     } else if (correctHeld) {
-      this.carSprite.setFrame(carSpriteFrame(direction > 0 ? 4 : 0, 0));
+      this.carSprite.setFrame(carSpriteFrame(direction > 0 ? 0 : 4, 0));
       tutorial.step++;
       tutorial.waitingForRelease = true;
       tutorial.acceptAt = this.time.now + 160;
@@ -1741,9 +1844,25 @@ export class GameScene extends Phaser.Scene {
         : this.airtimeFeedback
           ? 'landed'
           : 'approach';
+    const flight = this.flightSchool ? flightSchoolView(this.flightSchool) : null;
+    const flightSegment = this.model.findSegment(
+      this.player.position + TUNING.playerZ,
+    ).index;
+    const routeCue = flight
+      ? flightRouteCue(
+        this.flightSchool,
+        this.trackData.objects?.filter((object) => object.kind === 'flightRing'),
+        {
+          x: this.player.x,
+          altitude: flight.altitude,
+          segment: flightSegment,
+        },
+      )
+      : null;
     return {
       phase,
       flightAssist: Boolean(this.trackData?.flightTraining),
+      flightPhase: this.flightSchool?.phase ?? null,
       currentAirSeconds: this.player.airborne ? this.player.jumpElapsed : 0,
       bestAirSeconds: this.player.bestAirtime,
       glide: this.player.glide,
@@ -1754,7 +1873,52 @@ export class GameScene extends Phaser.Scene {
         : true,
       message: this.airtimeFeedback?.message ?? '',
       messageTone: this.airtimeFeedback?.tone ?? 'info',
+      altitude: this.flightSchool?.altitude ?? 0,
+      verticalSpeed: flight?.verticalSpeed ?? 0,
+      flightPitch: flight?.pitch ?? 0,
+      flightBank: flight?.bank ?? 0,
+      flightBraking: flight?.braking ?? 0,
+      flightAfterburner: flight?.afterburner ?? 0,
+      flightRouteCue: routeCue,
+      ringsHit: this.flightSchool?.ringsHit.size ?? 0,
+      ringsTotal: this.flightSchool?.ringCount ?? 0,
     };
+  }
+
+  updateFlightSchool(dt, input, previousPlayer) {
+    const state = this.flightSchool;
+    if (!state || this.done) return false;
+    const config = this.trackData.flightTraining;
+    const crossed = crossedRoadSegments(
+      this.player,
+      this.model,
+      TUNING,
+      previousPlayer,
+    );
+
+    if (state.phase !== 'flight') {
+      this.flightSchoolView = flightSchoolView(state);
+      return false;
+    }
+
+    updateFlight(state, dt, input, config);
+    for (const { segment, x } of crossed) {
+      for (const ring of segment.sprites) {
+        if (ring.def?.kind !== 'flight-ring' || ring.hit) continue;
+        if (!flightRingHit(state, ring, { x, altitude: state.altitude })) continue;
+        ring.hit = true;
+        this.recordObjective('object_hit', { sprite: ring });
+        MUSIC.playSpeedLine();
+        this.speedLineBurst = 1;
+        this.rumble({ duration: 70, strong: 0.08, weak: 0.3 });
+        this.popup(
+          `RING ${state.ringsHit.size} / ${state.ringCount}`,
+          state.ringsHit.size === state.ringCount ? '#ffcf3f' : '#00e5ff',
+        );
+      }
+    }
+    this.flightSchoolView = flightSchoolView(state);
+    return false;
   }
 
   isAirtimeGapRock(sprite) {
@@ -1960,9 +2124,8 @@ export class GameScene extends Phaser.Scene {
     // sustained tone. The grounded policy may resume it after landing.
     this.boostHoldHandle?.stop();
     this.boostHoldHandle = null;
-    const liftMultiplier = this.trackData?.flightTraining?.liftMultiplier ?? 1;
+    const liftMultiplier = this.trackData?.airtimeTraining?.liftMultiplier ?? 1;
     this.player.launch({ boosted, liftMultiplier });
-    if (liftMultiplier > 1) this.popup('LIFT WINGS ONLINE', '#00e5ff');
     this.jumpLaunchedThisFrame = true;
     this.airtimeAudioHandle?.stop();
     const speedRatio = this.player.launchSpeed / TUNING.maxSpeed;
@@ -2097,6 +2260,8 @@ export class GameScene extends Phaser.Scene {
         receipt: 'WRECKED — NO RACE PURSE',
       };
       this.showBanner('WRECKED\n\nENTER FOR GARAGE', 0);
+    } else if (this.mode === 'custom') {
+      this.showBanner('CUSTOM RUN ENDED\n\nENTER FOR CUSTOM TRACKS', 0);
     } else {
       this.showBanner('TRAINING ENDED\n\nENTER FOR TITLE', 0);
     }
@@ -2109,6 +2274,15 @@ export class GameScene extends Phaser.Scene {
     // the same origin instead of including the pre-start grid approach.
     const t = this.timedScoreAttack?.elapsedSeconds ??
       this.timedElimination?.elapsedSeconds ?? this.race.time;
+    if (this.mode === 'custom') {
+      const record = submitScore(this.trackData.id, t, 'min');
+      this.showBanner(
+        `CUSTOM TRACK COMPLETE\n${fmtTime(t)}` +
+        `${record ? '  •  NEW BEST' : ''}\n\nENTER FOR CUSTOM TRACKS`,
+        0,
+      );
+      return;
+    }
     if (this.mode === 'training') {
       const target = this.objectives.views.find(
         (objective) => objective.id === this.trackData.scoring.objective,
@@ -2152,12 +2326,32 @@ export class GameScene extends Phaser.Scene {
       const goldTarget = this.trackData.scoring?.thresholds
         ?.find((threshold) => threshold.rank === 'gold')?.minimum ?? target.total;
       const perfect = result.trophy?.rank === 'gold';
+      if (this.flightSchool) {
+        const medal = result.trophy
+          ? `${result.trophy.rank.toUpperCase()} TROPHY  ${'★'.repeat(result.trophy.stars)}`
+          : `NO TROPHY  •  BRONZE AT 6 RINGS`;
+        this.trainingAdvanceTo = null;
+        this.showBanner(
+          `${perfect ? 'PERFECT FLIGHT!' : 'FLIGHT COMPLETE'}\n` +
+          `RINGS  ${scoredProgress} / ${target.totalLabel}\n${medal}\n` +
+          `${fmtTime(t)}${result.newBest ? '  •  NEW BEST' : ''}\n\n` +
+          `THANK YOU FOR PLAYING RHYTHMIC RIDE\n` +
+          `THE ROAD WAS ONLY THE BEGINNING…\n` +
+          `FLIGHT RETURNS IN RHYTHMIC RIDE 2`,
+          0,
+        );
+        this.celebrateTrainingFinish(perfect, result.trophy?.stars ?? 0);
+        this.showTrainingResultActions();
+        return;
+      }
       const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
       const nextNeedsStoryPlatinum = nextTrack?.unlock?.type === 'story_platinum';
       const nextMasteryUnlocked = !nextNeedsStoryPlatinum ||
         isStoryCampaignPlatinum(TRACKS);
       this.trainingAdvanceTo = nextTrack &&
-        nextTrack.status !== 'placeholder' && nextMasteryUnlocked
+        nextTrack.status !== 'placeholder' &&
+        nextTrack.status !== 'coming_soon' &&
+        nextMasteryUnlocked
         ? this.trackIndex + 1
         : null;
       const damageLine = metricUsage.damage && this.trainingDamageMax > 0
@@ -2184,7 +2378,9 @@ export class GameScene extends Phaser.Scene {
         : '';
       const nextLine = this.trainingAdvanceTo == null
         ? (nextTrack
-          ? nextNeedsStoryPlatinum
+          ? nextTrack.status === 'coming_soon'
+            ? `NEXT: ${nextTrack.name} — COMING SOON`
+            : nextNeedsStoryPlatinum
             ? `NEXT: ${nextTrack.name} — PLATINUM ALL THREE RIVAL RACES`
             : `NEXT: ${nextTrack.name} — COMING SOON`
           : 'TRAINING TRACK COMPLETE')
@@ -2311,7 +2507,7 @@ export class GameScene extends Phaser.Scene {
       });
       return;
     }
-    if (this.mode === 'story') {
+    if (this.mode === 'story' || this.mode === 'custom') {
       this.returnToModeMenu();
     } else {
       this.scene.start('TitleScene');
@@ -2420,6 +2616,10 @@ export class GameScene extends Phaser.Scene {
       mode: this.mode,
       trackIndex: this.trackIndex,
       ...(this.mode === 'story' ? { storyPhase: this.storyPhase } : {}),
+      ...(this.mode === 'custom' ? {
+        customTrack: this.customTrack,
+        customDraftId: this.customDraftId,
+      } : {}),
     };
     this.releasePauseRuntime();
     this.scene.start('GameScene', launchData);
@@ -2459,7 +2659,7 @@ export class GameScene extends Phaser.Scene {
 
     const eventLabel = this.mode === 'story'
       ? `${this.trackData.name}  •  ${this.storyPhase === STORY_PHASES.RIVALS ? 'RIVAL RACE' : 'TIME TRIAL'}`
-      : `${this.trackData.name}  •  RACE SCHOOL`;
+      : `${this.trackData.name}  •  ${this.mode === 'custom' ? 'CUSTOM TRACK' : 'RACE SCHOOL'}`;
     ui.add(this.add.text(centerX, centerY - 91, eventLabel, {
       fontSize: '15px',
       color: '#9feeff',
@@ -2537,7 +2737,8 @@ export class GameScene extends Phaser.Scene {
       submitScore('endless', this.distanceM(), 'max');
       RACER.money += this.pop.cash;
     }
-    this.scene.start('TitleScene');
+    if (this.mode === 'custom') this.scene.start('TitleScene', modeMenuTarget('custom'));
+    else this.scene.start('TitleScene');
   }
 
   recordObjective(event, payload = {}) {

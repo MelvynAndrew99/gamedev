@@ -6,6 +6,7 @@ import {
   buildSchoolTiles,
   buildStoryCourseTiles,
   buildTrophySummary,
+  carouselWindow,
   cycleStoryPage,
   cycleTrophyPage,
   moveGridSelection,
@@ -36,7 +37,7 @@ test('completed races return to their mode submenu and retain course focus', () 
     },
   );
   assert.deepEqual(modeMenuTarget('endless', 9), {
-    view: 'main', selection: 0,
+    view: 'main', selection: 0, menuOpen: true,
   });
 });
 
@@ -54,9 +55,11 @@ test('Story course tiles keep one illustrated course card with two event states'
     }),
   );
   assert.equal(tile.qualifier.locked, false);
+  assert.equal(tile.qualifier.attempted, true);
   assert.equal(tile.qualifier.bestTime, 55);
   assert.equal(tile.qualifier.award, 'silver');
   assert.equal(tile.rivals.locked, false);
+  assert.equal(tile.rivals.attempted, false);
   assert.equal(tile.rivals.bestPlace, 2);
   assert.equal(tile.rivals.bestTakedowns, 1);
   assert.equal(tile.rivals.award, 'gold');
@@ -92,8 +95,24 @@ test('L/R trophy navigation alternates between school and player records', () =>
 
 test('L/R Story navigation alternates between courses and garage', () => {
   assert.equal(cycleStoryPage(STORY_PAGES.COURSES, 'right'), STORY_PAGES.GARAGE);
-  assert.equal(cycleStoryPage(STORY_PAGES.GARAGE, 'left'), STORY_PAGES.COURSES);
   assert.equal(cycleStoryPage(STORY_PAGES.GARAGE, 'right'), STORY_PAGES.COURSES);
+  assert.equal(cycleStoryPage(STORY_PAGES.COURSES, 'left'), STORY_PAGES.GARAGE);
+  assert.equal(cycleStoryPage(STORY_PAGES.GARAGE, 'left'), STORY_PAGES.COURSES);
+});
+
+test('title carousel keeps the selected destination centered and wraps both edges', () => {
+  assert.deepEqual(carouselWindow(5, 0), [
+    { offset: -2, index: 3 }, { offset: -1, index: 4 },
+    { offset: 0, index: 0 }, { offset: 1, index: 1 },
+    { offset: 2, index: 2 },
+  ]);
+  assert.deepEqual(carouselWindow(5, 4).map(({ index }) => index), [2, 3, 4, 0, 1]);
+});
+
+test('custom races return to the custom-track library', () => {
+  assert.deepEqual(modeMenuTarget('custom', 4), {
+    view: 'custom', selection: 0, menuOpen: true,
+  });
 });
 
 test('garage continuation preserves repairs while fresh launches reset', () => {
@@ -125,15 +144,16 @@ test('school view models preserve sequential locks and saved trophy results', ()
   assert.match(schoolTileDescription(tiles[2]), /COMPLETE COURSE 2/);
 });
 
-test('the sixth Flight School is visible but requires Platinum on every Rival Race', () => {
+test('the sixth Flight School stays visible as SOON and cannot launch in the jam build', () => {
   const tracks = [
     { id: 'lesson-1', name: 'ONE' },
     {
       id: 'training-flight',
       name: 'FLIGHT SCHOOL',
+      status: 'coming_soon',
       unlock: {
         type: 'story_platinum',
-        lockedText: 'LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK',
+        lockedText: 'COMING SOON — FLIGHT SCHOOL IS A POST-JAM PREVIEW',
       },
     },
   ];
@@ -141,11 +161,13 @@ test('the sixth Flight School is visible but requires Platinum on every Rival Ra
   assert.equal(locked[1].locked, true);
   assert.equal(
     schoolTileDescription(locked[1]),
-    'LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK',
+    'COMING SOON — FLIGHT SCHOOL IS A POST-JAM PREVIEW',
   );
-  assert.equal(trophyStatusLabel(locked[1]), 'LOCKED');
+  assert.equal(locked[1].comingSoon, true);
+  assert.equal(trophyStatusLabel(locked[1]), 'SOON');
   const unlocked = buildSchoolTiles(tracks, 0, () => null, { storyPlatinum: true });
-  assert.equal(unlocked[1].locked, false, 'campaign mastery is the complete unlock rule');
+  assert.equal(unlocked[1].locked, true, 'campaign mastery cannot enable a post-jam course');
+  assert.equal(unlocked[1].maxStars, 0, 'unreleased trophies do not inflate jam totals');
 });
 
 test('actual Air School remains sequential while only Flight School uses Story mastery', () => {
@@ -161,7 +183,8 @@ test('actual Air School remains sequential while only Flight School uses Story m
   assert.equal(tiles[4].locked, true, 'Rival School still follows Air School');
   assert.equal(tiles[5].id, 'training-flight');
   assert.equal(tiles[5].locked, true);
-  assert.match(tiles[5].lockReason, /PLATINUM THE RIVAL RACES/);
+  assert.equal(tiles[5].comingSoon, true);
+  assert.match(tiles[5].lockReason, /COMING SOON/);
 });
 
 test('trophy summary counts authored stars and requires Gold in every course', () => {
@@ -169,11 +192,25 @@ test('trophy summary counts authored stars and requires Gold in every course', (
     { trophy: 'gold', stars: 3, maxStars: 3 },
     { trophy: 'silver', stars: 2, maxStars: 3 },
   ]);
-  assert.deepEqual(summary, { stars: 5, maxStars: 6, allGold: false });
+  assert.deepEqual(summary, {
+    stars: 5, maxStars: 6, allGold: false, drivingAllGold: false,
+  });
   assert.equal(buildTrophySummary([
     { trophy: 'gold', stars: 3, maxStars: 3 },
     { trophy: 'gold', stars: 3, maxStars: 3 },
   ]).allGold, true);
+});
+
+test('five driving Golds unlock customization without requiring secret Flight School Gold', () => {
+  const summary = buildTrophySummary([
+    ...Array.from({ length: 5 }, () => ({
+      trophy: 'gold', stars: 3, maxStars: 3, specialUnlock: false,
+    })),
+    { trophy: null, stars: 0, maxStars: 0, specialUnlock: true, comingSoon: true },
+  ]);
+  assert.equal(summary.drivingAllGold, true);
+  assert.equal(summary.allGold, true);
+  assert.equal(summary.maxStars, 15);
 });
 
 test('trophy presentation distinguishes a completed course from an unplayed course', () => {

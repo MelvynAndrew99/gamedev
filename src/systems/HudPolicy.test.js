@@ -37,14 +37,17 @@ test('Air School has one teaching voice instead of coach plus checklist', () => 
   assert.equal(view.objectiveToast, true);
 });
 
-test('Flight School reuses the airtime teaching voice for its sequel preview', () => {
+test('Flight School owns a distinct sustained-flight instrument layout', () => {
   const view = hudVisibilityPolicy({
     mode: 'training', hasRace: true, hasObjectives: true,
     trackId: 'training-flight', hasBoostCapability: true,
   });
-  assert.equal(view.airtimeCoach, true);
+  assert.equal(view.airtimeCoach, false);
+  assert.equal(view.flightHud, true);
   assert.equal(view.objectiveRows, false);
-  assert.equal(view.objectiveToast, true);
+  assert.equal(view.objectiveToast, false);
+  assert.equal(view.courseProgress, false);
+  assert.equal(view.boostGauge, false);
 });
 
 test('other training lessons retain compact checkable rows', () => {

@@ -48,10 +48,53 @@ export function rivalSpriteFrameSize(projectedHullWidth) {
 }
 
 export function rivalSteerFrame(steer = 0) {
-  return steer < -0.6 ? 0
-    : steer < -0.2 ? 1
+  return steer < -0.6 ? 4
+    : steer < -0.2 ? 3
       : steer <= 0.2 ? 2
-        : steer <= 0.6 ? 3 : 4;
+        : steer <= 0.6 ? 1 : 0;
+}
+
+// Screen-space envelope for Aurora Concourse. The opening grows past the
+// viewport edges while the craft is inside it; otherwise the city plate reads
+// like a picture mounted in a small rectangle instead of a continuous world.
+export function flightArchitectureFrame(segment, section, width = 800, height = 600) {
+  const from = Number(section?.from);
+  const to = Number(section?.to);
+  if (!Number.isFinite(segment) || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+    return null;
+  }
+  const approachStart = from - 150;
+  const exitEnd = to + 80;
+  if (segment < approachStart || segment > exitEnd) return null;
+
+  let phase;
+  let progress;
+  let apertureWidth;
+  let apertureHeight;
+  let opacity;
+  if (segment < from) {
+    phase = 'approach';
+    progress = clamp((segment - approachStart) / Math.max(1, from - approachStart), 0, 1);
+    const eased = 1 - ((1 - progress) ** 3);
+    apertureWidth = width * (0.46 + eased * 0.38);
+    apertureHeight = height * (0.46 + eased * 0.26);
+    opacity = 0.18 + eased * 0.72;
+  } else if (segment <= to) {
+    phase = 'inside';
+    progress = clamp((segment - from) / Math.max(1, to - from), 0, 1);
+    const depth = Math.sin(progress * Math.PI);
+    apertureWidth = width * (0.84 + depth * 0.12);
+    apertureHeight = height * (0.72 + depth * 0.18);
+    opacity = 0.9;
+  } else {
+    phase = 'exit';
+    progress = clamp((segment - to) / Math.max(1, exitEnd - to), 0, 1);
+    apertureWidth = width * (0.84 + progress * 0.25);
+    apertureHeight = height * (0.72 + progress * 0.28);
+    opacity = 0.9 * (1 - progress);
+  }
+
+  return Object.freeze({ phase, progress, apertureWidth, apertureHeight, opacity });
 }
 
 export function blendEnvironmentColors(from = {}, to = {}, progress = 0) {
@@ -86,6 +129,7 @@ export class RoadRenderer {
     this.w = scene.scale.width;
     this.h = scene.scale.height;
     this.environment = getEnvironment(environmentId);
+    this.flightPresentation = environmentId === 'flight-school';
     this.colors = { ...tuning.colors, ...this.environment.colors };
 
     this.g = scene.add.graphics().setDepth(-1);
@@ -146,6 +190,14 @@ export class RoadRenderer {
     // adds a literal clock ring + hands so the time reward is never encoded by
     // cyan tint alone. One Graphics object is cleared/reused every frame.
     this.timeBonusMarkers = scene.add.graphics().setDepth(6);
+    // Flight School rings are projected from the same road segments as every
+    // other course object, but live above the asphalt and therefore need a
+    // dedicated vector layer instead of a ground-anchored texture.
+    this.flightRingMarkers = scene.add.graphics().setDepth(7);
+    // The Aurora Concourse uses two layers: side masses sit below the craft,
+    // while its roof crosses above it. Together they sell actual occlusion.
+    this.flightArchitectureBack = scene.add.graphics().setDepth(6);
+    this.flightArchitectureFront = scene.add.graphics().setDepth(12);
   }
 
   setEnvironment(environmentId) {
@@ -157,6 +209,7 @@ export class RoadRenderer {
       this.background.setAlpha(1);
     }
     this.environment = environment;
+    this.flightPresentation = environmentId === 'flight-school';
     this.colors = { ...this.t.colors, ...environment.colors };
     this.background.setEnvironment(environment);
     this.trackside.setEnvironment(environment);
@@ -327,9 +380,12 @@ export class RoadRenderer {
     );
     this.updateEnvironmentTransition(sceneryDistance);
 
-    this.trackside.render(model, base);
+    if (!this.flightPresentation) this.trackside.render(model, base);
+    else this.trackside.graphics.clear();
     this.renderGates(model, base);
     this.renderSprites(model, base);
+    this.renderFlightArchitecture(model, base, player);
+    this.renderFlightRings(model, base);
     this.renderRivals(model, base, player, rivals);
     this.drawSpeedLines();
   }
@@ -342,6 +398,7 @@ export class RoadRenderer {
     const g = this.gates;
     g.clear();
     this.gateLabel.setVisible(false);
+    if (this.flightPresentation) return;
     for (let n = this.t.drawDistance - 1; n >= 0; n--) {
       const seg = model.segmentAt(base, n);
       if (!seg.gate || seg.clipped) continue;
@@ -631,6 +688,7 @@ export class RoadRenderer {
       if (seg.clipped || seg.sprites.length === 0) continue;
       const { x, y, scale } = seg.p1.screen;
       for (const s of seg.sprites) {
+        if (s.def?.kind === 'flight-ring') continue;
         if (
           s.hit ||
           (s.speedMarker && seg.speedMarkerClipped) ||
@@ -665,6 +723,136 @@ export class RoadRenderer {
       }
     }
     for (let i = poolI; i < this.pool.length; i++) this.pool[i].setVisible(false);
+  }
+
+  renderFlightRings(model, base) {
+    const g = this.flightRingMarkers;
+    g.clear();
+    const pulse = 0.84 + Math.sin((this.scene.time?.now ?? 0) * 0.006) * 0.12;
+    for (let n = this.t.drawDistance - 1; n >= 0; n--) {
+      const seg = model.segmentAt(base, n);
+      if (seg.clipped) continue;
+      const rings = seg.sprites.filter(
+        (sprite) => sprite.def?.kind === 'flight-ring' && !sprite.hit,
+      );
+      if (!rings.length) continue;
+      const { x: roadX, y: roadY, w: roadHalfW } = seg.p1.screen;
+      for (const ring of rings) {
+        const cx = roadX + ring.offset * roadHalfW;
+        const cy = roadY - ring.altitude * roadHalfW * 0.72;
+        const width = Math.max(5, ring.ringRadiusX * roadHalfW * 2);
+        const height = Math.max(4, ring.ringRadiusY * roadHalfW * 1.44);
+        if (width < 5 || cy + height < 0 || cy - height > this.h) continue;
+        const line = Math.max(1, Math.min(7, width * 0.075));
+        g.lineStyle(line + 3, 0x08031c, 0.9);
+        g.strokeEllipse(cx, cy, width, height);
+        g.lineStyle(line, 0x00e5ff, pulse);
+        g.strokeEllipse(cx, cy, width, height);
+        g.lineStyle(Math.max(1, line * 0.42), 0xd9f7ff, 0.95);
+        g.strokeEllipse(cx, cy, width * 0.82, height * 0.82);
+        // A crown notch provides a non-color orientation cue and makes each
+        // target read as a checkpoint rather than decorative neon scenery.
+        const notch = Math.max(2, width * 0.09);
+        g.fillStyle(0x67e8ff, 1);
+        g.fillTriangle(
+          cx, cy - height * 0.5 - notch * 0.2,
+          cx - notch, cy - height * 0.5 - notch,
+          cx + notch, cy - height * 0.5 - notch,
+        );
+      }
+    }
+  }
+
+  renderFlightArchitecture(model, base, player) {
+    const back = this.flightArchitectureBack;
+    const front = this.flightArchitectureFront;
+    back.clear();
+    front.clear();
+    if (!this.flightPresentation) return;
+    const sections = this.scene.trackData?.flightTraining?.architecturalFlyThroughs ?? [];
+    if (!sections.length) return;
+    const segment = model.findSegment(player.position + this.t.playerZ).index;
+    const section = sections.find(({ from, to }) => segment >= from - 150 && segment <= to + 80);
+    if (!section) return;
+    const frame = flightArchitectureFrame(segment, section, this.w, this.h);
+    if (!frame || frame.opacity <= 0) return;
+
+    // The atrium is a piece of the city around the player, not an opaque HUD
+    // window over it. Its opening expands to almost the whole viewport once
+    // entered, leaving only peripheral walls and overhead structure visible.
+    const apertureW = frame.apertureWidth;
+    const apertureH = frame.apertureHeight;
+    const opacity = frame.opacity;
+    const cx = this.w / 2 + (this.backgroundCurveOffset ?? 0) * 0.18;
+    const cy = 330 + (this.backgroundHorizonOffset ?? 0) * 0.16;
+    const left = cx - apertureW / 2;
+    const right = cx + apertureW / 2;
+    const top = cy - apertureH / 2;
+    const bottom = Math.min(this.h + 80, cy + apertureH / 2 + 80);
+    const steel = 0x071522;
+    const face = 0x10283b;
+    const edge = 0x22d8ff;
+
+    back.fillStyle(steel, 0.78 * opacity);
+    back.beginPath();
+    back.moveTo(0, top + 24);
+    back.lineTo(left, top + 46);
+    back.lineTo(left, bottom);
+    back.lineTo(0, this.h);
+    back.closePath();
+    back.fillPath();
+    back.beginPath();
+    back.moveTo(this.w, top + 24);
+    back.lineTo(right, top + 46);
+    back.lineTo(right, bottom);
+    back.lineTo(this.w, this.h);
+    back.closePath();
+    back.fillPath();
+    back.fillStyle(face, 0.72 * opacity);
+    back.fillTriangle(0, top + 24, left, top + 46, 0, this.h);
+    back.fillTriangle(this.w, top + 24, right, top + 46, this.w, this.h);
+
+    // Short edge seams describe depth without boxing the city into a cyan
+    // rectangle. Receding wall ribs move with course position at the edges.
+    back.lineStyle(2, 0x77eaff, 0.58 * opacity);
+    back.lineBetween(left, top + 46, left, Math.min(bottom, top + 142));
+    back.lineBetween(right, top + 46, right, Math.min(bottom, top + 142));
+    const ribPhase = (segment % 42) / 42;
+    back.lineStyle(1, 0x52768b, 0.42 * opacity);
+    for (let i = 0; i < 7; i++) {
+      const t = ((i / 7 + ribPhase) % 1);
+      const y = top + 66 + (t * t) * Math.max(80, this.h - top);
+      back.lineBetween(0, y, Math.max(0, left - 8), y + 7);
+      back.lineBetween(Math.min(this.w, right + 8), y + 7, this.w, y);
+    }
+
+    front.fillStyle(steel, 0.84 * opacity);
+    front.beginPath();
+    front.moveTo(0, 0);
+    front.lineTo(this.w, 0);
+    front.lineTo(this.w, top + 24);
+    front.lineTo(right, top + 46);
+    front.lineTo(left, top + 46);
+    front.lineTo(0, top + 24);
+    front.closePath();
+    front.fillPath();
+    front.fillStyle(face, 0.52 * opacity);
+    front.fillTriangle(0, Math.max(0, top - 30), left, top + 46, 0, top + 24);
+    front.fillTriangle(this.w, Math.max(0, top - 30), right, top + 46, this.w, top + 24);
+    front.lineStyle(3, edge, 0.26 * opacity);
+    front.lineBetween(left, top + 46, right, top + 46);
+    front.lineStyle(1, 0x77eaff, 0.72 * opacity);
+    front.lineBetween(left + 12, top + 42, right - 12, top + 42);
+    front.lineStyle(1, 0x52768b, 0.38 * opacity);
+    for (let x = 60; x < this.w; x += 86) {
+      front.lineBetween(x, Math.max(0, top - 28), x + 24, top + 20);
+    }
+    // Small warm habitation lights keep the megastructure inhabited.
+    front.fillStyle(0xffc66d, 0.72 * opacity);
+    for (let x = 34; x < this.w - 20; x += 74) {
+      if (x > left - 10 && x < right + 10) continue;
+      front.fillRect(x, Math.max(6, top - 17), 14, 2);
+    }
   }
 
   renderRivals(model, base, player, rivals = []) {
@@ -816,6 +1004,11 @@ export class RoadRenderer {
   }
 
   drawSegment(seg, fogAmount) {
+    // Flight School's generated city already contains the physical transit
+    // route. Projected geometry still positions rings and architecture, but
+    // neither a road slab nor a translucent guide is painted over the world.
+    if (this.flightPresentation) return;
+
     const c = this.colors;
     const g = this.g;
     const { x: x1, y: y1, w: w1 } = seg.p1.screen;
@@ -927,6 +1120,7 @@ export class RoadRenderer {
     g.closePath();
     g.fillPath();
   }
+
 }
 
 // Sample the road players are actively reading rather than the mathematical

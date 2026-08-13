@@ -61,12 +61,23 @@ test('every Rival Race remains beatable at the authored speed-line ceiling', () 
   });
 });
 
-test('Syndicate Run is the tight finale but retains an eight-second perfect-run window', () => {
+test('Syndicate Run asks for sustained race flow without requiring near-perfect overspeed', () => {
   const model = new RoadModel(TUNING);
   model.buildFromData(syndicateRun);
   const budget = rivalRaceSpeedBudget(syndicateRun, TUNING, model.trackLength);
-  assert.ok(budget.fastestRivalSeconds > 158 && budget.fastestRivalSeconds < 160);
-  assert.ok(budget.marginSeconds > 7 && budget.marginSeconds < 9);
-  assert.ok(budget.requiredCeilingFraction > 0.94);
-  assert.ok(budget.requiredCeilingFraction < 0.96);
+  assert.ok(budget.fastestRivalSeconds > 177 && budget.fastestRivalSeconds < 179);
+  assert.ok(budget.marginSeconds > 25 && budget.marginSeconds < 28);
+  assert.ok(budget.requiredBaseSpeedFraction > 1.05);
+  assert.ok(budget.requiredBaseSpeedFraction < 1.07);
+  assert.ok(budget.requiredCeilingFraction > 0.84);
+  assert.ok(budget.requiredCeilingFraction < 0.86);
+});
+
+test('every Syndicate attack straight has a nearby bankable takedown boost', () => {
+  const boosts = syndicateRun.objects.filter((object) => object.kind === 'boost');
+  assert.equal(boosts.length, 14);
+  syndicateRun.rivals.attackZones.forEach((zone, index) => {
+    const setup = boosts.find((boost) => boost.at < zone.from && boost.at >= zone.from - 55);
+    assert.ok(setup, `attack zone ${index + 1} needs a boost within its 55-segment setup`);
+  });
 });

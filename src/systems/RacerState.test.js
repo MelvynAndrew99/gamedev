@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { RACER, sanitizeRacerProfile } from './RacerState.js';
+import { VEHICLE_LIVERIES } from '../config/vehicleSprite.js';
 
 function storage(initial = null) {
   const data = new Map(initial ? [['rhythmic-ride.garage.v1', JSON.stringify(initial)]] : []);
@@ -19,6 +20,7 @@ test('malformed profile data sanitizes to bounded migration-safe defaults', () =
     pitCrewLevel: 2,
     musicPlayerUnlocked: false,
     paintBoothUnlocked: false,
+    carColor: VEHICLE_LIVERIES[0],
     afterburnerFxUnlocked: false,
     afterburnerEligible: false,
     rivalWinCount: 0,
@@ -27,6 +29,21 @@ test('malformed profile data sanitizes to bounded migration-safe defaults', () =
     spendingLedger: { repairs: 0, supplies: 0, upgrades: 0 },
     payoutHistory: {},
   });
+});
+
+test('car color is persisted and restricted to authored readable liveries', () => {
+  globalThis.localStorage = storage({
+    version: 1,
+    paintBoothUnlocked: true,
+    carColor: VEHICLE_LIVERIES[3],
+  });
+  RACER.reloadProfile();
+  assert.equal(RACER.carColor, VEHICLE_LIVERIES[3]);
+  RACER.carColor = 0x123456;
+  assert.equal(RACER.carColor, VEHICLE_LIVERIES[0]);
+  RACER.carColor = VEHICLE_LIVERIES[5];
+  RACER.reloadProfile();
+  assert.equal(RACER.carColor, VEHICLE_LIVERIES[5]);
 });
 
 test('spending ledger is persisted, itemized, and atomically cleared for a receipt', () => {

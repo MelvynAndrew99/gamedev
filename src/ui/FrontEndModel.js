@@ -3,6 +3,7 @@ export const FRONT_END_VIEWS = Object.freeze({
   SCHOOL: 'school',
   STORY: 'story',
   TROPHIES: 'trophies',
+  CUSTOM: 'custom',
 });
 
 export const MAIN_DESTINATIONS = Object.freeze([
@@ -10,7 +11,7 @@ export const MAIN_DESTINATIONS = Object.freeze([
     id: FRONT_END_VIEWS.SCHOOL,
     label: 'RACE SCHOOL',
     kicker: 'LEARN THE LINE',
-    description: 'Master five driving courses, then discover a secret sixth lesson.',
+    description: 'Master five driving courses. Flight School is coming soon.',
   }),
   Object.freeze({
     id: FRONT_END_VIEWS.STORY,
@@ -30,6 +31,12 @@ export const MAIN_DESTINATIONS = Object.freeze([
     kicker: 'CHASE THE HORIZON',
     description: 'Survive the open road and push the distance record.',
   }),
+  Object.freeze({
+    id: FRONT_END_VIEWS.CUSTOM,
+    label: 'TRACK BUILDER',
+    kicker: 'BUILD YOUR OWN',
+    description: 'A completion reward: create, save, and race your own circuits.',
+  }),
 ]);
 
 export const STORY_PHASES = Object.freeze({
@@ -43,13 +50,25 @@ export const STORY_PAGES = Object.freeze({
 });
 
 export function cycleStoryPage(page, direction) {
-  if (direction === 'left') {
-    return page === STORY_PAGES.GARAGE ? STORY_PAGES.COURSES : STORY_PAGES.GARAGE;
-  }
-  if (direction === 'right') {
-    return page === STORY_PAGES.COURSES ? STORY_PAGES.GARAGE : STORY_PAGES.COURSES;
-  }
-  return page;
+  const pages = [STORY_PAGES.COURSES, STORY_PAGES.GARAGE];
+  const index = Math.max(0, pages.indexOf(page));
+  if (direction === 'left') return pages[(index + pages.length - 1) % pages.length];
+  if (direction === 'right') return pages[(index + 1) % pages.length];
+  return pages[index];
+}
+
+export function carouselWindow(count, selectedIndex, radius = 2) {
+  const safeCount = Math.max(0, Math.floor(Number(count) || 0));
+  if (safeCount === 0) return Object.freeze([]);
+  const safeRadius = Math.max(0, Math.floor(Number(radius) || 0));
+  const selected = ((Math.floor(Number(selectedIndex) || 0) % safeCount) + safeCount) % safeCount;
+  return Object.freeze(Array.from({ length: safeRadius * 2 + 1 }, (_, position) => {
+    const offset = position - safeRadius;
+    return Object.freeze({
+      offset,
+      index: (selected + offset + safeCount) % safeCount,
+    });
+  }));
 }
 
 export function shouldResetFrontEndLaunch(data, hasGarageData = false) {
@@ -102,6 +121,7 @@ export function buildStoryCourseTiles(tracks, resultForTrack) {
         phase: STORY_PHASES.QUALIFIER,
         label: 'TIME TRIAL',
         locked: false,
+        attempted: (progress?.qualifierAttempts ?? 0) > 0 || Boolean(progress?.qualified),
         complete: Boolean(progress?.qualified),
         bestTime: bestQualifierTime,
         award: qualifierAward,
@@ -110,6 +130,7 @@ export function buildStoryCourseTiles(tracks, resultForTrack) {
         phase: STORY_PHASES.RIVALS,
         label: 'RIVAL RACE',
         locked: !progress?.qualified,
+        attempted: (progress?.rivalAttempts ?? 0) > 0 || Boolean(progress?.rivalCompleted),
         complete: Boolean(progress?.rivalCompleted),
         bestPlace: progress?.bestRivalPlace ?? null,
         bestTime: progress?.bestRivalTime ?? null,
@@ -135,7 +156,14 @@ export function modeMenuTarget(mode, trackIndex = 0, phase = null, storyPage = n
       ...(storyPage == null ? {} : { storyPage }),
     });
   }
-  return Object.freeze({ view: FRONT_END_VIEWS.MAIN, selection: 0 });
+  if (mode === 'custom') {
+    return Object.freeze({
+      view: FRONT_END_VIEWS.CUSTOM,
+      selection: 0,
+      menuOpen: true,
+    });
+  }
+  return Object.freeze({ view: FRONT_END_VIEWS.MAIN, selection: 0, menuOpen: true });
 }
 
 const DIRECTIONS = Object.freeze({
@@ -181,7 +209,8 @@ export function buildSchoolTiles(
   unlockState = {},
 ) {
   return tracks.map((track, index) => {
-    const result = resultForTrack(track) ?? null;
+    const comingSoon = track.status === 'coming_soon';
+    const result = comingSoon ? null : resultForTrack(track) ?? null;
     const storyPlatinumUnlock = track.unlock?.type === 'story_platinum';
     const lockedBySpecialRule = storyPlatinumUnlock && !unlockState.storyPlatinum;
     const lockedBySequence = !storyPlatinumUnlock && index > highestUnlocked;
@@ -190,24 +219,33 @@ export function buildSchoolTiles(
       index,
       name: track.name,
       intro: track.intro ?? '',
-      locked: lockedBySpecialRule || lockedBySequence || track.status === 'placeholder',
-      lockReason: lockedBySpecialRule
-        ? track.unlock?.lockedText ?? 'LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK'
-        : null,
+      comingSoon,
+      locked: comingSoon || lockedBySpecialRule || lockedBySequence || track.status === 'placeholder',
+      lockReason: comingSoon
+        ? track.unlock?.lockedText ?? 'COMING SOON'
+        : lockedBySpecialRule
+          ? track.unlock?.lockedText ?? 'LOCKED — PLATINUM THE RIVAL RACES TO UNLOCK'
+          : null,
       completed: Boolean(result?.completed),
       trophy: result?.trophy ?? null,
+      earnedAt: result?.trophyEarnedAt ?? null,
       stars: result?.stars ?? 0,
-      maxStars: maxTrackStars(track),
+      maxStars: comingSoon ? 0 : maxTrackStars(track),
+      specialUnlock: storyPlatinumUnlock,
     });
   });
 }
 
 export function buildTrophySummary(schoolTiles) {
-  const stars = schoolTiles.reduce((total, tile) => total + tile.stars, 0);
-  const maxStars = schoolTiles.reduce((total, tile) => total + tile.maxStars, 0);
-  const allGold = schoolTiles.length > 0 &&
-    schoolTiles.every((tile) => tile.trophy === 'gold');
-  return Object.freeze({ stars, maxStars, allGold });
+  const releasedTiles = schoolTiles.filter((tile) => !tile.comingSoon);
+  const stars = releasedTiles.reduce((total, tile) => total + tile.stars, 0);
+  const maxStars = releasedTiles.reduce((total, tile) => total + tile.maxStars, 0);
+  const allGold = releasedTiles.length > 0 &&
+    releasedTiles.every((tile) => tile.trophy === 'gold');
+  const drivingTiles = schoolTiles.filter((tile) => !tile.specialUnlock);
+  const drivingAllGold = drivingTiles.length > 0 &&
+    drivingTiles.every((tile) => tile.trophy === 'gold');
+  return Object.freeze({ stars, maxStars, allGold, drivingAllGold });
 }
 
 export function schoolTileDescription(tile) {
@@ -223,6 +261,7 @@ export function schoolTileDescription(tile) {
 }
 
 export function trophyStatusLabel(tile) {
+  if (tile.comingSoon) return 'SOON';
   if (tile.locked) return 'LOCKED';
   if (tile.trophy) return tile.trophy.toUpperCase();
   return tile.completed ? 'COMPLETE — NO TROPHY' : 'UNEARNED';
