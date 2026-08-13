@@ -74,6 +74,16 @@ export function cycleTrophyPage(page, direction) {
 export function buildStoryCourseTiles(tracks, resultForTrack) {
   return tracks.map((track, trackIndex) => {
     const progress = resultForTrack(track) ?? null;
+    const bestQualifierTime = progress?.bestQualifierTime ?? null;
+    const qualifierAward = progress?.bestQualifierAward ?? (
+      progress?.qualified && bestQualifierTime != null
+        ? bestQualifierTime <= (track.qualifier?.goldSeconds ?? -1)
+          ? 'gold'
+          : bestQualifierTime <= (track.qualifier?.silverSeconds ?? -1)
+            ? 'silver'
+            : 'bronze'
+        : null
+    );
     const rivalCount = Math.max(1, Number(track?.rivals?.count) || 3);
     const legacyAward = progress?.bestRivalAward;
     const rivalAward = progress?.rivalCompleted &&
@@ -93,7 +103,8 @@ export function buildStoryCourseTiles(tracks, resultForTrack) {
         label: 'TIME TRIAL',
         locked: false,
         complete: Boolean(progress?.qualified),
-        bestTime: progress?.bestQualifierTime ?? null,
+        bestTime: bestQualifierTime,
+        award: qualifierAward,
       }),
       rivals: Object.freeze({
         phase: STORY_PHASES.RIVALS,

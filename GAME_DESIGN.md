@@ -191,6 +191,10 @@ locked slots. The player supports cursor/pointer selection, play, pause,
 previous/next shoulder shortcuts, and a close action. The current soundtrack is
 generated live by the tracker engine rather than loaded from external audio
 files, so choosing a theme starts its authored arrangement directly.
+Music revisions are additive: when an authored song is reworked, its original
+arrangement remains available as a clearly labeled Music Player entry. The
+garage therefore uses the hook-forward `Chrome & Credits` rework while
+`Chrome & Credits — Original` preserves the first jam arrangement.
 
 Rival School introduces the Story campaign's moving opposition as a 35-second
 base wreck score attack, not a boss or a lap-limited race. Exactly three
@@ -371,33 +375,38 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
 
 ### Player car sprite
 
-- `tools/gen-car.js` is the source of truth for `public/assets/car.png`.
-  Regenerate the sheet from the low-poly model instead of painting individual
-  frames, so every steering pose remains one coherent vehicle.
-- The sheet contains three rows of five `64x56` frames: nose-down, neutral,
-  and nose-up. Every row retains gameplay steering order—hard left, slight
-  left, straight, slight right, hard right—and opposite steering silhouettes
-  must remain mirrored. Airtime pitch eases toward the analog glide input and
-  returns through neutral after contact; it never reuses screen-space roll as
-  pitch because that would conflict with the steering read.
-- The car uses the game's low, directly-behind chase-camera perspective
-  (`CAM_PITCH = 0`), not the overhead Mode-7 angle used by the F-Zero reference
-  art. Every frame should remain substantially wider than it is tall, and the
-  straight frame should clearly present the rear of the vehicle.
-- The cockpit must read as glass at every yaw: a cyan teardrop dome with a
-  visible reflection and a base that follows the sloping hull. Canopy rails,
-  highlights, fins, or other accents must stay inside the vehicle silhouette;
-  long floating bars or constant-height slabs become beaks, gun barrels, or
-  disconnected overhangs in turning frames.
-- The in-race car is bottom-anchored so scaling grows it upward onto the road,
-  not below the canvas. `TUNING.carScale` is the shared size for gameplay and
-  the title screen; the Projection Lab must initialize to the same value
-  (currently `5`). A sprite with different visible bounds requires all three
-  presentations to be checked together. Collision width remains the separate
-  `TUNING.playerW` gameplay value.
-- `tools/gen-car.test.js` protects the rear-view proportions, visible glass,
-  frame dimensions, and left/right symmetry. Update the generator and its
-  expectations together when deliberately changing the vehicle.
+- `art/pulsewing-concept-v1.png` is the original image-generated art-direction
+  source for the Pulsewing hover racer. It is deliberately not shipped as a
+  loose game sprite. `tools/gen-car.js` deterministically isolates, cleans,
+  mirrors, anchors, and separates it into the synchronized runtime atlases
+  `car-v2.png`, `car-v2-paint.png`, and `car-v2-detail.png`.
+- Each runtime sheet is an exact `640x336`: three rows of five `128x112`
+  frames. Rows are nose-down, neutral, and nose-up; columns remain hard left,
+  soft left, straight, soft right, and hard right. Opposite steering poses are
+  exact mirrors of one authored side, and all fifteen poses share one center
+  and bottom contact anchor. Airtime pitch returns through neutral after
+  contact and never substitutes screen-space roll for pitch.
+- The vehicle uses a low rear-chase view: its stern, twin propulsion housings,
+  integrated glass canopy, underbody, and shallow V tail are the first read.
+  The hard-turn frames add an attached active-airbrake silhouette; the soft
+  poses remain unmistakably between neutral and hard commitment.
+- Rival identity is a material operation, not a whole-sprite tint. The
+  grayscale paint atlas receives the livery color while the detail atlas keeps
+  the canopy, engine cores and rings, pearl structure, gold tempo stripe, and
+  dark outline unchanged. Player, title, and rivals all use the same layered
+  sprite factory and the same frame policy.
+- The in-race and title vehicles are bottom-anchored so scale grows upward onto
+  the road. Their display scales are independently calibrated from the same
+  measured opaque hull width because their compositions have different space;
+  rival perspective sizing uses that hull ratio rather than transparent frame
+  width. A road-bound contact shadow shrinks and fades as the car rises so jump
+  height remains readable while the chassis never looks pasted onto the road.
+  Collision width remains the independent `TUNING.playerW` gameplay value.
+- `tools/gen-car.test.js` protects deterministic regeneration, atlas order,
+  hard alpha, rear-view proportions, twin propulsion, canopy/detail survival,
+  mirrored yaw, distinct pitch, active-airbrake cues, shared anchors, and the
+  paint/detail partition. `VehicleSprite.test.js` protects frame synchronization
+  and material-safe livery/damage tint restoration.
 
 ### Projection Lab
 
@@ -504,6 +513,12 @@ Use this checklist whenever changing the world, assets, or gameplay rules:
 - Add or update the shared definition and collision behavior.
 - Add the asset to loading/rendering and verify its scale at near and far
   projection distances.
+- Keep road-object communication inside the racing world. Hazards use a clear
+  physical silhouette and contrast against the surface; speed pads and other
+  pickups use distinctive authored art or road paint. Do not surround routine
+  objects with floating rings, brackets, or targeting chrome—the object itself
+  should provide the driving read unless the mechanic is explicitly a scanner
+  or lock-on system.
 - Decide explicitly how campaign tracks place it.
 - Decide explicitly how Endless Mode generates it and how its frequency scales.
 - Check interactions with cones, zippers, ramps, rocks, dirt, airborne state,

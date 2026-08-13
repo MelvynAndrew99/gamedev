@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createGameplayEvent } from './GameplayEvents.js';
 import { TRACKS } from '../tracks/index.js';
 import {
+  ENDLESS_STYLE_RULES,
   RewardInbox,
   StoryStyleTracker,
   storyStyleRulesForTrack,
@@ -77,6 +78,55 @@ test('three distinct speed-line entries earn Speed Demon and timeout resets prog
   tracker.recordSpeedLine('line-b');
   tracker.recordSpeedLine('line-c');
   assert.deepEqual(takeIds(tracker), ['speed_line_chain']);
+});
+
+test('Endless speed lines escalate without resetting the live chain', () => {
+  const tracker = new StoryStyleTracker({
+    runId: 'endless-chain',
+    rules: ENDLESS_STYLE_RULES,
+    cashAvailable: 0,
+  });
+  for (let count = 1; count <= 20; count += 1) {
+    tracker.recordSpeedLine(`line-${count}`);
+  }
+  const views = [];
+  let event;
+  while ((event = tracker.takeReward())) views.push(styleRewardView(event));
+  assert.deepEqual(
+    views.map(({ title }) => title),
+    [
+      'SPEED DEMON!', 'OVERDRIVE!', 'HYPERDRIVE!',
+      'UNSTOPPABLE!', 'MAXIMUM VELOCITY!', 'MAXIMUM VELOCITY!',
+    ],
+  );
+  assert.deepEqual(
+    views.map(({ detail }) => detail),
+    [
+      '3 SPEED LINES', '5 SPEED LINES', '7 SPEED LINES',
+      '10 SPEED LINES', '15 SPEED LINES', '20 SPEED LINES',
+    ],
+  );
+  assert.equal(tracker.progress.speedLines, 20);
+});
+
+test('Endless trick rewards carry and apply only the available small hull repair', () => {
+  let health = 96;
+  const tracker = new StoryStyleTracker({
+    runId: 'endless-heal',
+    rules: ENDLESS_STYLE_RULES,
+    cashAvailable: 0,
+    rewardHeal: () => Math.min(3, 100 - health),
+    onReward: (event) => { health += event.payload.heal ?? 0; },
+  });
+  ['a', 'b', 'c'].forEach((id) => tracker.recordSpeedLine(id));
+  assert.equal(health, 99);
+  const first = styleRewardView(tracker.takeReward());
+  assert.equal(first.heal, 3);
+  assert.equal(first.detail, '3 SPEED LINES  •  +3 HULL');
+
+  ['d', 'e'].forEach((id) => tracker.recordSpeedLine(id));
+  assert.equal(health, 100);
+  assert.equal(styleRewardView(tracker.takeReward()).heal, 1);
 });
 
 test('boost rewards use exact tier, hold, and landing boundaries', () => {

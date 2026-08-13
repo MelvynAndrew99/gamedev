@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   adjacentDiscoveredTrack,
+  musicListWindow,
   moveMusicSelection,
   musicLibraryEntries,
 } from './MusicPlayerModel.js';
@@ -27,4 +28,23 @@ test('library cursor wraps while shoulder skip ignores locked tracks', () => {
   assert.equal(moveMusicSelection(2, entries.length, 'down'), 0);
   assert.equal(adjacentDiscoveredTrack(entries, 0, 'next'), 2);
   assert.equal(adjacentDiscoveredTrack(entries, 2, 'previous'), 0);
+});
+
+test('long libraries keep the selected track inside a six-row scroll window', () => {
+  assert.deepEqual(musicListWindow(0, 11, 6), {
+    start: 0, end: 6, size: 6, total: 11,
+    canScrollUp: false, canScrollDown: true,
+    thumbFraction: 6 / 11, scrollFraction: 0,
+    label: '1–6 / 11',
+  });
+  const middle = musicListWindow(6, 11, 6);
+  assert.ok(middle.start <= 6 && middle.end > 6);
+  assert.equal(middle.canScrollUp, true);
+  assert.equal(middle.canScrollDown, true);
+  assert.deepEqual(musicListWindow(10, 11, 6), {
+    start: 5, end: 11, size: 6, total: 11,
+    canScrollUp: true, canScrollDown: false,
+    thumbFraction: 6 / 11, scrollFraction: 1,
+    label: '6–11 / 11',
+  });
 });

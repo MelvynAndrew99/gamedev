@@ -7,9 +7,10 @@
   "intro": "Build speed downhill. Boost the gold runways, steer the flight, then spend that speed on the next line.",
   "qualifier": {
     "laps": 1,
-    "targetSeconds": 76,
-    "targetStatus": "provisional-playtest-required",
-    "targetBasis": "A 3444-segment lap has a 57.4-second max-speed geometry floor. The provisional target adds 32 percent for launch acceleration, two dirt sectors, elevation, airbrake choices, and one recoverable mistake; replace it with the median of five clean telemetry runs plus 10-15 percent."
+    "targetSeconds": 80,
+    "silverSeconds": 72,
+    "goldSeconds": 66,
+    "targetBasis": "A deterministic clean no-boost line runs about 59.8 seconds. Gold at 66 seconds rewards an optimized line, Silver at 72 allows a modest correction, and the 80-second qualifying deadline leaves about twenty seconds for learning the dirt and elevation changes."
   },
   "rivalRace": {
     "laps": 3,

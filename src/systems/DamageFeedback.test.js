@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  damageNoticeView,
   damageFeedbackState,
   trainingDamageTrophyMessage,
 } from './DamageFeedback.js';
@@ -56,4 +57,25 @@ test('destroyed glass reports the best trophy that damage still permits', () => 
     trainingDamageTrophyMessage(rivals, 4),
     'TRAINING CONTINUES  •  BRONZE STILL LIVE',
   );
+});
+
+test('damage notices are concise temporary replacements for the shared HUD slot', () => {
+  assert.equal(damageNoticeView({ state: { critical: false } }), null);
+  assert.deepEqual(damageNoticeView({
+    state: { critical: true, destroyed: false }, training: true,
+  }), {
+    title: 'GLASS CRITICAL',
+    detail: 'NEXT ROCK SHATTERS IT',
+    durationMs: 1800,
+  });
+  assert.deepEqual(damageNoticeView({
+    state: { critical: true, destroyed: true },
+    training: true,
+    hits: 4,
+    thresholds: [{ rank: 'gold', stars: 3, maximumDamageHits: 0 }],
+  }), {
+    title: 'GLASS SHATTERED',
+    detail: 'NO TROPHY • GOALS STILL TRACKED',
+    durationMs: 2200,
+  });
 });

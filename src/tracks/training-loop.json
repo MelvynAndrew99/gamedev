@@ -115,7 +115,7 @@
     { "id": "hairpin-07", "at": 1238, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
     { "id": "hairpin-08", "at": 1245, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
     { "id": "hairpin-09", "at": 1252, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
-    { "id": "hairpin-10", "at": 1259, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
+    { "id": "hairpin-10", "at": 1259, "kind": "cone", "offset": 0.6, "objective": "cone-sweep" },
     { "id": "hairpin-11", "at": 1266, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" },
     { "id": "hairpin-12", "at": 1273, "kind": "cone", "offset": 0.57, "objective": "cone-sweep" }
   ],

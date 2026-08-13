@@ -44,6 +44,44 @@ export function trainingDamageTrophyMessage(thresholds = [], hits = 0) {
     : 'TRAINING CONTINUES  •  NO TROPHY';
 }
 
+// Compact copy for the shared upper-left notification slot. Windshield cracks
+// already preserve the long-lived damage state, so this text only needs to
+// announce the transition and then yield the slot back to training goals.
+export function damageNoticeView({
+  state = {},
+  training = false,
+  thresholds = [],
+  hits = 0,
+} = {}) {
+  if (!state.critical) return null;
+  if (training && state.destroyed) {
+    const possible = [...thresholds]
+      .filter((threshold) =>
+        threshold.maximumDamageHits == null || hits <= threshold.maximumDamageHits
+      )
+      .sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0))[0];
+    return {
+      title: 'GLASS SHATTERED',
+      detail: possible
+        ? `${String(possible.rank ?? 'TROPHY').toUpperCase()} STILL LIVE • GOALS TRACKED`
+        : 'NO TROPHY • GOALS STILL TRACKED',
+      durationMs: 2200,
+    };
+  }
+  if (training) {
+    return {
+      title: 'GLASS CRITICAL',
+      detail: 'NEXT ROCK SHATTERS IT',
+      durationMs: 1800,
+    };
+  }
+  return {
+    title: 'HULL CRITICAL',
+    detail: 'NEXT ROCK WRECKS',
+    durationMs: 1800,
+  };
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }

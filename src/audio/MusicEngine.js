@@ -187,6 +187,7 @@ class MusicEngine {
     this.lastStyleRewardVariation = -1;
     this.lastCashRewardVariation = -1;
     this.lastTakeoffTime = -Infinity;
+    this.lastMenuMoveTime = -Infinity;
   }
 
   ensureContext() {
@@ -313,6 +314,21 @@ class MusicEngine {
     if (this.master) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
 
+  // Scene transitions can duck the score without changing the player's saved
+  // volume. The next theme fades into the same mix level instead of cutting
+  // across a phrase at full volume.
+  fadeMusicTo(v, seconds = 0.65) {
+    if (!this.master || !this.ctx) return false;
+    const target = Math.max(0.0001, Number(v) || 0.0001);
+    const duration = Math.max(0.01, Number(seconds) || 0.65);
+    const gain = this.master.gain;
+    const time = this.ctx.currentTime;
+    gain.cancelScheduledValues(time);
+    gain.setValueAtTime(Math.max(0.0001, gain.value), time);
+    gain.linearRampToValueAtTime(target, time + duration);
+    return true;
+  }
+
   setSfxVolume(v) {
     this.sfxVolume = v;
     if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
@@ -386,6 +402,8 @@ class MusicEngine {
         bar.driveBass,
         bar.bassFM,
         bar.bassGain,
+        bar.bassCutoff,
+        bar.bassHighpass,
       );
     }
 
@@ -398,10 +416,10 @@ class MusicEngine {
       const leadTones = bar.leadTones ?? bar.chordTones;
       const tone = leadTones[leadIdx % leadTones.length];
       const freq = bar.leadRootFreq * semitoneRatio(tone);
-      if (bar.leadSynth === 'keys') this.playKeys(freq, time, dur * 3);
-      else if (bar.leadSynth === 'saw') this.playSawLead(freq, time, dur * 1.4);
-      else if (bar.leadSynth === 'metal') this.playMetalLead(freq, time, dur * 1.65);
-      else if (bar.leadSynth === 'guitar') this.playGuitar(freq, time, dur * 1.9);
+      if (bar.leadSynth === 'keys') this.playKeys(freq, time, dur * 3, bar.leadGain);
+      else if (bar.leadSynth === 'saw') this.playSawLead(freq, time, dur * 1.4, bar.leadGain);
+      else if (bar.leadSynth === 'metal') this.playMetalLead(freq, time, dur * 1.65, bar.leadGain);
+      else if (bar.leadSynth === 'guitar') this.playGuitar(freq, time, dur * 1.9, bar.leadGain);
       else this.playLead(freq, time, dur * 1.4, bar.leadGain);
     }
 
@@ -413,7 +431,12 @@ class MusicEngine {
     const arpIdx = bar.arp?.[step];
     if (arpIdx != null) {
       const tone = bar.chordTones[arpIdx % bar.chordTones.length];
-      this.playArp((bar.arpRootFreq ?? bar.leadRootFreq) * semitoneRatio(tone), time, dur * 1.05);
+      this.playArp(
+        (bar.arpRootFreq ?? bar.leadRootFreq) * semitoneRatio(tone),
+        time,
+        dur * 1.05,
+        bar.arpGain,
+      );
     }
 
     // Optional cyber-metal rhythm layer. Unlike the chord-tone-indexed lead,
@@ -425,7 +448,7 @@ class MusicEngine {
     const chugOffset = bar.chug?.[step];
     if (chugOffset != null) {
       const freq = (bar.chugRootFreq ?? bar.bassRootFreq * 2) * semitoneRatio(chugOffset);
-      this.playCyberChug(freq, time, dur * 0.9);
+      this.playCyberChug(freq, time, dur * 0.9, bar.chugGain);
     }
 
     // A real power-chord voice remains available as a supporting accent. It
@@ -434,7 +457,7 @@ class MusicEngine {
     const guitarOffset = bar.guitar?.[step];
     if (guitarOffset != null) {
       const freq = (bar.guitarRootFreq ?? bar.leadRootFreq / 2) * semitoneRatio(guitarOffset);
-      this.playGuitar(freq, time, dur * 1.9);
+      this.playGuitar(freq, time, dur * 1.9, bar.guitarGain);
     }
 
     if (step === 0) {
@@ -464,7 +487,16 @@ class MusicEngine {
   // schedule stop, let the garbage collector take it. No pooling — at this
   // note rate the churn is trivial next to Phaser's own per-frame allocs.
 
-  playBass(freq, time, dur, drive, fm, level = 1) {
+  playBass(
+    freq,
+    time,
+    dur,
+    drive,
+    fm,
+    level = 1,
+    cutoff = null,
+    highpassFrequency = null,
+  ) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
@@ -487,8 +519,17 @@ class MusicEngine {
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = drive ? 1400 : 900;
+    filter.frequency.value = cutoff ?? (drive ? 1400 : 900);
     filter.Q.value = 1.2;
+
+    // Per-theme bass EQ. The master already removes unusable sub-48Hz
+    // energy; this optional second high-pass lets a mix trim the steepest
+    // speaker-moving octave without thinning every song, while bassCutoff
+    // prevents the saw/FM edge from masking hooks in the low mids.
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = highpassFrequency ?? 32;
+    highpass.Q.value = 0.6;
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
@@ -506,7 +547,7 @@ class MusicEngine {
       node = shaper;
     }
 
-    node.connect(filter).connect(gain).connect(this.duckable);
+    node.connect(filter).connect(highpass).connect(gain).connect(this.duckable);
     osc.start(time);
     osc.stop(time + dur + 0.02);
     if (modOsc) {
@@ -563,11 +604,11 @@ class MusicEngine {
   // resonant lowpass with a fast-open envelope for the "gated" pluck this
   // genre's arps live on. Opt-in via bar.leadSynth === 'saw' — the other
   // themes keep using playLead's chip-choir.
-  playSawLead(freq, time, dur) {
+  playSawLead(freq, time, dur, level = 1) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.2, time + 0.006); // fast, "gated" attack
+    gain.gain.linearRampToValueAtTime(0.2 * (level ?? 1), time + 0.006); // fast, "gated" attack
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
 
     const filter = ctx.createBiquadFilter();
@@ -616,12 +657,13 @@ class MusicEngine {
   // Deliberately reuses driveCurve's gentle grit (a production technique,
   // shared per GAME_DESIGN.md) rather than adding a hotter curve the mix
   // bus would have to fight.
-  playGuitar(freq, time, dur) {
+  playGuitar(freq, time, dur, level = 1) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.17, time + 0.01);
-    gain.gain.setValueAtTime(0.17, time + Math.max(0.011, dur - 0.06));
+    const peak = 0.17 * (level ?? 1);
+    gain.gain.linearRampToValueAtTime(peak, time + 0.01);
+    gain.gain.setValueAtTime(peak, time + Math.max(0.011, dur - 0.06));
     gain.gain.linearRampToValueAtTime(0.001, time + dur);
 
     const drive = ctx.createWaveShaper();
@@ -663,12 +705,13 @@ class MusicEngine {
   // filter and waveshaper. The result has a power-chord silhouette and the
   // hard gaps of a metal chug, but its metallic sidebands belong to a neon
   // machine rather than an amp in a garage.
-  playCyberChug(freq, time, dur) {
+  playCyberChug(freq, time, dur, level = 1) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.15, time + 0.002);
-    gain.gain.setValueAtTime(0.15, time + dur * 0.42);
+    const peak = 0.15 * (level ?? 1);
+    gain.gain.linearRampToValueAtTime(peak, time + 0.002);
+    gain.gain.setValueAtTime(peak, time + dur * 0.42);
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
 
     const drive = ctx.createWaveShaper();
@@ -719,11 +762,11 @@ class MusicEngine {
   // ratio keeps the overtones deliberately non-acoustic, and a narrow
   // bandpass gives it the cutting "metallic lead" register without adding
   // more low-mid energy on top of bass and chugs.
-  playMetalLead(freq, time, dur) {
+  playMetalLead(freq, time, dur, level = 1) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.16, time + 0.003);
+    gain.gain.linearRampToValueAtTime(0.16 * (level ?? 1), time + 0.003);
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
 
     const filter = ctx.createBiquadFilter();
@@ -768,11 +811,11 @@ class MusicEngine {
   // in this genre; a legato version just reads as a busy lead). Deliberately
   // quiet and routed through the duckable bus so the kick pumps it — the
   // arp is texture and momentum under the hook, never competition for it.
-  playArp(freq, time, dur) {
+  playArp(freq, time, dur, level = 1) {
     const ctx = this.ctx;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.11, time + 0.003); // hard gate open
+    gain.gain.linearRampToValueAtTime(0.11 * (level ?? 1), time + 0.003); // hard gate open
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur * 0.7); // closed before next step
 
     const filter = ctx.createBiquadFilter();
@@ -803,7 +846,7 @@ class MusicEngine {
   // fundamental reads as dull, one bright overtone on top reads as warm),
   // slower attack/release than playLead's pluck so it sits back in the mix
   // instead of announcing every hit.
-  playKeys(freq, time, dur) {
+  playKeys(freq, time, dur, level = 1) {
     const ctx = this.ctx;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -812,7 +855,7 @@ class MusicEngine {
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.24, time + 0.03);
+    gain.gain.linearRampToValueAtTime(0.24 * (level ?? 1), time + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
     gain.connect(filter);
 
@@ -1266,6 +1309,40 @@ class MusicEngine {
       osc.start(start);
       osc.stop(start + 0.18);
     });
+  }
+
+  // A 55ms three-band cursor cue. The cooldown prevents rapid d-pad/axis
+  // chatter from scheduling a backlog that keeps clicking after navigation
+  // has stopped; each accepted move replaces silence immediately.
+  playMenuMove(direction = 'right') {
+    if (!this.ctx || !this.sfxBus) return false;
+    const ctx = this.ctx;
+    const time = ctx.currentTime;
+    if (time - this.lastMenuMoveTime < 0.025) return false;
+    this.lastMenuMoveTime = time;
+    const lower = direction === 'left' || direction === 'down';
+    const ratio = lower ? 0.89 : 1;
+    const layers = [
+      { frequency: 110 * ratio, type: 'sine', gain: 0.035, duration: 0.055 },
+      { frequency: 440 * ratio, type: 'square', gain: 0.025, duration: 0.04 },
+      { frequency: 880 * ratio, type: 'triangle', gain: 0.018, duration: 0.025 },
+    ];
+    layers.forEach((layer) => {
+      const osc = ctx.createOscillator();
+      osc.type = layer.type;
+      osc.frequency.setValueAtTime(layer.frequency, time);
+      osc.frequency.exponentialRampToValueAtTime(
+        layer.frequency * (lower ? 0.94 : 1.06),
+        time + layer.duration,
+      );
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(layer.gain, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + layer.duration);
+      osc.connect(gain).connect(this.sfxBus);
+      osc.start(time);
+      osc.stop(time + layer.duration + 0.01);
+    });
+    return true;
   }
 
   // A boost is a long aerodynamic onset: filtered wind rises around the car

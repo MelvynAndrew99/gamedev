@@ -399,8 +399,10 @@ test('Cone Control separates its diagnostic from the cone-lined final hairpin', 
   assert.ok(hairpin.every((object) => object.at >= 1194 && object.at < 1278));
   assert.ok(setup.at(-1).offset > 0.5, 'setup line should stage the outside lane');
   assert.ok(
-    hairpin.every((object) => object.offset === 0.57),
-    'hairpin cones should hold one collectible right-lane line',
+    hairpin.every((object) => object.offset === 0.57 || (
+      object.id === 'hairpin-10' && object.offset === 0.6
+    )),
+    'hairpin cones should hold one right-lane line with a small late-apex allowance',
   );
 });
 

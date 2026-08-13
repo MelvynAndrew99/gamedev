@@ -23,7 +23,24 @@ The target is **catchy, danceable, futuristic, and dynamic**. A track should
 feel good under active play and still reward someone listening to several
 loops on headphones.
 
-## Reference standard: “Controlled Burn”
+Reworking a song must not erase its history. Keep the original tracker data
+and expose it as an explicitly labeled Music Player entry alongside the new
+scene-default arrangement. This preservation rule applies to every future
+soundtrack revision, not only `Chrome & Credits`.
+
+Race School is one composition with six lesson mixes, not six unrelated
+songs. Course variants may shift tempo by at most 8 BPM and transpose the
+motif by at most four semitones; arrangement changes should identify the skill
+(clearer collision space, acceleration pulse, airy register, rival breakbeat,
+or flight lift) while `Open Circuit` remains recognizable within one phrase.
+
+## Reference standards: “Night Drive” and “Controlled Burn”
+
+`src/audio/tracks/titleTheme.js` (`Night Drive`) is the production clarity
+reference: a short hook states itself immediately, bass stays physical without
+masking it, and percussion creates motion at restrained gain. A Story cue may
+be longer, heavier, or more sectional, but its main idea must remain at least
+as easy to follow. Do not copy Night Drive's F-minor writing or hook contour.
 
 `src/audio/tracks/syndicateRunTheme.js` is the current reference for musical
 hierarchy and dynamic pacing. Do not copy its E-minor progression, hook, riff,
@@ -213,7 +230,12 @@ engine default:
 | Field | Controls | Practical use |
 | --- | --- | --- |
 | `bassGain` | Synth-bass note gain | Reduce low-end crowding or distinguish interlude/drive |
-| `leadGain` | Default/chip lead gain | Bring a square-wave hook forward; other lead synths currently use fixed voice gain |
+| `bassCutoff` | Synth-bass low-pass cutoff in Hz | Keep saw/FM edge out of the hook's low-mid register |
+| `bassHighpass` | Optional synth-bass high-pass in Hz | Trim speaker-moving sub energy for a specific mix without thinning every cue |
+| `leadGain` | Chip, saw, metal, guitar, or keys lead gain | Keep the hook forward without raising the whole music bus |
+| `arpGain` | Gated motion-arp gain | Preserve speed texture below the melody |
+| `chugGain` | Cyber-chug gain | Control low-mid density independently of bass |
+| `guitarGain` | Supporting power-chord gain | Keep acoustic-like accents behind synthetic voices |
 | `kickGain` | Kick gain | Keep pulse below melody or enlarge a climax |
 | `snareGain` | Snare noise/body gain | Scale backbeat between half-time and payoff |
 | `hatGain` | Closed/open hat gain | Preserve motion without high-frequency fatigue |

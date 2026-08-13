@@ -4,6 +4,8 @@
 
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
+import { createVehicleSprite } from '../entities/VehicleSprite.js';
+import { vehicleShadowFrame } from '../entities/VehicleShadow.js';
 import { RoadModel } from '../road/RoadModel.js';
 import { EndlessTrack } from '../road/EndlessTrack.js';
 import { RoadRenderer } from '../road/RoadRenderer.js';
@@ -85,10 +87,15 @@ import {
   submitRivalResult,
 } from '../systems/StoryProgress.js';
 import {
+  ENDLESS_STYLE_RULES,
   STORY_STYLE_RULES,
   StoryStyleTracker,
   storyStyleRulesForTrack,
 } from '../systems/StyleEvents.js';
+import {
+  ENDLESS_TRICK_HEAL,
+  endlessStageForDistance,
+} from '../systems/EndlessProgression.js';
 import {
   HeldBoostAccumulator,
   createPlayerStatEvent,
@@ -96,19 +103,27 @@ import {
 } from '../systems/PlayerStats.js';
 import { MUSIC } from '../audio/MusicEngine.js';
 import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
-import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
 import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
+import { PROVING_GROUND_THEME } from '../audio/tracks/provingGroundTheme.js';
+import { raceSchoolThemeForTrack } from '../audio/tracks/raceSchoolThemes.js';
 import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
 import {
   PAUSE_ACTIONS,
   canPauseRace,
   movePauseSelection,
 } from '../ui/PauseMenuModel.js';
+import { rumbleGamepad } from '../systems/Haptics.js';
 
 // Theme identities can be shared by geometry variants (Training Loop and its
 // Story validation race). Endless keeps the original high-speed score.
 const CAMPAIGN_THEMES = {
-  'training-loop': TRAINING_LOOP_THEME,
+  'proving-ground': PROVING_GROUND_THEME,
+  'neon-gulch': NEON_GULCH_THEME,
+  'syndicate-run': SYNDICATE_RUN_THEME,
+};
+
+const ENDLESS_THEMES = {
+  'high-speed': HIGH_SPEED_THEME,
   'neon-gulch': NEON_GULCH_THEME,
   'syndicate-run': SYNDICATE_RUN_THEME,
 };
@@ -138,6 +153,7 @@ export class GameScene extends Phaser.Scene {
       this.model = new EndlessTrack(TUNING);
       this.race = null;
       this.trackData = null;
+      this.endlessStage = endlessStageForDistance(0);
     } else {
       const trackList = this.mode === 'training' ? TRAINING_TRACKS : TRACKS;
       this.trackData = trackList[this.trackIndex];
@@ -172,17 +188,30 @@ export class GameScene extends Phaser.Scene {
         this.storyPhase,
       )
       : null;
-    this.styleTracker = this.mode === 'story'
+    const styleEnabled = this.mode === 'story' || this.mode === 'endless';
+    this.styleTracker = styleEnabled
       ? new StoryStyleTracker({
         runId: this.gameplayRunId,
-        rules: storyStyleRulesForTrack(this.trackData),
-        cashAvailable: styleBank.remaining,
+        rules: this.mode === 'endless'
+          ? ENDLESS_STYLE_RULES
+          : storyStyleRulesForTrack(this.trackData),
+        cashAvailable: styleBank?.remaining ?? 0,
+        rewardHeal: this.mode === 'endless'
+          ? () => Math.min(
+            ENDLESS_TRICK_HEAL,
+            Math.max(0, RACER.maxHealth - RACER.health),
+          )
+          : null,
+        onReward: this.mode === 'endless'
+          ? (event) => this.applyEndlessTrickHeal(event)
+          : null,
       })
       : null;
     this.renderer = new RoadRenderer(
       this,
       TUNING,
-      this.trackData?.environment ?? this.trackData?.id ?? 'endless',
+      this.endlessStage?.environment ??
+        this.trackData?.environment ?? this.trackData?.id ?? 'endless',
     );
     this.player = new Player(TUNING);
     const rivalConfig = this.mode !== 'story' || this.storyPhase === STORY_PHASES.RIVALS
@@ -305,9 +334,20 @@ export class GameScene extends Phaser.Scene {
     // the top bigger. Bottom-anchoring means Car Size only ever grows the
     // car upward into the road, never off the bottom edge.
     this.carBaselineY = this.scale.height - 24;
-    this.carSprite = this.add
-      .sprite(this.scale.width / 2, this.carBaselineY, 'car', carSpriteFrame(2, 0))
-      .setOrigin(0.5, 1)
+    this.carShadow = this.add.ellipse(
+      this.scale.width / 2,
+      this.carBaselineY - 2,
+      118,
+      18,
+      0x03020d,
+      0.48,
+    ).setDepth(9);
+    this.carSprite = createVehicleSprite(
+      this,
+      this.scale.width / 2,
+      this.carBaselineY,
+      carSpriteFrame(2, 0),
+    )
       .setScale(TUNING.carScale)
       .setDepth(10);
     this.createAirtimeVisuals();
@@ -373,7 +413,13 @@ export class GameScene extends Phaser.Scene {
     MUSIC.setVolume(TUNING.musicVolume);
     MUSIC.setSfxVolume(TUNING.sfxVolume);
     const themeId = this.trackData?.music ?? this.trackData?.id;
-    const theme = this.trackData ? CAMPAIGN_THEMES[themeId] ?? HIGH_SPEED_THEME : HIGH_SPEED_THEME;
+    const theme = this.mode === 'endless'
+      ? ENDLESS_THEMES[this.endlessStage.music]
+      : this.mode === 'training'
+        ? raceSchoolThemeForTrack(this.trackData?.id)
+      : this.trackData
+        ? CAMPAIGN_THEMES[themeId] ?? HIGH_SPEED_THEME
+        : HIGH_SPEED_THEME;
     MUSIC.start(theme);
     this.events.once('shutdown', () => MUSIC.stop());
     // The sustained hold-drone schedules its own stop far in the future —
@@ -535,6 +581,7 @@ export class GameScene extends Phaser.Scene {
         this.speedLineBurst = 1;
         this.speedPadPulse = 1;
         this.cameras.main.shake(105, 0.006);
+        this.rumble({ duration: 65, strong: 0.08, weak: 0.34 });
         if (this.mode === 'endless') this.pop.add(TUNING.zipPop);
         this.recordObjective('zipper_hit');
         const segment = this.model.findSegment(this.player.position + TUNING.playerZ);
@@ -585,6 +632,7 @@ export class GameScene extends Phaser.Scene {
 
     if (this.mode === 'endless') {
       this.model.ensureAhead(this.player.position); // pave ahead of the car
+      this.updateEndlessStage();
     } else {
       const event = this.race.update(dt, this.player);
       if (event === 'start') {
@@ -699,6 +747,14 @@ export class GameScene extends Phaser.Scene {
     this.carSprite.y = this.carBaselineY - airFx.liftPx;
     this.carSprite.x =
       this.scale.width / 2 + this.player.steer * 6 * speedPercent;
+    const shadow = vehicleShadowFrame({
+      liftPx: airFx.liftPx,
+      airScaleX: airFx.scaleX,
+    });
+    this.carShadow
+      .setPosition(this.carSprite.x, this.carBaselineY - 2)
+      .setScale(shadow.scaleX, shadow.scaleY)
+      .setAlpha(shadow.alpha);
     this.renderAirtimeVisuals(time, airFx);
     this.renderSpeedPadFx();
   }
@@ -993,6 +1049,11 @@ export class GameScene extends Phaser.Scene {
   startRivalFx(kind, rival, { boosted = false } = {}) {
     if (!this.rivalFxGraphics) return;
     const spec = rivalFxSpec(kind, boosted);
+    this.rumble({
+      duration: kind === 'takedown' ? 210 : kind === 'incoming' ? 150 : 85,
+      strong: kind === 'takedown' ? 0.85 : kind === 'incoming' ? 0.58 : 0.28,
+      weak: kind === 'takedown' ? 0.62 : 0.32,
+    });
     const visible = rival?.screen?.visible;
     // Collision feedback must originate from the car the player actually saw.
     // An off-camera/stale contact keeps its audio but never fabricates a large
@@ -1127,6 +1188,7 @@ export class GameScene extends Phaser.Scene {
         phase: this.storyPhase,
         targetSeconds: this.qualifierClock?.targetSeconds ??
           this.trackData?.qualifier?.targetSeconds ?? 0,
+        goldSeconds: this.trackData?.qualifier?.goldSeconds ?? 0,
         elapsedSeconds: this.qualifierClock?.elapsedSeconds ?? 0,
         remainingSeconds: this.qualifierClock?.remainingSeconds ??
           this.trackData?.qualifier?.targetSeconds ?? 0,
@@ -1463,6 +1525,37 @@ export class GameScene extends Phaser.Scene {
 
   distanceM() {
     return Math.floor(this.player.position / 100);
+  }
+
+  rumble(options) {
+    return rumbleGamepad(getPrimaryPad(this.input.gamepad), options);
+  }
+
+  updateEndlessStage() {
+    if (this.mode !== 'endless') return;
+    const next = endlessStageForDistance(this.distanceM());
+    if (next.id === this.endlessStage?.id) return;
+    this.endlessStage = next;
+    this.renderer.transitionEnvironment(next.environment, 1800);
+    MUSIC.fadeMusicTo(0.015, 0.8);
+    this.endlessMusicTransition?.remove(false);
+    this.endlessMusicTransition = this.time.delayedCall(850, () => {
+      MUSIC.start(ENDLESS_THEMES[next.music] ?? HIGH_SPEED_THEME);
+      MUSIC.fadeMusicTo(TUNING.musicVolume, 0.9);
+      this.endlessMusicTransition = null;
+    });
+  }
+
+  applyEndlessTrickHeal(event) {
+    if (this.mode !== 'endless') return 0;
+    const heal = Math.min(
+      Math.max(0, Math.floor(Number(event?.payload?.heal) || 0)),
+      Math.max(0, RACER.maxHealth - RACER.health),
+    );
+    if (heal <= 0) return 0;
+    RACER.repair(heal);
+    this.popup(`HULL +${heal}`, '#2ee56b');
+    return heal;
   }
 
   // Adaptive onboarding: a clean bend silently measures the result. Staying
@@ -1874,6 +1967,11 @@ export class GameScene extends Phaser.Scene {
     this.airtimeAudioHandle?.stop();
     const speedRatio = this.player.launchSpeed / TUNING.maxSpeed;
     MUSIC.playRampTakeoff({ boosted, speedRatio });
+    this.rumble({
+      duration: boosted ? 125 : 90,
+      strong: boosted ? 0.32 : 0.16,
+      weak: boosted ? 0.58 : 0.38,
+    });
     this.airtimeAudioHandle = MUSIC.startAirtimeFlight({ boosted, speedRatio });
     const rampSegment = this.model.segments.find(
       (segment) => segment.sprites.includes(sprite),
@@ -1897,6 +1995,11 @@ export class GameScene extends Phaser.Scene {
     // A collision ends the current style line. Completed rewards stay banked,
     // but partial cone/speed/hold streaks must be rebuilt cleanly.
     this.styleTracker?.breakStreaks();
+    this.rumble({
+      duration: 180,
+      strong: Math.min(1, 0.35 + Math.max(0, def.damage ?? 0) / 40),
+      weak: 0.48,
+    });
     this.flushHeldBoostStats();
     if (this.isAirtimeGapRock(sprite)) {
       // The collision sweep covers the entire landing frame. A successful
@@ -1949,15 +2052,15 @@ export class GameScene extends Phaser.Scene {
       if (!this.trainingDamageTaught) {
         this.trainingDamageTaught = true;
         this.showBanner(
-          'ROCKS CRACK YOUR WINDSCREEN\nSteer around them to stay clean\nCones mark the mastery line\nCLEAN + ALL CONES FOR GOLD',
-          3200,
+          'ROCKS CAUSE CRACKS\nAVOID ROCKS  •  HIT CONES',
+          1900,
         );
       }
       // Training damage is communication, not punishment: no speed loss,
       // campaign hull damage, wreck, or restart. The cracks affect the medal.
       this.cameras.main.shake(140, 0.01);
-      this.carSprite.setTint(0xff5555).setTintMode(Phaser.TintModes.FILL);
-      this.time.delayedCall(120, () => this.carSprite.clearTint());
+      this.carSprite.impactFlash(0xff5555);
+      this.time.delayedCall(120, () => this.carSprite.clearImpactFlash());
       return;
     }
     if (this.mode === 'endless') this.pop.bust();
@@ -1972,10 +2075,8 @@ export class GameScene extends Phaser.Scene {
     // car flashes red. The player should FEEL the difference between a
     // cone and a rock before the health bar finishes updating.
     this.cameras.main.shake(140, def.damage >= 20 ? 0.012 : 0.004);
-    this.carSprite
-      .setTint(0xff4444)
-      .setTintMode(Phaser.TintModes.FILL);
-    this.time.delayedCall(120, () => this.carSprite.clearTint());
+    this.carSprite.impactFlash(0xff4444);
+    this.time.delayedCall(120, () => this.carSprite.clearImpactFlash());
     if (wrecked) this.onWrecked();
   }
 
@@ -2129,7 +2230,7 @@ export class GameScene extends Phaser.Scene {
           `${crew.health > 0 ? `   PIT CREW +${crew.health} HULL` : ''}`,
       };
       this.showBanner(
-        `${result.qualified ? 'QUALIFIED!' : 'TIME MISSED'}\n` +
+        `${result.qualified ? `${result.award.toUpperCase()} TIME!` : 'TIME MISSED'}\n` +
           `${fmtTime(elapsed)}  •  TARGET ${fmtTime(target)}` +
           `${result.newBest ? '\nNEW BEST' : ''}` +
           `${result.qualified ? `\n${payout.claim} $${payout.purse}` +
@@ -2296,6 +2397,8 @@ export class GameScene extends Phaser.Scene {
     );
     if (next === this.pauseSelection) return;
     this.pauseSelection = next;
+    MUSIC.playMenuMove(direction);
+    this.rumble({ duration: 28, strong: 0.04, weak: 0.14 });
     this.renderPauseMenu();
   }
 

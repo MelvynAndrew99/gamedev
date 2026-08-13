@@ -8,6 +8,8 @@ import { checkObstacleHit } from '../systems/Collision.js';
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
 import trainingFlight from '../tracks/training-flight.json' with { type: 'json' };
+import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
+import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
 import { Player } from './Player.js';
 
 function drive(piece, controls, { startX = 0, speed = 0.9 } = {}) {
@@ -334,6 +336,74 @@ test('Cone Control final hairpin requires steering plus the matching shoulder', 
       );
     }
   }
+});
+
+test('Cone Control final hairpin can collect its entire cone line in one skilled hold', () => {
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingLoop);
+  const player = new Player(TUNING);
+  player.position = 1140 * TUNING.segmentLength - TUNING.playerZ;
+  player.x = 0.48;
+  player.speed = TUNING.maxSpeed;
+  const contacts = [];
+
+  while (model.findSegment(player.position + TUNING.playerZ).index <= 1274) {
+    const previous = { position: player.position, x: player.x };
+    const correcting = player.x > 0.48;
+    player.update(1 / 60, {
+      ...NEUTRAL_INPUT,
+      throttle: 1,
+      steer: correcting ? -1 : 0,
+      airbrakeL: correcting,
+    }, model);
+    const contact = checkObstacleHit(player, model, TUNING, previous);
+    if (contact) contacts.push(contact.trackObjectId);
+  }
+
+  assert.deepEqual(contacts, [
+    'setup-09', 'setup-10', 'setup-11', 'setup-12',
+    'hairpin-01', 'hairpin-02', 'hairpin-03', 'hairpin-04',
+    'hairpin-05', 'hairpin-06', 'hairpin-07', 'hairpin-08',
+    'hairpin-09', 'hairpin-10', 'hairpin-11', 'hairpin-12',
+  ]);
+});
+
+test('Syndicate Run qualifier target leaves room for a clean no-boost driving line', () => {
+  const model = new RoadModel(TUNING);
+  model.buildFromData(syndicateRun);
+  const player = new Player(TUNING);
+  let elapsed = 0;
+  let completed = false;
+
+  while (elapsed < syndicateRun.qualifier.targetSeconds) {
+    const segment = model.findSegment(player.position + TUNING.playerZ);
+    const speedPercent = player.speed / TUNING.maxSpeed;
+    // Feed-forward cancels the known centrifugal term; the small centering
+    // term models a skilled analog correction. Airbrake joins only when a
+    // sharp curve asks for more than ordinary steering can supply.
+    const requested = segment.curve * speedPercent * TUNING.centrifugal - player.x * 2;
+    const steer = Math.max(-1, Math.min(1, requested));
+    const shoulder = Math.abs(requested) > 1;
+    const previous = player.position;
+    player.update(1 / 60, {
+      ...NEUTRAL_INPUT,
+      throttle: 1,
+      steer,
+      airbrakeL: shoulder && requested < 0,
+      airbrakeR: shoulder && requested > 0,
+    }, model);
+    elapsed += 1 / 60;
+    if (player.position < previous) {
+      completed = true;
+      break;
+    }
+  }
+
+  assert.equal(completed, true, 'a clean line must cross the finish before the clock');
+  assert.ok(
+    elapsed <= syndicateRun.qualifier.targetSeconds - 5,
+    `qualifier should preserve at least five seconds of execution allowance, got ${elapsed.toFixed(2)}s`,
+  );
 });
 
 function driveHazardMasterySector({ from, to, startX, controls }) {

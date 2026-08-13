@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { SYNDICATE_RUN_THEME } from './syndicateRunTheme.js';
+import {
+  SYNDICATE_RUN_ORIGINAL_THEME,
+  SYNDICATE_RUN_THEME,
+} from './syndicateRunTheme.js';
 
 const theme = SYNDICATE_RUN_THEME;
 const hits = (pattern = []) => pattern.filter((value) => value != null).length;
@@ -62,4 +65,26 @@ test('the arrangement grows, pays off, falls away, and rebuilds', () => {
 test('the main groove repeats one hook before varying it', () => {
   assert.deepEqual(theme.bars[8].lead, theme.bars[10].lead);
   assert.notDeepEqual(theme.bars[8].lead, theme.bars[12].lead);
+  assert.ok(hits(theme.bars[8].chug) < hits(theme.bars[10].chug));
+  assert.deepEqual(theme.bars[10].chug, SYNDICATE_RUN_ORIGINAL_THEME.bars[10].chug);
+});
+
+test('the Race Mix keeps bass/chug controlled beneath a clear hook', () => {
+  for (const [index, bar] of theme.bars.entries()) {
+    assert.ok(bar.bassGain <= 0.76, `bar ${index} bass`);
+    assert.ok(bar.bassCutoff <= 900, `bar ${index} bass low-mid carve`);
+    assert.equal(bar.bassHighpass, 50, `bar ${index} sub trim`);
+    assert.ok(bar.chugGain <= 0.68, `bar ${index} chug`);
+    assert.ok(bar.hatGain <= 0.5, `bar ${index} hats`);
+    assert.ok(bar.leadGain >= 0.86, `bar ${index} lead`);
+  }
+  assert.ok(theme.bars[20].leadGain > theme.bars[8].leadGain);
+  assert.ok(theme.bars[28].padGain > theme.bars[20].padGain, 'interlude restores warm space while removing density');
+});
+
+test('the original Controlled Burn tracker pass remains available intact', () => {
+  assert.equal(SYNDICATE_RUN_ORIGINAL_THEME.bars[8].chugGain, undefined);
+  assert.equal(SYNDICATE_RUN_ORIGINAL_THEME.bars[8].leadGain, undefined);
+  assert.deepEqual(SYNDICATE_RUN_ORIGINAL_THEME.bars[8].lead, theme.bars[8].lead);
+  assert.deepEqual(SYNDICATE_RUN_ORIGINAL_THEME.bars[20].chug, theme.bars[20].chug);
 });

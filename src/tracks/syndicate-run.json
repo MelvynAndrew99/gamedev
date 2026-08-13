@@ -6,7 +6,9 @@
   "laps": 1,
   "qualifier": {
     "laps": 1,
-    "targetSeconds": 95
+    "targetSeconds": 88,
+    "silverSeconds": 80,
+    "goldSeconds": 72
   },
   "rivalRace": {
     "laps": 3,
@@ -18,7 +20,7 @@
   "intro": "Read the runway, commit to the launch, then airbrake into the next beat.",
   "design": {
     "focus": "The expert finale chains boost, launch, airborne lane choice, landing reward, and precision recovery across one long escalating lap.",
-    "qualifierTargetBasis": "Provisional 95 seconds: the 3,766-segment layout has a 62.8-second no-acceleration perfect-max-speed floor. The target budgets 32.2 seconds for launch acceleration, four dirt passages, sharp curves, airbrake transfers, and one recoverable mistake. Replace it with the median of at least five clean telemetry runs plus a 10-15% completion allowance.",
+    "qualifierTargetBasis": "A deterministic clean no-boost line runs about 65.6 seconds. Gold at 72 seconds preserves one small execution allowance, Silver at 80 allows a correction, and the 88-second qualifying deadline leaves about twenty-two seconds without making the finale a free clear.",
     "rivalLapRationale": "Three laps answer playtest feedback that the Rival Race ended before route optimization or combat could develop: lap one reads the line, lap two attacks it, and lap three settles the race.",
     "cycles": [
       {

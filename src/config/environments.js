@@ -6,6 +6,56 @@
 // gameplay color means.
 
 const ENVIRONMENTS = {
+  'proving-ground': {
+    name: 'Midnight test circuit',
+    seed: 1701,
+    colors: {
+      skyBands: [0x030718, 0x090d2a, 0x141944, 0x25295a, 0x41476d, 0x7477a0],
+      fog: 0x25295a,
+      groundLight: 0x172038,
+      groundDark: 0x10172b,
+      roadLight: 0x353b4c,
+      roadDark: 0x2d3343,
+      dirtLight: 0x4b4455,
+      dirtDark: 0x403949,
+      dirtEdgeA: 0x75627c,
+      dirtEdgeB: 0x5f506a,
+    },
+    celestial: { x: 0.24, y: 0.21, radius: 18, color: 0xdbe8ff, glow: 0x829ee8 },
+    stars: 24,
+    trackside: {
+      cadence: 24,
+      offset: [1.55, 2.75],
+      kinds: ['sensor', 'light', 'service'],
+      structure: 0x17223d,
+      highlight: 0x7187b8,
+      light: 0x6ee7ff,
+    },
+    layers: [
+      {
+        kind: 'ridge',
+        color: 0x202a4c,
+        baseY: 0.49,
+        amplitude: 48,
+        tileWidth: 580,
+        curveFactor: 0.2,
+        travelFactor: 0.024,
+        detail: 'transmission',
+      },
+      {
+        kind: 'industrial',
+        color: 0x0c142c,
+        windowColor: 0x63d9f5,
+        baseY: 0.525,
+        amplitude: 72,
+        tileWidth: 660,
+        curveFactor: 0.62,
+        travelFactor: 0.12,
+        detail: 'commuter',
+      },
+    ],
+  },
+
   'training-loop': {
     name: 'Coastal proving ground',
     seed: 1101,

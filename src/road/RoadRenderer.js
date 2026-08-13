@@ -11,6 +11,11 @@
 // reads as a bend. Nothing is actually curved.
 
 import { getEnvironment } from '../config/environments.js';
+import {
+  VEHICLE_FRAME_ASPECT,
+  VEHICLE_HULL_FRAME_RATIO,
+} from '../config/vehicleSprite.js';
+import { createVehicleSprite } from '../entities/VehicleSprite.js';
 import { ParallaxBackground } from './ParallaxBackground.js';
 import { TracksideScenery } from './TracksideScenery.js';
 import { carSpriteFrame } from '../systems/AirtimeFx.js';
@@ -26,14 +31,10 @@ export function rivalRenderAlpha(rival = {}) {
   return Math.min(1, Math.max(0, telegraphAlpha * stagingAlpha));
 }
 
-// The generated car lives in a deliberately roomy 64x56 steering frame. Its
-// straight-on hull occupies about 30 pixels of that width. Treating the whole
-// transparent frame as the projected car width made distant rivals collapse
-// into two isolated engine pixels — visually similar to two offset sprites.
-// Keep the authored frame, but size it from its opaque hull and switch to one
-// cohesive world marker before the detailed sprite becomes sub-pixel noise.
-const RIVAL_HULL_FRAME_RATIO = 30 / 64;
-const RIVAL_FRAME_ASPECT = 56 / 64;
+// The generated car lives in a deliberately roomy steering frame. Treating
+// that full transparent frame as the projected car width makes distant rivals
+// collapse into disconnected engine pixels. Size from the measured opaque
+// hull ratio instead, then switch to one cohesive marker below useful detail.
 const RIVAL_SPRITE_LOD_WIDTH = 8;
 
 export function rivalSpriteMode(projectedHullWidth) {
@@ -43,7 +44,7 @@ export function rivalSpriteMode(projectedHullWidth) {
 
 export function rivalSpriteFrameSize(projectedHullWidth) {
   const hullWidth = Math.max(0, Number(projectedHullWidth) || 0);
-  return hullWidth / RIVAL_HULL_FRAME_RATIO;
+  return hullWidth / VEHICLE_HULL_FRAME_RATIO;
 }
 
 export function rivalSteerFrame(steer = 0) {
@@ -53,8 +54,34 @@ export function rivalSteerFrame(steer = 0) {
         : steer <= 0.6 ? 3 : 4;
 }
 
+export function blendEnvironmentColors(from = {}, to = {}, progress = 0) {
+  const amount = Math.min(1, Math.max(0, Number(progress) || 0));
+  const keys = new Set([...Object.keys(from), ...Object.keys(to)]);
+  const colors = {};
+  keys.forEach((key) => {
+    const start = from[key];
+    const end = to[key];
+    if (Number.isInteger(start) && Number.isInteger(end)) {
+      const sr = (start >> 16) & 0xff;
+      const sg = (start >> 8) & 0xff;
+      const sb = start & 0xff;
+      const er = (end >> 16) & 0xff;
+      const eg = (end >> 8) & 0xff;
+      const eb = end & 0xff;
+      const r = Math.round(sr + (er - sr) * amount);
+      const g = Math.round(sg + (eg - sg) * amount);
+      const b = Math.round(sb + (eb - sb) * amount);
+      colors[key] = (r << 16) | (g << 8) | b;
+    } else {
+      colors[key] = amount >= 1 ? end : start;
+    }
+  });
+  return colors;
+}
+
 export class RoadRenderer {
   constructor(scene, tuning, environmentId = 'endless') {
+    this.scene = scene;
     this.t = tuning;
     this.w = scene.scale.width;
     this.h = scene.scale.height;
@@ -108,8 +135,7 @@ export class RoadRenderer {
     this.rivalPool = [];
     for (let i = 0; i < 6; i++) {
       this.rivalPool.push(
-        scene.add.sprite(0, 0, 'car', carSpriteFrame(2, 0))
-          .setOrigin(0.5, 1)
+        createVehicleSprite(scene, 0, 0, carSpriteFrame(2, 0))
           .setDepth(7)
           .setVisible(false),
       );
@@ -120,6 +146,71 @@ export class RoadRenderer {
     // adds a literal clock ring + hands so the time reward is never encoded by
     // cyan tint alone. One Graphics object is cleared/reused every frame.
     this.timeBonusMarkers = scene.add.graphics().setDepth(6);
+  }
+
+  setEnvironment(environmentId) {
+    const environment = getEnvironment(environmentId);
+    if (environment === this.environment) return false;
+    if (this.environmentTransition) {
+      this.environmentTransition.nextBackground.destroy();
+      this.environmentTransition = null;
+      this.background.setAlpha(1);
+    }
+    this.environment = environment;
+    this.colors = { ...this.t.colors, ...environment.colors };
+    this.background.setEnvironment(environment);
+    this.trackside.setEnvironment(environment);
+    return true;
+  }
+
+  transitionEnvironment(environmentId, durationMs = 1800) {
+    const environment = getEnvironment(environmentId);
+    if (environment === this.environment || this.environmentTransition) return false;
+    const nextBackground = new ParallaxBackground(
+      this.scene,
+      this.w,
+      this.h,
+      environment,
+      this.t.segmentLength,
+    ).setAlpha(0);
+    this.environmentTransition = {
+      environment,
+      nextBackground,
+      fromColors: { ...this.colors },
+      toColors: { ...this.t.colors, ...environment.colors },
+      startedAt: this.scene.time.now,
+      durationMs: Math.max(1, Number(durationMs) || 1800),
+    };
+    return true;
+  }
+
+  updateEnvironmentTransition(sceneryDistance) {
+    const transition = this.environmentTransition;
+    if (!transition) return;
+    const progress = Math.min(
+      1,
+      Math.max(0, (this.scene.time.now - transition.startedAt) / transition.durationMs),
+    );
+    this.background.setAlpha(1 - progress);
+    transition.nextBackground.setAlpha(progress);
+    transition.nextBackground.render(
+      sceneryDistance,
+      this.backgroundCurveOffset,
+      this.backgroundHorizonOffset,
+    );
+    this.colors = blendEnvironmentColors(
+      transition.fromColors,
+      transition.toColors,
+      progress,
+    );
+    if (progress < 1) return;
+
+    this.background.destroy();
+    this.background = transition.nextBackground.setAlpha(1);
+    this.environment = transition.environment;
+    this.colors = transition.toColors;
+    this.trackside.setEnvironment(transition.environment);
+    this.environmentTransition = null;
   }
 
   render(
@@ -234,6 +325,7 @@ export class RoadRenderer {
       this.backgroundCurveOffset,
       this.backgroundHorizonOffset,
     );
+    this.updateEnvironmentTransition(sceneryDistance);
 
     this.trackside.render(model, base);
     this.renderGates(model, base);
@@ -624,9 +716,9 @@ export class RoadRenderer {
             .setPosition(Math.round(drawX), Math.round(roadY))
             .setDisplaySize(
               frameWidth,
-              frameWidth * RIVAL_FRAME_ASPECT,
+              frameWidth * VEHICLE_FRAME_ASPECT,
             )
-            .setTint(rival.color ?? 0xff6b6b)
+            .setLivery(rival.color ?? 0xff6b6b)
             .setAlpha(alpha)
             .setVisible(true);
         } else {

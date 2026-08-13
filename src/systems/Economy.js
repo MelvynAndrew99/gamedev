@@ -31,11 +31,11 @@ export const PIT_CREW_REPAIR_FRACTIONS = Object.freeze({
 export const GARAGE_ITEMS = Object.freeze([
   Object.freeze({
     id: 'boost_pack', category: 'race', label: 'STARTER CANISTER', cost: 75,
-    description: 'Arm 1 boost charge for your next Story race.',
+    description: 'Load 1 boost for your next Story race. Buy up to 3.',
   }),
   Object.freeze({
     id: 'extra_boost_slot', category: 'race', label: 'OVERCHARGE RACK', cost: 150,
-    description: 'Add and fill a fourth boost slot for your next Story race.',
+    description: 'Add an empty fourth slot for your next Story race. Fill it on the track.',
   }),
   Object.freeze({
     id: 'pit_crew_1', category: 'upgrade', label: 'PIT CREW', cost: 800,
@@ -83,7 +83,12 @@ export function applyEmergencyTow(racer, tuning) {
 }
 
 function itemFlags(racer, id) {
-  if (id === 'boost_pack') return { owned: false, armed: racer.pendingBoostPack === true };
+  if (id === 'boost_pack') {
+    const loaded = Math.min(3, Math.max(0, Math.floor(
+      Number(racer.pendingBoostCharges ?? (racer.pendingBoostPack ? 1 : 0)) || 0,
+    )));
+    return { owned: false, armed: loaded >= 3, loaded, limit: 3 };
+  }
   if (id === 'extra_boost_slot') {
     return { owned: false, armed: racer.pendingExtraBoostSlot === true };
   }
@@ -127,7 +132,10 @@ export function buyGarageItem(racer, id) {
   }
 
   racer.money -= item.cost;
-  if (id === 'boost_pack') racer.pendingBoostPack = true;
+  if (id === 'boost_pack') {
+    const loaded = Math.min(3, (item.loaded ?? 0) + 1);
+    racer.pendingBoostCharges = loaded;
+  }
   else if (id === 'extra_boost_slot') racer.pendingExtraBoostSlot = true;
   else if (id === 'pit_crew_1') racer.pitCrewLevel = 1;
   else if (id === 'pit_crew_2') racer.pitCrewLevel = 2;
@@ -138,18 +146,28 @@ export function buyGarageItem(racer, id) {
     reason: null,
     itemId: id,
     cost: item.cost,
-    armed: id === 'boost_pack' || id === 'extra_boost_slot',
+    armed: id === 'boost_pack' ? (item.loaded ?? 0) + 1 >= 3 : id === 'extra_boost_slot',
     owned: id !== 'boost_pack' && id !== 'extra_boost_slot',
+    ...(id === 'boost_pack'
+      ? { loaded: Math.min(3, (item.loaded ?? 0) + 1), limit: 3 }
+      : {}),
   };
 }
 
 export function raceLoadout(racer, baseCapacity = 3) {
-  const boostPack = racer.pendingBoostPack === true;
+  const boostCharges = Math.min(
+    Math.max(1, Math.floor(Number(baseCapacity) || 3)),
+    Math.max(0, Math.floor(
+      Number(racer.pendingBoostCharges ?? (racer.pendingBoostPack ? 1 : 0)) || 0,
+    )),
+  );
   const extraSlot = racer.pendingExtraBoostSlot === true;
   return Object.freeze({
     capacity: Math.max(1, Math.floor(Number(baseCapacity) || 3)) + (extraSlot ? 1 : 0),
-    startingSlots: (boostPack ? 1 : 0) + (extraSlot ? 1 : 0),
-    consumed: Object.freeze({ boostPack, extraSlot }),
+    // The purchased rack is capacity, not a free fourth charge. This keeps
+    // its intended accessibility value while preserving the pickup loop.
+    startingSlots: boostCharges,
+    consumed: Object.freeze({ boostCharges, extraSlot }),
   });
 }
 
@@ -157,7 +175,7 @@ export function raceLoadout(racer, baseCapacity = 3) {
 // Merely opening a race scene or backing out of its briefing does not spend it.
 export function consumeRaceLoadout(racer, baseCapacity = 3) {
   const loadout = raceLoadout(racer, baseCapacity);
-  racer.pendingBoostPack = false;
+  racer.pendingBoostCharges = 0;
   racer.pendingExtraBoostSlot = false;
   return loadout;
 }

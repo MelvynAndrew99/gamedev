@@ -1,8 +1,8 @@
 {
   "id": "training-validation",
   "name": "PROVING GROUND",
-  "environment": "training-loop",
-  "music": "training-loop",
+  "environment": "proving-ground",
+  "music": "proving-ground",
   "seed": 1101,
   "storyVersion": 1,
   "laps": 1,
@@ -10,7 +10,9 @@
   "intro": "Bank boost, launch the gold lanes, and smash every marked cone.",
   "qualifier": {
     "laps": 1,
-    "targetSeconds": 78
+    "targetSeconds": 78,
+    "silverSeconds": 70,
+    "goldSeconds": 64
   },
   "rivalRace": {
     "laps": 3,
@@ -22,7 +24,7 @@
   "design": {
     "focus": "Recombine Race School skills in six readable boost-to-air cycles before adding moving rivals.",
     "pacing": "A welcoming opening grows through hills, dirt, lane-choice jumps, and airbrake precision, breathes after every technical pair, then rebuilds into a fast downhill finish.",
-    "targetTuning": "PROVISIONAL: 3342 segments create a 55.7-second theoretical floor at 12000 world units/second. The 78-second qualifier adds 40 percent for acceleration, two dirt sectors, curves, elevation, and one recoverable mistake. Replace it with the median of five clean telemetry runs plus a 10-15 percent completion allowance.",
+    "targetTuning": "A deterministic clean no-boost line runs about 58.1 seconds. Gold at 64 seconds leaves one small execution allowance, Silver at 70 leaves about twelve seconds, and the 78-second qualifying deadline leaves about twenty seconds for route reading and a recoverable mistake.",
     "cycles": [
       {
         "id": "opening-sweep",

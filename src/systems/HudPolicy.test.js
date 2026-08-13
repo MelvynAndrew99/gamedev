@@ -83,6 +83,7 @@ test('Endless is distance, speed, boost, and glass only', () => {
       health: view.healthBar,
       boost: view.boostGauge,
       glass: view.windshieldDamage,
+      style: view.styleRewards,
     },
     {
       progress: false,
@@ -92,6 +93,7 @@ test('Endless is distance, speed, boost, and glass only', () => {
       health: false,
       boost: true,
       glass: true,
+      style: true,
     },
   );
 });
@@ -106,6 +108,12 @@ test('persistent corner instruments stay outside the player and road corridor', 
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.carsRemaining, HUD_SAFE_LAYOUT.roadCorridor), false);
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.objectiveToast, HUD_SAFE_LAYOUT.rivalToast), false);
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.objectiveToast, HUD_SAFE_LAYOUT.roadCorridor), false);
+  assert.deepEqual(
+    HUD_SAFE_LAYOUT.damageNotice,
+    HUD_SAFE_LAYOUT.objectiveToast,
+    'damage temporarily owns the same notification slot instead of overlapping it',
+  );
+  assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.damageNotice, HUD_SAFE_LAYOUT.styleReward), false);
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.rivalToast, HUD_SAFE_LAYOUT.roadCorridor), false);
   assert.equal(rectsOverlap(HUD_SAFE_LAYOUT.styleReward, HUD_SAFE_LAYOUT.roadCorridor), false);
   assert.ok(

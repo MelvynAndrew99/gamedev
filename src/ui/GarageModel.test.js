@@ -7,6 +7,7 @@ test('garage product badges distinguish affordability, ownership, and one-race l
   assert.equal(garageItemBadge({ cost: 120, perRace: true }, 120), 'PER RACE');
   assert.equal(garageItemBadge({ cost: 500 }, 60), 'FUNDS LOW');
   assert.equal(garageItemBadge({ cost: 90, armed: true, perRace: true }, 500), 'NEXT RACE');
+  assert.equal(garageItemBadge({ badge: '2 / 3 LOADED', cost: 75 }, 500), '2 / 3 LOADED');
   assert.equal(garageItemBadge({ cost: 750, owned: true }, 0), 'OWNED');
   assert.equal(garageItemBadge({ cost: 1400, locked: true }, 5000), 'LOCKED');
 });

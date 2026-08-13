@@ -18,7 +18,7 @@ test('every game mode has a complete two-layer environment', () => {
 
   assert.deepEqual(
     ENVIRONMENT_IDS,
-    ['training-loop', 'neon-gulch', 'syndicate-run', 'endless'],
+    ['proving-ground', 'training-loop', 'neon-gulch', 'syndicate-run', 'endless'],
   );
 
   for (const id of ENVIRONMENT_IDS) {
@@ -41,6 +41,14 @@ test('every game mode has a complete two-layer environment', () => {
       );
     }
   }
+});
+
+test('Story Proving Ground has a distinct night-test environment from Race School', () => {
+  const story = getEnvironment('proving-ground');
+  const school = getEnvironment('training-loop');
+  assert.notEqual(story, school);
+  assert.notDeepEqual(story.colors.skyBands, school.colors.skyBands);
+  assert.notDeepEqual(story.trackside.kinds, school.trackside.kinds);
 });
 
 test('near scenery produces stronger parallax than far scenery', () => {

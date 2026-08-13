@@ -3,6 +3,11 @@
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
 import {
+  VEHICLE_TITLE_SCALE,
+  loadVehicleSheets,
+} from '../config/vehicleSprite.js';
+import { createVehicleSprite } from '../entities/VehicleSprite.js';
+import {
   getTrainingResult,
   highestUnlockedTrainingIndex,
 } from '../systems/TrainingProgress.js';
@@ -23,15 +28,28 @@ import {
 } from '../systems/StoryProgress.js';
 import { achievementViews, getPlayerProfile } from '../systems/PlayerStats.js';
 import { MUSIC } from '../audio/MusicEngine.js';
-import { SHOP_THEME } from '../audio/tracks/shopTheme.js';
+import {
+  CHROME_CREDITS_ORIGINAL_THEME,
+  SHOP_THEME,
+} from '../audio/tracks/shopTheme.js';
 import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
-import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
+import {
+  NEON_GULCH_ORIGINAL_THEME,
+  NEON_GULCH_THEME,
+} from '../audio/tracks/neonGulchTheme.js';
+import { PROVING_GROUND_THEME } from '../audio/tracks/provingGroundTheme.js';
 import { REDLINE_GAUNTLET_THEME } from '../audio/tracks/redlineGauntletTheme.js';
-import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
+import {
+  SYNDICATE_RUN_ORIGINAL_THEME,
+  SYNDICATE_RUN_THEME,
+} from '../audio/tracks/syndicateRunTheme.js';
 import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
+import { TITLE_THEME } from '../audio/tracks/titleTheme.js';
 import { garageActionBlocked, garageItemBadge } from '../ui/GarageModel.js';
+import { rumbleGamepad } from '../systems/Haptics.js';
 import {
   adjacentDiscoveredTrack,
+  musicListWindow,
   moveMusicSelection,
   musicLibraryEntries,
 } from '../ui/MusicPlayerModel.js';
@@ -99,12 +117,21 @@ const STYLE_RECORDS = Object.freeze([
 ]);
 
 const GARAGE_PLAYLIST = Object.freeze([
+  Object.freeze({ label: 'NIGHT DRIVE', track: TITLE_THEME, discovered: () => true }),
   Object.freeze({ label: 'CHROME & CREDITS', track: SHOP_THEME, discovered: () => true }),
+  Object.freeze({ label: 'CHROME & CREDITS — ORIGINAL',
+    track: CHROME_CREDITS_ORIGINAL_THEME, discovered: () => true }),
   Object.freeze({ label: 'HIGH SPEED', track: HIGH_SPEED_THEME,
+    discovered: (scene) => Boolean(scene.storyTiles[0]?.qualifier.complete) }),
+  Object.freeze({ label: 'START SIGNAL', track: PROVING_GROUND_THEME,
     discovered: (scene) => Boolean(scene.storyTiles[0]?.qualifier.complete) }),
   Object.freeze({ label: 'NEON GULCH', track: NEON_GULCH_THEME,
     discovered: (scene) => Boolean(scene.storyTiles[1]?.qualifier.complete) }),
+  Object.freeze({ label: 'NEON GULCH — ORIGINAL', track: NEON_GULCH_ORIGINAL_THEME,
+    discovered: (scene) => Boolean(scene.storyTiles[1]?.qualifier.complete) }),
   Object.freeze({ label: 'SYNDICATE RUN', track: SYNDICATE_RUN_THEME,
+    discovered: (scene) => Boolean(scene.storyTiles[2]?.qualifier.complete) }),
+  Object.freeze({ label: 'SYNDICATE RUN — ORIGINAL', track: SYNDICATE_RUN_ORIGINAL_THEME,
     discovered: (scene) => Boolean(scene.storyTiles[2]?.qualifier.complete) }),
   Object.freeze({ label: 'REDLINE GAUNTLET', track: REDLINE_GAUNTLET_THEME,
     discovered: (scene) => scene.storyTiles.some((tile) => tile.rivals.complete) }),
@@ -142,6 +169,13 @@ function trophyColor(rank) {
       : rank === 'bronze'
         ? COLORS.bronze
         : 0x4e4966;
+}
+
+function trophyAtlasFrame(rank) {
+  return rank === 'bronze' ? 0
+    : rank === 'silver' ? 1
+      : rank === 'gold' ? 2
+        : rank === 'platinum' ? 3 : 0;
 }
 
 function shortTime(seconds) {
@@ -187,16 +221,17 @@ export class TitleScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.spritesheet('car', 'assets/car.png', {
-      frameWidth: 64,
-      frameHeight: 56,
-    });
+    loadVehicleSheets(this);
     this.load.image('cone', 'assets/cone.png');
     this.load.image('rock', 'assets/rock.png');
     this.load.image('post', 'assets/post.png');
     this.load.image('ramp', 'assets/ramp.png');
     this.load.image('boost', 'assets/boost.png');
     this.load.image('title-city-bg', 'assets/title-city-bg-v2.png');
+    this.load.spritesheet('trophy-atlas', 'assets/trophy-atlas-v1.png', {
+      frameWidth: 627,
+      frameHeight: 627,
+    });
   }
 
   create() {
@@ -225,7 +260,7 @@ export class TitleScene extends Phaser.Scene {
     this.garageTowHealth = this.garageData?.wrecked
       ? applyEmergencyTow(RACER, TUNING)
       : 0;
-    this.menuMusicPlaying = false;
+    this.menuMusicTrack = null;
     this.buildTableau();
     this.refreshProgress();
 
@@ -258,7 +293,15 @@ export class TitleScene extends Phaser.Scene {
     }).setOrigin(1, 1).setDepth(30);
 
     this.renderView(true);
+    this.musicWheelHandler = (_pointer, _gameObjects, _deltaX, deltaY) => {
+      if (!this.musicPlayerOpen || Math.abs(deltaY) < 1) return;
+      this.navigate(deltaY < 0 ? 'up' : 'down');
+    };
+    this.input.on('wheel', this.musicWheelHandler);
     this.events.once('shutdown', () => MUSIC.stop());
+    this.events.once('shutdown', () => {
+      this.input.off('wheel', this.musicWheelHandler);
+    });
   }
 
   buildTableau() {
@@ -306,16 +349,17 @@ export class TitleScene extends Phaser.Scene {
     });
     this.logoAccent = this.add.graphics().setDepth(7);
 
-    // The visible pixels sit low inside the 64×56 source frame. Position the
-    // frame so the tires—not its transparent bounds—meet the grid at y≈424.
-    // A restrained contact shadow makes that road relationship unambiguous.
+    // The layered hover racer is bottom-anchored, so its underbody meets the
+    // road plane even when the source atlas resolution changes. A restrained
+    // contact shadow makes that relationship unambiguous without drawing
+    // wheels onto an anti-gravity vehicle.
     this.carGrounding = this.add.graphics().setDepth(5);
     this.carGrounding.fillStyle(0x03020d, 0.72);
     this.carGrounding.fillEllipse(WIDTH / 2, 422, 122, 18);
     this.carGrounding.lineStyle(2, COLORS.magenta, 0.34);
     this.carGrounding.strokeEllipse(WIDTH / 2, 422, 112, 12);
-    this.car = this.add.sprite(WIDTH / 2, 374, 'car', carSpriteFrame(2, 0))
-      .setScale(2.7)
+    this.car = createVehicleSprite(this, WIDTH / 2, 424, carSpriteFrame(2, 0))
+      .setScale(VEHICLE_TITLE_SCALE)
       .setDepth(6);
     this.tweens.add({
       targets: this.car,
@@ -390,10 +434,10 @@ export class TitleScene extends Phaser.Scene {
     if (this.musicPlayerOpen) {
       if (justDown(this.keys.tabLeft)) this.skipGarageMusic('previous');
       if (justDown(this.keys.tabRight)) this.skipGarageMusic('next');
-      if (justDown(this.keys.up)) this.moveMusicPlayer('up');
-      if (justDown(this.keys.down)) this.moveMusicPlayer('down');
-      if (justDown(this.keys.left)) this.moveMusicPlayer('left');
-      if (justDown(this.keys.right)) this.moveMusicPlayer('right');
+      if (justDown(this.keys.up)) this.navigate('up');
+      if (justDown(this.keys.down)) this.navigate('down');
+      if (justDown(this.keys.left)) this.navigate('left');
+      if (justDown(this.keys.right)) this.navigate('right');
       if (justDown(this.keys.enter)) this.playSelectedGarageMusic();
       if (justDown(this.keys.space) || justDown(this.keys.pauseMusic)) {
         this.toggleGarageMusicPlayback();
@@ -403,10 +447,10 @@ export class TitleScene extends Phaser.Scene {
     }
     if (justDown(this.keys.tabLeft)) this.switchSectionPage('left');
     if (justDown(this.keys.tabRight)) this.switchSectionPage('right');
-    if (justDown(this.keys.up)) this.move('up');
-    if (justDown(this.keys.down)) this.move('down');
-    if (justDown(this.keys.left)) this.move('left');
-    if (justDown(this.keys.right)) this.move('right');
+    if (justDown(this.keys.up)) this.navigate('up');
+    if (justDown(this.keys.down)) this.navigate('down');
+    if (justDown(this.keys.left)) this.navigate('left');
+    if (justDown(this.keys.right)) this.navigate('right');
     if (justDown(this.keys.enter) || justDown(this.keys.space)) this.activate();
     if (justDown(this.keys.escape) || justDown(this.keys.backspace)) this.back();
   }
@@ -435,24 +479,36 @@ export class TitleScene extends Phaser.Scene {
       a: true, b: true, x: true, l: true, r: true,
     };
     if (this.musicPlayerOpen) {
-      if (now.up && !prev.up) this.moveMusicPlayer('up');
-      if (now.down && !prev.down) this.moveMusicPlayer('down');
-      if (now.left && !prev.left) this.moveMusicPlayer('left');
-      if (now.right && !prev.right) this.moveMusicPlayer('right');
-      if (now.a && !prev.a) this.playSelectedGarageMusic();
+      if (now.up && !prev.up) this.navigate('up', pad);
+      if (now.down && !prev.down) this.navigate('down', pad);
+      if (now.left && !prev.left) this.navigate('left', pad);
+      if (now.right && !prev.right) this.navigate('right', pad);
+      if (now.a && !prev.a) {
+        rumbleGamepad(pad, { duration: 55, strong: 0.12, weak: 0.3 });
+        this.playSelectedGarageMusic();
+      }
       if (now.x && !prev.x) this.toggleGarageMusicPlayback();
-      if (now.b && !prev.b) this.back();
+      if (now.b && !prev.b) {
+        rumbleGamepad(pad, { duration: 45, strong: 0.08, weak: 0.2 });
+        this.back();
+      }
       if (now.l && !prev.l) this.skipGarageMusic('previous');
       if (now.r && !prev.r) this.skipGarageMusic('next');
       this.prevPad = now;
       return;
     }
-    if (now.up && !prev.up) this.move('up');
-    if (now.down && !prev.down) this.move('down');
-    if (now.left && !prev.left) this.move('left');
-    if (now.right && !prev.right) this.move('right');
-    if (now.a && !prev.a) this.activate();
-    if (now.b && !prev.b) this.back();
+    if (now.up && !prev.up) this.navigate('up', pad);
+    if (now.down && !prev.down) this.navigate('down', pad);
+    if (now.left && !prev.left) this.navigate('left', pad);
+    if (now.right && !prev.right) this.navigate('right', pad);
+    if (now.a && !prev.a) {
+      rumbleGamepad(pad, { duration: 55, strong: 0.12, weak: 0.3 });
+      this.activate();
+    }
+    if (now.b && !prev.b) {
+      rumbleGamepad(pad, { duration: 45, strong: 0.08, weak: 0.2 });
+      this.back();
+    }
     if (now.l && !prev.l) this.switchSectionPage('left');
     if (now.r && !prev.r) this.switchSectionPage('right');
     this.prevPad = now;
@@ -476,11 +532,18 @@ export class TitleScene extends Phaser.Scene {
     return 3;
   }
 
+  navigate(direction, pad = null) {
+    if (!this.move(direction)) return false;
+    MUSIC.playMenuMove(direction);
+    if (pad) rumbleGamepad(pad, { duration: 28, strong: 0.04, weak: 0.14 });
+    return true;
+  }
+
   move(direction) {
-    if (this.transitioning) return;
+    if (this.transitioning) return false;
     if (this.musicPlayerOpen) {
       this.moveMusicPlayer(direction);
-      return;
+      return true;
     }
     if (this.view === FRONT_END_VIEWS.STORY && this.storyPage === STORY_PAGES.GARAGE) {
       const count = this.garageActions().length;
@@ -488,18 +551,18 @@ export class TitleScene extends Phaser.Scene {
       this.garageSelection = (this.garageSelection + delta + count) % count;
       this.garageMessage = '';
       this.renderView();
-      return;
+      return true;
     }
     if (
       this.view === FRONT_END_VIEWS.TROPHIES &&
       this.trophyPage === TROPHY_PAGES.RECORDS
-    ) return;
+    ) return false;
     if (
       this.view === FRONT_END_VIEWS.STORY &&
       (direction === 'up' || direction === 'down')
     ) {
       this.toggleStoryPhase(this.selection());
-      return;
+      return true;
     }
     const current = this.selection();
     const next = moveGridSelection(
@@ -508,9 +571,10 @@ export class TitleScene extends Phaser.Scene {
       this.columnsForView(),
       direction,
     );
-    if (next === current) return;
+    if (next === current) return false;
     this.selectionByView[this.view] = next;
     this.renderView();
+    return true;
   }
 
   toggleStoryPhase(trackIndex, phase = null) {
@@ -552,6 +616,7 @@ export class TitleScene extends Phaser.Scene {
     if (this.transitioning) return;
     if (index === this.selection()) return;
     this.selectionByView[this.view] = index;
+    MUSIC.playMenuMove('right');
     this.renderView();
   }
 
@@ -619,6 +684,14 @@ export class TitleScene extends Phaser.Scene {
       this.renderView(true);
       return;
     }
+    // The garage is a sibling of Course Select inside Story, not a dead-end
+    // destination. B / Escape and the visible Back action therefore return
+    // to the course cards first; a second Back leaves Story for the title.
+    if (this.view === FRONT_END_VIEWS.STORY && this.storyPage === STORY_PAGES.GARAGE) {
+      this.storyPage = STORY_PAGES.COURSES;
+      this.renderView(true);
+      return;
+    }
     this.view = FRONT_END_VIEWS.MAIN;
     this.renderView(true);
   }
@@ -633,7 +706,9 @@ export class TitleScene extends Phaser.Scene {
     this.logoExtrusion.setVisible(main);
     this.logoAccent.setVisible(main);
     this.carGrounding.setAlpha(main ? 1 : 0.12);
-    this.car.setAlpha(main ? 1 : 0.18).setScale(main ? 2.7 : 2.55);
+    this.car.setAlpha(main ? 1 : 0.18).setScale(
+      main ? VEHICLE_TITLE_SCALE : VEHICLE_TITLE_SCALE * 0.94,
+    );
 
     if (main) this.renderMain();
     else if (this.view === FRONT_END_VIEWS.SCHOOL) this.renderSchool();
@@ -655,17 +730,20 @@ export class TitleScene extends Phaser.Scene {
   }
 
   syncMenuMusic() {
-    const shouldPlay = this.view === FRONT_END_VIEWS.STORY;
-    if (shouldPlay && !this.menuMusicPlaying) {
+    // While the unlocked jukebox is open, its explicit selection owns the
+    // music bus. Closing it restores the appropriate front-end theme.
+    if (this.musicPlayerOpen) return;
+    const desired = this.view === FRONT_END_VIEWS.STORY ? SHOP_THEME : TITLE_THEME;
+    if (this.menuMusicTrack !== desired) {
       MUSIC.setVolume(TUNING.musicVolume);
-      MUSIC.start(SHOP_THEME);
-      this.menuMusicPlaying = true;
+      MUSIC.start(desired);
+      this.menuMusicTrack = desired;
       this.musicPlayerPlaying = true;
-      this.garageTrackIndex = 0;
-      this.garageNowPlaying = GARAGE_PLAYLIST[0].label;
-    } else if (!shouldPlay && this.menuMusicPlaying) {
-      MUSIC.stop();
-      this.menuMusicPlaying = false;
+      this.garageTrackIndex = Math.max(
+        0,
+        GARAGE_PLAYLIST.findIndex((entry) => entry.track === desired),
+      );
+      this.garageNowPlaying = GARAGE_PLAYLIST[this.garageTrackIndex].label;
     }
   }
 
@@ -785,7 +863,7 @@ export class TitleScene extends Phaser.Scene {
       color: colorCss(tile.locked ? COLORS.muted : COLORS.white),
       wordWrap: { width: width - 28 },
     });
-    this.drawMiniRoad(g, x + 14, y + 61, width - 28, 35, tile.locked);
+    this.drawSchoolIllustration(g, x + 14, y + 59, width - 28, 40, index, tile.locked);
     const status = tile.locked
       ? '■ LOCKED'
       : tile.trophy
@@ -838,7 +916,8 @@ export class TitleScene extends Phaser.Scene {
     const event = phase === STORY_PHASES.RIVALS ? tile.rivals : tile.qualifier;
     const target = tile.track.qualifier?.targetSeconds;
     const detail = phase === STORY_PHASES.QUALIFIER
-      ? `${tile.track.intro}  •  SOLO TARGET ${shortTime(target)}`
+      ? `${tile.track.intro}  •  QUALIFY ${shortTime(target)}  •  ` +
+        `GOLD ${shortTime(tile.track.qualifier?.goldSeconds)}`
       : event.locked
         ? 'LOCKED — BEAT THIS COURSE\'S CLOCK TO OPEN THE RIVAL RACE'
         : `${tile.track.intro}  •  ${tile.track.rivalRace?.laps ?? 3} LAPS  •  ` +
@@ -909,6 +988,9 @@ export class TitleScene extends Phaser.Scene {
           : null,
         armed: Boolean(item.armed),
         equipped: Boolean(item.armed),
+        badge: item.id === 'boost_pack'
+          ? `${item.loaded} / ${item.limit} LOADED`
+          : undefined,
         buy: () => buyGarageItem(RACER, item.id),
       });
     });
@@ -955,8 +1037,12 @@ export class TitleScene extends Phaser.Scene {
       return `REPAIRED +${result.health} HULL  •  $${result.cost} PAID`;
     }
     if (result.ok) {
-      if (action.id === 'boost_pack') return '+1 STARTING BOOST ARMED  •  NEXT STORY RACE';
-      if (action.id === 'extra_boost_slot') return '4TH BOOST SLOT LOADED  •  NEXT STORY RACE';
+      if (action.id === 'boost_pack') {
+        return `STARTING BOOST ${result.loaded} / ${result.limit} LOADED  •  NEXT STORY RACE`;
+      }
+      if (action.id === 'extra_boost_slot') {
+        return '4TH BOOST SLOT ADDED EMPTY  •  FIND A PICKUP ON THE TRACK';
+      }
       if (action.id === 'pit_crew_1') return 'PIT CREW ADDED  •  UP TO 25% HULL AFTER A FINISH';
       if (action.id === 'pit_crew_2') return 'PIT CREW UPGRADED  •  UP TO 50% HULL AFTER A FINISH';
       if (action.id === 'music_player') return 'MUSIC PLAYER UNLOCKED  •  PRESS A TO OPEN LIBRARY';
@@ -1010,6 +1096,7 @@ export class TitleScene extends Phaser.Scene {
     }
     MUSIC.setVolume(TUNING.musicVolume);
     MUSIC.start(selection.track);
+    this.menuMusicTrack = selection.track;
     this.garageNowPlaying = selection.label;
     this.musicPlayerPlaying = true;
     this.musicPlayerMessage = `NOW PLAYING  •  ${selection.label}`;
@@ -1019,6 +1106,7 @@ export class TitleScene extends Phaser.Scene {
   toggleGarageMusicPlayback() {
     if (this.musicPlayerPlaying) {
       MUSIC.stop();
+      this.menuMusicTrack = null;
       this.musicPlayerPlaying = false;
       this.musicPlayerMessage = `PAUSED  •  ${this.garageNowPlaying}`;
     } else {
@@ -1027,6 +1115,7 @@ export class TitleScene extends Phaser.Scene {
         this.musicPlayerMessage = 'SELECT A DISCOVERED TRACK TO PLAY';
       } else {
         MUSIC.start(selected.track);
+        this.menuMusicTrack = selected.track;
         this.garageNowPlaying = selected.label;
         this.musicPlayerPlaying = true;
         this.musicPlayerMessage = `NOW PLAYING  •  ${selected.label}`;
@@ -1094,6 +1183,7 @@ export class TitleScene extends Phaser.Scene {
   renderGarageMusicPlayer() {
     const entries = this.musicLibrary();
     const selected = entries[this.garageTrackIndex] ?? entries[0];
+    const listWindow = musicListWindow(this.garageTrackIndex, entries.length, 6);
     const g = this.graphics();
     const x = 28;
     const y = 180;
@@ -1112,9 +1202,15 @@ export class TitleScene extends Phaser.Scene {
       color: colorCss(COLORS.cyan),
     }).setOrigin(1, 0);
 
-    entries.forEach((entry, index) => {
+    this.text(x + 334, y + 39, listWindow.label, {
+      fontFamily: 'Arial, sans-serif', fontSize: '8px', fontStyle: 'bold',
+      color: colorCss(COLORS.cyan),
+    }).setOrigin(1, 0);
+
+    entries.slice(listWindow.start, listWindow.end).forEach((entry, visibleIndex) => {
+      const index = listWindow.start + visibleIndex;
       const rowX = x + 18;
-      const rowY = y + 54 + index * 38;
+      const rowY = y + 54 + visibleIndex * 38;
       const active = index === this.garageTrackIndex;
       const playing = entry.label === this.garageNowPlaying && this.musicPlayerPlaying;
       g.fillStyle(active ? COLORS.panelAlt : COLORS.panel, active ? 1 : 0.86);
@@ -1152,6 +1248,31 @@ export class TitleScene extends Phaser.Scene {
           this.renderView();
         });
     });
+
+    // A literal rail makes the windowed library discoverable without relying
+    // on copy. Its thumb reflects the complete album and follows keyboard,
+    // controller, pointer-hover, and wheel selection through one model.
+    const railX = x + 342;
+    const railY = y + 54;
+    const railH = 222;
+    const thumbH = Math.max(32, railH * listWindow.thumbFraction);
+    const thumbY = railY + (railH - thumbH) * listWindow.scrollFraction;
+    g.fillStyle(0x29233f, 1);
+    g.fillRect(railX, railY, 6, railH);
+    g.fillStyle(COLORS.cyan, 0.9);
+    g.fillRect(railX, thumbY, 6, thumbH);
+    if (listWindow.canScrollUp) {
+      g.fillStyle(COLORS.gold, 1);
+      g.fillTriangle(railX - 4, railY + 8, railX + 3, railY - 1, railX + 10, railY + 8);
+    }
+    if (listWindow.canScrollDown) {
+      g.fillStyle(COLORS.gold, 1);
+      g.fillTriangle(
+        railX - 4, railY + railH - 8,
+        railX + 3, railY + railH + 1,
+        railX + 10, railY + railH - 8,
+      );
+    }
 
     const deckX = x + 358;
     const deckW = width - 376;
@@ -1427,7 +1548,7 @@ export class TitleScene extends Phaser.Scene {
       ? '■ LOCKED'
       : phase === STORY_PHASES.QUALIFIER
         ? event.complete
-          ? `QUALIFIED  •  ${shortTime(event.bestTime)}`
+          ? `${(event.award ?? 'bronze').toUpperCase()}  •  ${shortTime(event.bestTime)}`
           : `TARGET ${shortTime(tile.track.qualifier?.targetSeconds)}`
         : event.complete
           ? `${event.award === 'platinum' ? 'PLATINUM  •  100% CLEAR' : 'GOLD  •  1ST PLACE'}`
@@ -1445,7 +1566,10 @@ export class TitleScene extends Phaser.Scene {
           : event.complete ? COLORS.gold : COLORS.silver),
     });
     this.text(x + 14, y + 225,
-      phase === STORY_PHASES.QUALIFIER ? 'SOLO SPEED RUN' : 'GOLD: WIN  •  PLATINUM: WRECK ALL', {
+      phase === STORY_PHASES.QUALIFIER
+        ? `QUALIFY ${shortTime(tile.track.qualifier?.targetSeconds)}  •  ` +
+          `GOLD ${shortTime(tile.track.qualifier?.goldSeconds)}`
+        : 'GOLD: WIN  •  PLATINUM: WRECK ALL', {
         fontFamily: 'Arial, sans-serif',
         fontSize: '10px',
         color: colorCss(event.locked ? COLORS.muted : COLORS.cyan),
@@ -1580,15 +1704,25 @@ export class TitleScene extends Phaser.Scene {
       color: colorCss(COLORS.muted),
     });
     this.text(42, 472, `${this.trophySummary.stars}/${this.trophySummary.maxStars} SCHOOL STARS`, {
-      fontSize: '20px',
+      fontSize: '18px',
       color: colorCss(COLORS.gold),
     });
-    this.text(756, 476, rewardText, {
+    this.text(42, 499, rewardText, {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '11px',
+      fontSize: '10px',
       fontStyle: 'bold',
       color: colorCss(this.trophySummary.allGold ? COLORS.green : COLORS.muted),
-    }).setOrigin(1, 0);
+    });
+    ['bronze', 'silver', 'gold'].forEach((rank, index) => {
+      const earned = this.schoolTiles.some((tile) => tile.trophy === rank);
+      const image = this.uiAdd(this.add.image(
+        584 + index * 68,
+        479,
+        'trophy-atlas',
+        trophyAtlasFrame(rank),
+      )).setDisplaySize(62, 62);
+      if (!earned) image.setTint(0x28243a).setAlpha(0.34);
+    });
   }
 
   renderPlayerRecords() {
@@ -1703,7 +1837,16 @@ export class TitleScene extends Phaser.Scene {
   drawTrophyCard(x, y, width, height, tile, index, selected) {
     const g = this.graphics();
     this.drawPanel(g, x, y, width, height, selected, tile.locked);
-    this.drawTrophyIcon(g, x + 43, y + 57, tile.locked ? null : tile.trophy, 0.78);
+    if (tile.trophy) {
+      this.uiAdd(this.add.image(
+        x + 43,
+        y + 58,
+        'trophy-atlas',
+        trophyAtlasFrame(tile.trophy),
+      )).setDisplaySize(76, 76);
+    } else {
+      this.drawTrophyIcon(g, x + 43, y + 57, null, 0.78);
+    }
     this.text(x + 82, y + 18, `${index + 1}. ${tile.name}`, {
       fontSize: tile.name.length > 15 ? '13px' : '15px',
       wordWrap: { width: width - 94 },
@@ -1835,6 +1978,92 @@ export class TitleScene extends Phaser.Scene {
     g.lineBetween(x + width * 0.42, y, x + width * 0.18, y + height);
     g.lineStyle(2, locked ? 0x615c73 : COLORS.magenta, 0.8);
     g.lineBetween(x + width * 0.58, y, x + width * 0.82, y + height);
+  }
+
+  drawSchoolIllustration(g, x, y, width, height, index, locked) {
+    const palettes = [
+      [0x12335b, 0x17223e],
+      [0x4a2034, 0x281b32],
+      [0x3b215d, 0x151b3a],
+      [0x17415a, 0x18263d],
+      [0x3f194f, 0x201633],
+      [0x162650, 0x101733],
+    ];
+    const [sky, ground] = palettes[index % palettes.length];
+    const muted = locked ? 0x625d73 : null;
+    g.fillStyle(locked ? 0x242234 : sky, 1);
+    g.fillRect(x, y, width, height);
+    g.fillStyle(locked ? 0x302d3c : ground, 1);
+    g.fillRect(x, y + 17, width, height - 17);
+    g.fillStyle(locked ? 0x4a4658 : index === 5 ? 0xb8d7ff : 0xff7d3a, 0.9);
+    g.fillCircle(x + width * 0.78, y + 10, index === 5 ? 7 : 5);
+
+    // Every lesson owns a different instantly readable horizon silhouette.
+    if (index === 1) {
+      g.fillStyle(muted ?? 0x6e4859, 1);
+      g.fillTriangle(x, y + 19, x + 30, y + 3, x + 57, y + 19);
+      g.fillTriangle(x + width - 61, y + 19, x + width - 31, y + 1, x + width, y + 19);
+    } else if (index === 4) {
+      g.fillStyle(muted ?? 0x0b0a20, 1);
+      [12, 39, 67, width - 75, width - 45, width - 19].forEach((dx, tower) => {
+        g.fillRect(x + dx, y + 6 + (tower % 3) * 3, 13, 13 - (tower % 3) * 3);
+      });
+    } else if (index === 5) {
+      g.fillStyle(muted ?? 0xdbe8ff, 0.85);
+      for (let star = 0; star < 6; star += 1) {
+        g.fillRect(x + 12 + star * 31, y + 4 + (star % 2) * 5, 2, 2);
+      }
+    }
+
+    // Perspective course ribbon shared for orientation; its authored props
+    // communicate what makes each lesson mechanically different.
+    g.fillStyle(locked ? 0x373442 : 0x24243a, 1);
+    g.fillTriangle(x + width * 0.43, y + 15, x + width * 0.57, y + 15,
+      x + width * 0.88, y + height);
+    g.fillTriangle(x + width * 0.43, y + 15, x + width * 0.88, y + height,
+      x + width * 0.12, y + height);
+    g.lineStyle(2, muted ?? COLORS.cyan, 0.9);
+    g.lineBetween(x + width * 0.43, y + 15, x + width * 0.12, y + height);
+    g.lineStyle(2, muted ?? COLORS.magenta, 0.9);
+    g.lineBetween(x + width * 0.57, y + 15, x + width * 0.88, y + height);
+
+    if (index === 0) {
+      [-0.42, 0.12, 0.46].forEach((offset, cone) => {
+        const cx = x + width / 2 + offset * width * 0.3;
+        const cy = y + 25 + cone * 5;
+        g.fillStyle(muted ?? 0xff7d3a, 1);
+        g.fillTriangle(cx, cy - 4, cx - 3, cy + 3, cx + 3, cy + 3);
+      });
+    } else if (index === 1) {
+      [-0.5, 0, 0.5].forEach((offset, rock) => {
+        const rx = x + width / 2 + offset * width * 0.28;
+        g.fillStyle(muted ?? (rock === 1 ? 0xff5468 : 0x7b6370), 1);
+        g.fillTriangle(rx - 5, y + 36, rx, y + 25, rx + 6, y + 36);
+      });
+    } else if (index === 2) {
+      [0, 1, 2, 3].forEach((line) => {
+        const ly = y + 22 + line * 4;
+        const half = 3 + line * 4;
+        g.fillStyle(muted ?? (line % 2 ? 0x18b04b : 0x2ee56b), 1);
+        g.fillRect(x + width / 2 - half, ly, half * 2, 2);
+      });
+    } else if (index === 3 || index === 5) {
+      g.fillStyle(muted ?? COLORS.gold, 1);
+      g.fillTriangle(x + width / 2 - 12, y + 35, x + width / 2 + 12, y + 35,
+        x + width / 2 + 8, y + 27);
+      g.lineStyle(2, muted ?? COLORS.cyan, 0.9);
+      g.beginPath();
+      g.arc(x + width / 2, y + 23, index === 5 ? 17 : 11, Math.PI, Math.PI * 2);
+      g.strokePath();
+    } else if (index === 4) {
+      [-0.45, 0, 0.45].forEach((offset, rival) => {
+        const cx = x + width / 2 + offset * width * 0.35;
+        const cy = y + 27 + Math.abs(offset) * 10;
+        g.fillStyle(muted ?? [COLORS.cyan, COLORS.gold, COLORS.magenta][rival], 1);
+        g.fillRect(cx - 5, cy, 10, 5);
+        g.fillRect(cx - 3, cy - 3, 6, 3);
+      });
+    }
   }
 
   drawStoryIllustration(g, x, y, width, height, index) {

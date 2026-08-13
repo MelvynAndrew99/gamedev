@@ -5,11 +5,21 @@ import { TUNING } from '../config/tuning.js';
 import { RoadModel } from './RoadModel.js';
 import {
   backgroundPitchOffset,
+  blendEnvironmentColors,
   rivalRenderAlpha,
   rivalSpriteFrameSize,
   rivalSpriteMode,
   RoadRenderer,
 } from './RoadRenderer.js';
+
+test('environment palette blend reaches each endpoint without abrupt channel jumps', () => {
+  const from = { road: 0x000000, grass: 0x204060, skyBands: [0x000000] };
+  const to = { road: 0xffffff, grass: 0x80a0c0, skyBands: [0xffffff] };
+  assert.deepEqual(blendEnvironmentColors(from, to, 0), from);
+  assert.equal(blendEnvironmentColors(from, to, 0.5).road, 0x808080);
+  assert.equal(blendEnvironmentColors(from, to, 0.5).grass, 0x507090);
+  assert.deepEqual(blendEnvironmentColors(from, to, 1), to);
+});
 
 function chainable(base = {}) {
   let proxy;
@@ -31,7 +41,8 @@ function fakeScene() {
     add: {
       graphics: () => chainable(),
       image: () => chainable({ width: 10, height: 10 }),
-      sprite: () => chainable({ width: 64, height: 56 }),
+      sprite: () => chainable({ width: 128, height: 112 }),
+      container: () => chainable({ scaleX: 1, scaleY: 1 }),
       text: () => chainable({ width: 170, height: 24 }),
     },
   };
@@ -221,13 +232,13 @@ test('rivals use opaque hull width and a cohesive far LOD instead of engine frag
   assert.equal(rivalSpriteMode(7.99), 'beacon');
   assert.equal(rivalSpriteMode(8), 'sprite');
   assert.equal(
-    rivalSpriteFrameSize(30),
-    64,
-    'a 30px projected hull requires the full 64px transparent steering frame',
+    rivalSpriteFrameSize(72),
+    128,
+    'a 72px projected hull requires the full 128px transparent steering frame',
   );
   assert.ok(
-    rivalSpriteFrameSize(12) > 12 * 2,
-    'transparent padding must not silently halve the visible opponent',
+    rivalSpriteFrameSize(12) > 12 * 1.7,
+    'transparent padding must not silently shrink the visible opponent',
   );
 });
 
@@ -245,7 +256,7 @@ test('one rival ID occupies exactly one pooled sprite', () => {
     setFrame() { return this; },
     setPosition(x, y) { this.x = x; this.y = y; return this; },
     setDisplaySize() { return this; },
-    setTint() { return this; },
+    setLivery() { return this; },
     setAlpha() { return this; },
     setVisible(value) { this.visible = value; return this; },
   }));

@@ -5,6 +5,7 @@ import {
   getStoryProgress,
   isStoryCampaignComplete,
   isStoryCampaignPlatinum,
+  qualifierAwardForTime,
   submitQualifierResult,
   submitRivalResult,
 } from './StoryProgress.js';
@@ -26,9 +27,25 @@ test('qualifying unlocks the rival phase and preserves the best time', () => {
   assert.deepEqual(getStoryProgress(track.id, 2), {
     version: 2,
     qualified: true,
+    bestQualifierAward: 'bronze',
     bestQualifierTime: 58,
     qualifierAttempts: 3,
   });
+});
+
+test('qualifier awards separate an easy clear from Silver and optimized Gold', () => {
+  globalThis.localStorage = storage();
+  const track = {
+    id: 'story-medals',
+    storyVersion: 1,
+    qualifier: { targetSeconds: 80, silverSeconds: 72, goldSeconds: 66 },
+  };
+  assert.equal(qualifierAwardForTime(track, 81), null);
+  assert.equal(qualifierAwardForTime(track, 79), 'bronze');
+  assert.equal(qualifierAwardForTime(track, 70), 'silver');
+  assert.equal(qualifierAwardForTime(track, 65), 'gold');
+  assert.equal(submitQualifierResult(track, 65, 80).award, 'gold');
+  assert.equal(submitQualifierResult(track, 75, 80).progress.bestQualifierAward, 'gold');
 });
 
 test('reaching the deadline without the finish line does not qualify', () => {

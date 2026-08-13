@@ -70,7 +70,7 @@ function career(money = 0) {
     paintBoothUnlocked: false,
     afterburnerFxUnlocked: false,
     afterburnerEligible: false,
-    pendingBoostPack: false,
+    pendingBoostCharges: 0,
     pendingExtraBoostSlot: false,
     getPayoutHistory(key) {
       return structuredClone(histories[key] ?? {
@@ -95,26 +95,28 @@ test('garage catalog exposes stable purchase states and enforces upgrade gates',
   assert.equal(state.pitCrewLevel, 2);
 });
 
-test('race prep queues once, stacks to a 2/4 start, and consumes once', () => {
-  const state = career(300);
+test('starter canisters stack to three while the purchased fourth slot starts empty', () => {
+  const state = career(500);
   assert.equal(buyGarageItem(state, 'boost_pack').ok, true);
+  assert.equal(buyGarageItem(state, 'boost_pack').loaded, 2);
+  assert.equal(buyGarageItem(state, 'boost_pack').loaded, 3);
   assert.equal(buyGarageItem(state, 'boost_pack').reason, 'ARMED');
   assert.equal(buyGarageItem(state, 'extra_boost_slot').ok, true);
   assert.deepEqual(raceLoadout(state, 3), {
     capacity: 4,
-    startingSlots: 2,
-    consumed: { boostPack: true, extraSlot: true },
+    startingSlots: 3,
+    consumed: { boostCharges: 3, extraSlot: true },
   });
-  assert.equal(state.pendingBoostPack, true, 'briefing preview does not consume prep');
+  assert.equal(state.pendingBoostCharges, 3, 'briefing preview does not consume prep');
   assert.deepEqual(consumeRaceLoadout(state, 3), {
     capacity: 4,
-    startingSlots: 2,
-    consumed: { boostPack: true, extraSlot: true },
+    startingSlots: 3,
+    consumed: { boostCharges: 3, extraSlot: true },
   });
   assert.deepEqual(consumeRaceLoadout(state, 3), {
     capacity: 3,
     startingSlots: 0,
-    consumed: { boostPack: false, extraSlot: false },
+    consumed: { boostCharges: 0, extraSlot: false },
   });
 });
 

@@ -24,7 +24,7 @@ function emptyProfile() {
     afterburnerFxUnlocked: false,
     afterburnerEligible: false,
     rivalWinCount: 0,
-    pendingBoostPack: false,
+    pendingBoostCharges: 0,
     pendingExtraBoostSlot: false,
     spendingLedger: { repairs: 0, supplies: 0, upgrades: 0 },
     payoutHistory: {},
@@ -42,7 +42,13 @@ export function sanitizeRacerProfile(value) {
   clean.afterburnerFxUnlocked = value.afterburnerFxUnlocked === true;
   clean.afterburnerEligible = value.afterburnerEligible === true;
   clean.rivalWinCount = nonnegativeInt(value.rivalWinCount);
-  clean.pendingBoostPack = value.pendingBoostPack === true;
+  // v1 originally stored a single boolean starter canister. Preserve it as
+  // one charge while allowing new saves to queue any count from zero to the
+  // normal three-slot capacity.
+  clean.pendingBoostCharges = Math.min(3, nonnegativeInt(
+    value.pendingBoostCharges,
+    value.pendingBoostPack === true ? 1 : 0,
+  ));
   clean.pendingExtraBoostSlot = value.pendingExtraBoostSlot === true;
   clean.spendingLedger = {
     repairs: nonnegativeInt(value.spendingLedger?.repairs),
@@ -159,9 +165,19 @@ export const RACER = {
     saveProfile();
   },
 
-  get pendingBoostPack() { return profile.pendingBoostPack; },
+  get pendingBoostCharges() { return profile.pendingBoostCharges; },
+  set pendingBoostCharges(value) {
+    profile.pendingBoostCharges = Math.min(3, nonnegativeInt(value));
+    saveProfile();
+  },
+
+  // Compatibility seam for older callers and persisted tests. New economy
+  // code uses the numeric charge count above.
+  get pendingBoostPack() { return profile.pendingBoostCharges > 0; },
   set pendingBoostPack(value) {
-    profile.pendingBoostPack = value === true;
+    profile.pendingBoostCharges = value === true
+      ? Math.max(1, profile.pendingBoostCharges)
+      : 0;
     saveProfile();
   },
 

@@ -41,6 +41,23 @@ export function isStoryCampaignPlatinum(tracks = []) {
   });
 }
 
+const QUALIFIER_AWARD_VALUE = Object.freeze({ bronze: 1, silver: 2, gold: 3 });
+
+export function qualifierAwardForTime(track, time, targetSeconds = null, finished = true) {
+  if (!finished) return null;
+  const cleanTime = Math.max(0, Number(time) || 0);
+  const qualifier = track?.qualifier ?? {};
+  const bronze = Math.max(
+    0,
+    Number(targetSeconds ?? qualifier.targetSeconds) || 0,
+  );
+  const silver = Math.max(0, Number(qualifier.silverSeconds) || 0);
+  const gold = Math.max(0, Number(qualifier.goldSeconds) || 0);
+  if (gold > 0 && cleanTime <= gold) return 'gold';
+  if (silver > 0 && cleanTime <= silver) return 'silver';
+  return bronze > 0 && cleanTime <= bronze ? 'bronze' : null;
+}
+
 export function submitQualifierResult(track, time, targetSeconds, finished = true) {
   const progress = load();
   const version = track.storyVersion ?? 1;
@@ -48,7 +65,15 @@ export function submitQualifierResult(track, time, targetSeconds, finished = tru
   const previous = stored?.version === version ? stored : {};
   const cleanTime = Math.max(0, Number(time) || 0);
   const target = Math.max(0, Number(targetSeconds) || 0);
-  const qualified = Boolean(finished) && cleanTime <= target;
+  const award = qualifierAwardForTime(track, cleanTime, target, finished);
+  const qualified = award != null;
+  const previousQualifierAward = previous.bestQualifierAward ??
+    qualifierAwardForTime(
+      track,
+      previous.bestQualifierTime,
+      target,
+      previous.qualified,
+    );
   const bestQualifierTime = previous.bestQualifierTime == null
     ? cleanTime
     : Math.min(previous.bestQualifierTime, cleanTime);
@@ -56,12 +81,21 @@ export function submitQualifierResult(track, time, targetSeconds, finished = tru
     ...previous,
     version,
     qualified: Boolean(previous.qualified || qualified),
+    bestQualifierAward: (QUALIFIER_AWARD_VALUE[award] ?? 0) >
+      (QUALIFIER_AWARD_VALUE[previousQualifierAward] ?? 0)
+      ? award
+      : previousQualifierAward ?? award,
     bestQualifierTime,
     qualifierAttempts: (previous.qualifierAttempts ?? 0) + 1,
   };
   progress[track.id] = next;
   save(progress);
-  return Object.freeze({ qualified, newBest: cleanTime === bestQualifierTime, progress: next });
+  return Object.freeze({
+    qualified,
+    award,
+    newBest: cleanTime === bestQualifierTime,
+    progress: next,
+  });
 }
 
 export function submitRivalResult(track, { place = 1, time = 0, takedowns = 0 } = {}) {

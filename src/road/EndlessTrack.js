@@ -13,8 +13,7 @@
 
 import { RoadModel } from './RoadModel.js';
 import { stampPattern } from './patterns.js';
-
-const RAMP_PIECES = 30; // pieces until full difficulty (~a few minutes of driving)
+import { endlessDifficultyForDistance } from '../systems/EndlessProgression.js';
 
 export class EndlessTrack extends RoadModel {
   constructor(tuning) {
@@ -68,7 +67,8 @@ export class EndlessTrack extends RoadModel {
   // a pattern is only stamped once ALL the road it needs exists, so the
   // cone telegraph can never point at rocks that were never built.
   stampPatterns() {
-    const d = Math.min(1, this.piecesGenerated / RAMP_PIECES);
+    const patternDistanceM = this.nextPatternAt * this.t.segmentLength / 100;
+    const d = endlessDifficultyForDistance(patternDistanceM);
     const gap = Math.round(80 - d * 50); // breathing room shrinks: 80 -> 30
     let cleanupFrom = null;
     // nextPatternAt is ABSOLUTE; convert to array space for stamping.
@@ -89,7 +89,11 @@ export class EndlessTrack extends RoadModel {
   }
 
   appendPiece() {
-    const d = Math.min(1, this.piecesGenerated++ / RAMP_PIECES); // 0 -> 1
+    // Two world units are one displayed meter. Generation keys difficulty to
+    // absolute distance, so trimming and frame rate can never alter the level
+    // curve and each named environment genuinely raises the pressure.
+    const d = endlessDifficultyForDistance(this.trackLength / 100);
+    this.piecesGenerated++;
     const len = Math.round(30 - d * 16);        // pieces: 30 -> 14 segments
     const minCurve = 1 + d * 2;                 // gentlest curve: 1 -> 3
     const maxCurve = 2 + d * 5;                 // sharpest curve: 2 -> 7

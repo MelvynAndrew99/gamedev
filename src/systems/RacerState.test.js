@@ -22,7 +22,7 @@ test('malformed profile data sanitizes to bounded migration-safe defaults', () =
     afterburnerFxUnlocked: false,
     afterburnerEligible: false,
     rivalWinCount: 0,
-    pendingBoostPack: false,
+    pendingBoostCharges: 0,
     pendingExtraBoostSlot: false,
     spendingLedger: { repairs: 0, supplies: 0, upgrades: 0 },
     payoutHistory: {},
@@ -53,9 +53,19 @@ test('wallet, hull, ownership, and queued prep survive reload while resetRun gra
   assert.equal(RACER.pitCrewLevel, 1);
   assert.equal(RACER.musicPlayerUnlocked, true);
   assert.equal(RACER.pendingBoostPack, true);
+  assert.equal(RACER.pendingBoostCharges, 1, 'legacy boolean migrates to one charge');
   RACER.repair(8);
   RACER.reloadProfile();
   assert.equal(RACER.health, 50);
+});
+
+test('up to three purchased starter charges persist and sanitize safely', () => {
+  globalThis.localStorage = storage({ version: 1, pendingBoostCharges: 3 });
+  RACER.reloadProfile();
+  assert.equal(RACER.pendingBoostCharges, 3);
+  RACER.pendingBoostCharges = 99;
+  RACER.reloadProfile();
+  assert.equal(RACER.pendingBoostCharges, 3);
 });
 
 test('payout history reads cannot mutate persisted rival bounty IDs', () => {

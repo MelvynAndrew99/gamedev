@@ -8,6 +8,7 @@ export const HUD_SAFE_LAYOUT = Object.freeze({
   eventTimer: Object.freeze({ x: 10, y: 8, width: 144, height: 44 }),
   carsRemaining: Object.freeze({ x: 646, y: 8, width: 144, height: 44 }),
   objectiveToast: Object.freeze({ x: 10, y: 68, width: 230, height: 38 }),
+  damageNotice: Object.freeze({ x: 10, y: 68, width: 230, height: 38 }),
   rivalToast: Object.freeze({ x: 10, y: 110, width: 230, height: 38 }),
   styleReward: Object.freeze({ x: 10, y: 110, width: 230, height: 58 }),
   leftColumn: Object.freeze({ x: 10, y: 66, width: 230 }),
@@ -53,7 +54,7 @@ export function hudVisibilityPolicy({
     rivalCourseMarkers: rivalSchool && hasRace,
     storyEventHud: story && hasRace,
     storyRivalMarkers: story && hasRace,
-    styleRewards: story && hasRace,
+    styleRewards: (story && hasRace) || endless,
 
     boostGauge: hasBoostCapability,
     windshieldDamage: !training || trainingDamageMax > 0,

@@ -20,9 +20,8 @@ export const TUNING = {
   maxSpeed: 12000,     // (derived-input) world units/sec. 12000 = 1 segment per frame at 60fps
   centrifugal: 0.3,    // how hard curves fling you outward. THE core risk knob of the game.
   playerW: 0.14,       // car collision half-width in road-half units
-  carScale: 5,          // on-screen size of the car sprite. The rear-view canopy
-                        // sheet has a tighter visible silhouette than the earlier
-                        // sprite; 5 is the measured-by-eye Projection Lab value.
+  carScale: 1.4,        // 128x112 source frames multiply authored detail while
+                        // preserving the prior ~150px on-screen hull footprint.
   iframes: 0.9,        // seconds of post-hit invulnerability (no combo-wrecks by cluster)
 
   // ---- Handling feel (all live on the debug panel) --------------------

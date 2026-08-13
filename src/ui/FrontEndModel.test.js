@@ -45,6 +45,7 @@ test('Story course tiles keep one illustrated course card with two event states'
     [{ id: 'one', name: 'ONE', qualifier: { targetSeconds: 60 } }],
     () => ({
       qualified: true,
+      bestQualifierAward: 'silver',
       rivalCompleted: false,
       bestQualifierTime: 55,
       bestRivalPlace: 2,
@@ -54,6 +55,7 @@ test('Story course tiles keep one illustrated course card with two event states'
   );
   assert.equal(tile.qualifier.locked, false);
   assert.equal(tile.qualifier.bestTime, 55);
+  assert.equal(tile.qualifier.award, 'silver');
   assert.equal(tile.rivals.locked, false);
   assert.equal(tile.rivals.bestPlace, 2);
   assert.equal(tile.rivals.bestTakedowns, 1);

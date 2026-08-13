@@ -28,7 +28,25 @@ export class ParallaxBackground {
     this.drawAtmosphere(0, 0);
   }
 
+  displayObjects() {
+    return [
+      this.sky,
+      this.atmosphere,
+      ...this.layers.map((layer) => layer.graphics),
+    ];
+  }
+
+  setAlpha(alpha) {
+    this.displayObjects().forEach((object) => object.setAlpha(alpha));
+    return this;
+  }
+
+  destroy() {
+    this.displayObjects().forEach((object) => object.destroy());
+  }
+
   drawSky() {
+    this.sky.clear();
     const bands = this.environment.colors.skyBands;
     const horizon = this.h / 2;
     const bandH = horizon / bands.length;
@@ -38,6 +56,18 @@ export class ParallaxBackground {
       this.sky.fillRect(0, index * bandH, this.w, height);
     });
 
+  }
+
+  setEnvironment(environment) {
+    this.environment = environment;
+    this.stars = makeStars(environment, this.w, this.h);
+    environment.layers.forEach((config, index) => {
+      if (!this.layers[index]) return;
+      this.layers[index].config = config;
+      this.layers[index].shapes = makeShapes(config, environment.seed + index * 997);
+    });
+    this.drawSky();
+    this.drawAtmosphere(0, 0);
   }
 
   drawAtmosphere(curveOffset, horizonOffset) {

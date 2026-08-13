@@ -15,8 +15,8 @@ import { ProgressBar } from '../ui/ProgressBar.js';
 import { BoostGauge } from '../ui/BoostGauge.js';
 import { OBSTACLES } from '../config/obstacles.js';
 import {
+  damageNoticeView,
   damageFeedbackState,
-  trainingDamageTrophyMessage,
 } from '../systems/DamageFeedback.js';
 import {
   airtimeCoachView,
@@ -98,6 +98,10 @@ export class HudScene extends Phaser.Scene {
     this.airbrakeRows = null;
     this.crackGraphics = null;
     this.criticalDamageParts = null;
+    this.criticalDamageContainer = null;
+    this.criticalDamageStage = -1;
+    this.criticalDamageUntil = 0;
+    this.pendingCriticalDamageState = null;
 
     this.gs = this.scene.get('GameScene');
     this.training = this.gs.mode === 'training';
@@ -130,12 +134,12 @@ export class HudScene extends Phaser.Scene {
     // Endless has no finite course ribbon, so distance/best is its single run
     // read. Circuit races use the numbered ribbon and do not repeat LAP x/y.
     if (this.hudPolicy.endlessDistance) {
-      chip(10, 10, 172, 46);
+      chip(10, 10, 230, 46);
       this.line1 = this.add.text(22, 15, '', {
         fontSize: '18px', fontStyle: 'bold', color: '#ffffff',
       });
       this.line2 = this.add.text(22, 36, '', {
-        fontSize: '13px', color: '#b8b8c8',
+        fontSize: '11px', color: '#b8b8c8',
       });
     }
 
@@ -318,7 +322,8 @@ export class HudScene extends Phaser.Scene {
         if (rivalPublicView.phase === 'qualifier') {
           this.storyTimerText.setText(formatStoryTime(rivalPublicView.remainingSeconds));
           this.storyStatusText.setText(
-            `TARGET\n${formatStoryTime(rivalPublicView.targetSeconds)}`,
+            `QUALIFY ${formatStoryTime(rivalPublicView.targetSeconds)}\n` +
+            `GOLD ${formatStoryTime(rivalPublicView.goldSeconds)}`,
           );
           this.storyTimerText.setColor(
             rivalPublicView.remainingSeconds <= 5 ? '#ff6b6b' : '#ffffff',
@@ -336,7 +341,12 @@ export class HudScene extends Phaser.Scene {
       }
     } else if (this.line1) {
       this.line1.setText(`${gs.distanceM()}m`);
-      this.line2.setText(this.cachedBest ? `BEST ${this.cachedBest}m` : '');
+      const level = gs.endlessStage
+        ? `L${gs.endlessStage.level} ${gs.endlessStage.name}`
+        : '';
+      this.line2.setText(
+        `${level}${this.cachedBest ? `  •  BEST ${this.cachedBest}m` : ''}`,
+      );
     }
 
     const damageFeedback = damageFeedbackState({
@@ -447,6 +457,9 @@ export class HudScene extends Phaser.Scene {
 
   updateObjectiveToast() {
     if (!this.objectiveToastParts) return;
+    // Critical damage has priority in this same physical slot. Objective
+    // events remain in the authoritative array and are consumed afterward.
+    if (this.criticalDamageVisible) return;
     if (this.objectiveToastBusy) return;
     const event = nextObjectiveFeedback(
       this.gs.objectiveHudEvents,
@@ -527,6 +540,14 @@ export class HudScene extends Phaser.Scene {
     icon.lineStyle(2, view.color, 0.72);
     icon.lineBetween(x + 50, y + 56, x + 178, y + 56);
     icon.lineBetween(x + 184, y + 56, x + 211, y + 56);
+    // Higher Endless chains add more rails around the same borderless reward
+    // silhouette. The tier therefore survives grayscale without becoming a
+    // large opaque panel over the road.
+    for (let tier = 1; tier < Math.min(5, view.spectacle); tier += 1) {
+      const railY = y + 56 - tier * 5;
+      icon.lineStyle(1 + tier * 0.35, view.color, 0.35 + tier * 0.1);
+      icon.lineBetween(x + 54 + tier * 7, railY, x + 211 - tier * 4, railY);
+    }
   }
 
   updateStyleReward() {
@@ -555,10 +576,11 @@ export class HudScene extends Phaser.Scene {
     MUSIC.playStyleReward(view.styleId);
     if (view.cash > 0) MUSIC.playCashReward();
     if (!this.reducedMotion) {
+      const payoffScale = Math.min(1.24, 1.06 + view.spectacle * 0.035);
       this.tweens.add({
         targets: this.styleRewardTitle,
-        scale: 1.1,
-        duration: 180,
+        scale: payoffScale,
+        duration: 150 + view.spectacle * 18,
         ease: 'Back.out',
         yoyo: true,
       });
@@ -884,112 +906,90 @@ export class HudScene extends Phaser.Scene {
   }
 
   createCriticalDamageWarning() {
-    const w = this.scale.width;
-    const h = this.scale.height;
-    const panelX = w - 330;
-    const panelY = 58;
-    const panelH = 104;
-    const stripW = 330 / 8;
-    const blackAlpha = [0, 0.02, 0.05, 0.1, 0.18, 0.3, 0.48, 0.72];
+    // Damage and objective confirmations share one bounded upper-left slot.
+    // The cracks carry persistent state; this compact card only announces a
+    // state change, then gives training goals their space back.
+    const panel = this.add.graphics();
+    panel.fillStyle(0x080812, 0.92);
+    panel.fillRect(0, 0, 230, 38);
+    panel.fillStyle(0xff2d55, 1);
+    panel.fillRect(0, 0, 6, 38);
 
-    // Canvas-safe stepped gradient: transparent at the center edge, dense at
-    // the outer glass. The warning reads as part of the windshield while the
-    // road/horizon remain unobscured.
-    this.criticalDamageBackdrop = this.add.graphics().setDepth(98);
-    blackAlpha.forEach((alpha, index) => {
-      const x = panelX + index * stripW;
-      this.criticalDamageBackdrop.fillStyle(0x05050a, alpha);
-      this.criticalDamageBackdrop.fillRect(x, panelY, Math.ceil(stripW), panelH);
-      this.criticalDamageBackdrop.fillStyle(0xff2d55, alpha * 0.2);
-      this.criticalDamageBackdrop.fillRect(x, panelY, Math.ceil(stripW), panelH);
+    this.criticalDamageAccent = this.add.graphics();
+    this.criticalDamageAccent.lineStyle(2, 0xff6b6b, 1);
+    this.criticalDamageAccent.strokeTriangle(10, 29, 19, 8, 28, 29);
+    this.criticalDamageAccent.lineBetween(19, 14, 19, 22);
+    this.criticalDamageAccent.fillStyle(0xff6b6b, 1);
+    this.criticalDamageAccent.fillCircle(19, 26, 1.5);
+
+    this.criticalDamageTitle = this.add.text(36, 2, 'CRITICAL DAMAGE', {
+      fontSize: '15px', fontStyle: 'bold', color: '#ff6b6b',
+      stroke: '#080812', strokeThickness: 3,
     });
-
-    // Only the warning chrome pulses. Text stays fully opaque so the player
-    // can read it in one glance instead of chasing a flashing label.
-    this.criticalDamagePulse = this.add.graphics().setDepth(101);
-    this.criticalDamagePulse.fillStyle(0xff2d55, 0.22);
-    this.criticalDamagePulse.fillRect(0, 0, w, 8);
-    this.criticalDamagePulse.fillRect(0, h - 8, w, 8);
-    this.criticalDamagePulse.fillRect(0, 0, 8, h);
-    this.criticalDamagePulse.fillRect(w - 8, 0, 8, h);
-    this.criticalDamagePulse.fillStyle(0xff2d55, 0.95);
-    this.criticalDamagePulse.fillRect(w - 5, panelY, 5, panelH);
-    this.criticalDamagePulse.fillTriangle(
-      panelX + 20, panelY + 69,
-      panelX + 47, panelY + 19,
-      panelX + 74, panelY + 69,
-    );
-    this.criticalDamagePulse.fillStyle(0x0a0a14, 1);
-    this.criticalDamagePulse.fillRect(panelX + 44, panelY + 36, 6, 19);
-    this.criticalDamagePulse.fillCircle(panelX + 47, panelY + 62, 3);
-
-    this.criticalDamageTitle = this.add.text(
-      panelX + 78,
-      panelY + 20,
-      'CRITICAL DAMAGE',
-      {
-        fontSize: '24px',
-        fontStyle: 'bold',
-        color: '#ff6b6b',
-        stroke: '#0a0a14',
-        strokeThickness: 4,
-      },
-    ).setDepth(102);
-    this.criticalDamageDetail = this.add.text(
-      panelX + 80,
-      panelY + 57,
-      '',
-      {
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-        stroke: '#0a0a14',
-        strokeThickness: 3,
-      },
-    ).setDepth(102);
-    this.criticalDamageParts = [
-      this.criticalDamageBackdrop,
-      this.criticalDamagePulse,
-      this.criticalDamageTitle,
-      this.criticalDamageDetail,
-    ];
-    this.criticalDamageParts.forEach((part) => part.setVisible(false));
+    this.criticalDamageDetail = this.add.text(36, 21, '', {
+      fontSize: '10px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#080812', strokeThickness: 2,
+    });
+    this.criticalDamageContainer = this.add.container(
+      10, 68,
+      [panel, this.criticalDamageAccent, this.criticalDamageTitle, this.criticalDamageDetail],
+    ).setDepth(102).setVisible(false);
+    this.criticalDamageParts = [this.criticalDamageContainer];
     this.criticalDamageVisible = false;
   }
 
   updateCriticalDamageWarning(time, state) {
-    const visible = state.critical;
-    if (visible !== this.criticalDamageVisible) {
-      this.criticalDamageVisible = visible;
-      this.criticalDamageParts.forEach((part) => part.setVisible(visible));
-      if (visible) {
-        this.criticalDamageParts.forEach((part) => { part.x = 20; });
+    const stageChanged = state.stage !== this.criticalDamageStage;
+    this.criticalDamageStage = state.stage;
+    if (!state.critical) {
+      this.pendingCriticalDamageState = null;
+      this.criticalDamageUntil = 0;
+    } else if (stageChanged) {
+      this.pendingCriticalDamageState = { ...state };
+    }
+
+    // A confirmation already visible in the same slot finishes first. Its
+    // event is never erased by damage arriving on the same frame.
+    if (this.pendingCriticalDamageState && !this.objectiveToastBusy) {
+      const view = damageNoticeView({
+        state: this.pendingCriticalDamageState,
+        training: this.training,
+        thresholds: this.gs.trackData?.scoring?.thresholds,
+        hits: this.gs.trainingDamageHits,
+      });
+      this.pendingCriticalDamageState = null;
+      if (view) {
+        this.criticalDamageTitle.setText(view.title);
+        this.criticalDamageDetail.setText(view.detail);
+        this.criticalDamageUntil = time + view.durationMs;
+        this.tweens.killTweensOf(this.criticalDamageContainer);
+        this.criticalDamageContainer.setX(-8).setVisible(true).setAlpha(1);
         this.tweens.add({
-          targets: this.criticalDamageParts,
-          x: 0,
-          duration: 180,
+          targets: this.criticalDamageContainer,
+          x: 10,
+          duration: 160,
           ease: 'Quad.out',
         });
       }
     }
-    if (!visible) return;
-    this.criticalDamagePulse.setAlpha(0.86 + Math.sin(time / 120) * 0.14);
-    this.criticalDamageBackdrop.setAlpha(1);
-    this.criticalDamageTitle.setAlpha(1);
-    this.criticalDamageDetail.setAlpha(1);
 
+    const visible = time < this.criticalDamageUntil;
+    if (visible !== this.criticalDamageVisible) {
+      this.criticalDamageVisible = visible;
+      this.criticalDamageContainer.setVisible(visible);
+      this.objectivePanelParts?.forEach((part) => part.setVisible(!visible));
+    }
+    if (!visible) return;
+    // At most ~1.3 gentle pulses/second—far below a flashing hazard.
+    this.criticalDamageAccent.setAlpha(0.75 + Math.sin(time / 240) * 0.25);
     if (state.destroyed && this.training) {
-      this.criticalDamageTitle.setText('GLASS SHATTERED');
-      this.criticalDamageDetail.setText(trainingDamageTrophyMessage(
-        this.gs.trackData?.scoring?.thresholds,
-        this.gs.trainingDamageHits,
-      ));
-    } else if (this.training) {
-      this.criticalDamageTitle.setText('GLASS CRITICAL');
-      this.criticalDamageDetail.setText('NEXT ROCK SHATTERS IT');
-    } else {
-      this.criticalDamageTitle.setText('HULL CRITICAL');
-      this.criticalDamageDetail.setText('NEXT ROCK WRECKS');
+      const refreshed = damageNoticeView({
+        state,
+        training: true,
+        thresholds: this.gs.trackData?.scoring?.thresholds,
+        hits: this.gs.trainingDamageHits,
+      });
+      this.criticalDamageDetail.setText(refreshed?.detail ?? 'GOALS STILL TRACKED');
     }
   }
 

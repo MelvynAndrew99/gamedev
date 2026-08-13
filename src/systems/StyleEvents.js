@@ -1,4 +1,5 @@
 import { createGameplayEvent, validGameplayEvent } from './GameplayEvents.js';
+import { endlessSpeedLineTier } from './EndlessProgression.js';
 
 const MAX_COALESCED_REWARDS = 64;
 
@@ -7,6 +8,14 @@ export const STORY_STYLE_RULES = Object.freeze({
   speedLineChain: Object.freeze({ count: 3, windowSeconds: 6 }),
   boostedHangtime: Object.freeze({ minimumSeconds: 0.85 }),
   longBurn: Object.freeze({ minimumHeldSeconds: 1.05 }),
+});
+
+export const ENDLESS_STYLE_RULES = Object.freeze({
+  ...STORY_STYLE_RULES,
+  speedLineChain: Object.freeze({
+    ...STORY_STYLE_RULES.speedLineChain,
+    escalating: true,
+  }),
 });
 
 export function storyStyleRulesForTrack(track = {}) {
@@ -94,6 +103,7 @@ export class RewardInbox {
           latestEventId: event.payload.latestEventId ?? event.eventId,
           ...(event.type === 'style_reward' ? {
             cash: (tail.payload.cash ?? 0) + (event.payload.cash ?? 0),
+            heal: (tail.payload.heal ?? 0) + (event.payload.heal ?? 0),
           } : {}),
         },
       });
@@ -113,7 +123,13 @@ export class RewardInbox {
 }
 
 export class StoryStyleTracker {
-  constructor({ runId = 'run', rules = STORY_STYLE_RULES, cashAvailable = Infinity } = {}) {
+  constructor({
+    runId = 'run',
+    rules = STORY_STYLE_RULES,
+    cashAvailable = Infinity,
+    rewardHeal = null,
+    onReward = null,
+  } = {}) {
     this.runId = runId;
     this.rules = rules;
     this.elapsed = 0;
@@ -125,6 +141,8 @@ export class StoryStyleTracker {
     this.longBurnAwarded = false;
     this.cashAvailable = Math.max(0, Number(cashAvailable) || 0);
     this.cashEarned = 0;
+    this.rewardHeal = typeof rewardHeal === 'function' ? rewardHeal : null;
+    this.onReward = typeof onReward === 'function' ? onReward : null;
   }
 
   update(dt, { boostHeld = false } = {}) {
@@ -161,6 +179,19 @@ export class StoryStyleTracker {
   }
 
   recordSpeedLine(objectId) {
+    if (this.rules.speedLineChain.escalating) {
+      if (!objectId || this.speedLines.seen.has(String(objectId))) return false;
+      this.speedLines.seen.add(String(objectId));
+      this.speedLines.count += 1;
+      this.speedLines.lastAt = this.elapsed;
+      const tier = endlessSpeedLineTier(this.speedLines.count);
+      if (!tier) return false;
+      this.emit('speed_line_chain', {
+        count: this.speedLines.count,
+        spectacle: tier.spectacle,
+      });
+      return true;
+    }
     return this.recordStreak(
       this.speedLines,
       String(objectId),
@@ -212,6 +243,9 @@ export class StoryStyleTracker {
     const cash = Math.min(reward.cash, this.cashAvailable);
     this.cashAvailable -= cash;
     this.cashEarned += cash;
+    const heal = Math.max(0, Math.floor(Number(
+      this.rewardHeal?.({ styleId, detail }) ?? 0,
+    ) || 0));
     this.sequence += 1;
     const event = createGameplayEvent({
       eventId: `${this.runId}:style:${this.sequence}`,
@@ -223,10 +257,12 @@ export class StoryStyleTracker {
         attackClass: reward.attackClass,
         sequence: this.sequence,
         cash,
+        ...(heal > 0 ? { heal } : {}),
         ...detail,
       },
     });
-    this.inbox.push(event);
+    if (!this.inbox.push(event)) return null;
+    this.onReward?.(event);
     return event;
   }
 
@@ -250,18 +286,31 @@ export function styleRewardView(event) {
   if (!validGameplayEvent(event, 'style_reward')) return null;
   const reward = STYLE_REWARDS[event.payload.styleId];
   if (!reward) return null;
+  const speedTier = event.payload.styleId === 'speed_line_chain'
+    ? endlessSpeedLineTier(event.payload.count)
+    : null;
+  const presentation = speedTier
+    ? { ...reward, title: speedTier.title, color: speedTier.color }
+    : reward;
   const detail = event.payload.styleId === 'boosted_hangtime'
     ? `${Math.max(0, Number(event.payload.seconds) || 0).toFixed(1)}s BOOSTED AIR`
     : event.payload.styleId === 'cone_chain'
       ? `${Math.max(1, Math.floor(Number(event.payload.count) || 1))} CONES`
-      : reward.detail;
+      : event.payload.styleId === 'speed_line_chain' && event.payload.count > 0
+        ? `${Math.floor(event.payload.count)} SPEED LINES`
+        : reward.detail;
   const repeats = Math.max(1, Math.floor(Number(event.payload.repeatCount) || 1));
   return Object.freeze({
-    ...reward,
+    ...presentation,
     detail: `${repeats > 1 ? `${detail}  ×${repeats}` : detail}` +
-      `${event.payload.cash > 0 ? `  •  +$${event.payload.cash}` : ''}`,
+      `${event.payload.cash > 0 ? `  •  +$${event.payload.cash}` : ''}` +
+      `${event.payload.heal > 0 ? `  •  +${event.payload.heal} HULL` : ''}`,
     repeats,
     cash: Math.max(0, Math.floor(Number(event.payload.cash) || 0)),
+    heal: Math.max(0, Math.floor(Number(event.payload.heal) || 0)),
+    spectacle: Math.max(1, Math.floor(
+      Number(event.payload.spectacle ?? speedTier?.spectacle) || 1,
+    )),
     styleId: event.payload.styleId,
   });
 }

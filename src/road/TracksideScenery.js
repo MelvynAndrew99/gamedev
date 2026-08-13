@@ -16,6 +16,10 @@ export class TracksideScenery {
     this.graphics = scene.add.graphics().setDepth(4);
   }
 
+  setEnvironment(environment) {
+    this.environment = environment;
+  }
+
   render(model, base) {
     const g = this.graphics;
     const t = this.t;
