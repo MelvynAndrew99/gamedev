@@ -153,18 +153,18 @@ function addHardTurnAirbrake(frame) {
   // A raised gold vane grows directly from the near rear shoulder. Its pearl
   // hinge keeps the cue attached to the vehicle rather than floating beside it.
   const hingeX = box.minX + Math.round(box.width * 0.28);
-  const baseY = box.minY + Math.round(box.height * 0.56);
+  const baseY = box.minY + Math.max(14, Math.round(box.height * 0.28));
   fillPolygon(frame, [
-    [hingeX - 5, baseY + 2],
-    [hingeX - 4, Math.max(CLEARANCE, box.minY - 10)],
-    [hingeX + 2, Math.max(CLEARANCE + 1, box.minY - 7)],
-    [hingeX + 4, baseY + 3],
+    [hingeX - 3, baseY + 4],
+    [hingeX + 9, baseY - 8],
+    [hingeX + 15, baseY - 5],
+    [hingeX + 4, baseY + 6],
   ], [255, 207, 63, 255]);
   fillPolygon(frame, [
-    [hingeX + 2, baseY + 2],
-    [hingeX + 2, Math.max(CLEARANCE + 1, box.minY - 7)],
-    [hingeX + 4, Math.max(CLEARANCE + 2, box.minY - 5)],
-    [hingeX + 5, baseY + 3],
+    [hingeX + 3, baseY + 3],
+    [hingeX + 10, baseY - 7],
+    [hingeX + 15, baseY - 5],
+    [hingeX + 5, baseY + 5],
   ], [232, 236, 255, 255]);
 }
 

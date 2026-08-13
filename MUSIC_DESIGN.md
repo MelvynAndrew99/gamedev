@@ -23,10 +23,9 @@ The target is **catchy, danceable, futuristic, and dynamic**. A track should
 feel good under active play and still reward someone listening to several
 loops on headphones.
 
-Reworking a song must not erase its history. Keep the original tracker data
-and expose it as an explicitly labeled Music Player entry alongside the new
-scene-default arrangement. This preservation rule applies to every future
-soundtrack revision, not only `Chrome & Credits`.
+The Music Player ships one strongest production mix per composition.
+Superseded arrangements are removed from the runtime library so players do not
+have to distinguish near-duplicate versions during a jam-sized campaign.
 
 Race School is one composition with six lesson mixes, not six unrelated
 songs. Course variants may shift tempo by at most 8 BPM and transpose the

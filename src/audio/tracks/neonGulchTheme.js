@@ -174,10 +174,8 @@ const SECTIONS = [
   final(RIFF_A, false), final(RIFF_A, false), final(RIFF_A, false), final(RIFF_A, true),  // push, riff comes home
 ];
 
-// Preserve the first future-funk arrangement in the library. The scene mix
-// below is additive: it exposes the riff before the speed arp enters and uses
-// explicit per-voice trims, but this approved tracker pass remains playable.
-export const NEON_GULCH_ORIGINAL_THEME = Object.freeze({
+// Base arrangement used to produce the sole shipped Open Road mix.
+const NEON_GULCH_BASE_THEME = Object.freeze({
   bpm: 160,
   stepsPerBar: 16,
   // Light swing on the off-beat 16ths — the funk pocket. Small on purpose:
@@ -218,6 +216,6 @@ function productionBar(source, index) {
 // double-hit/octave hook, now with controlled bass, quieter hats/arp, and a
 // deliberately exposed first hook statement modeled on Night Drive's clarity.
 export const NEON_GULCH_THEME = Object.freeze({
-  ...NEON_GULCH_ORIGINAL_THEME,
-  bars: Object.freeze(NEON_GULCH_ORIGINAL_THEME.bars.map(productionBar)),
+  ...NEON_GULCH_BASE_THEME,
+  bars: Object.freeze(NEON_GULCH_BASE_THEME.bars.map(productionBar)),
 });

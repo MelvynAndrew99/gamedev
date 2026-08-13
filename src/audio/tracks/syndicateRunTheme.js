@@ -307,10 +307,8 @@ const SECTIONS = [
   REBUILD_A, REBUILD_B, REBUILD_C, REBUILD_FILL,                    // loop turnaround
 ];
 
-// Archive the first complete Controlled Burn pass before production trims.
-// Revisions are additive in Rhythmic Ride, so this remains a Music Player
-// option rather than disappearing behind the scene-default mix.
-export const SYNDICATE_RUN_ORIGINAL_THEME = Object.freeze({
+// Base arrangement used to produce the sole shipped Controlled Burn mix.
+const SYNDICATE_RUN_BASE_THEME = Object.freeze({
   bpm: 166,
   stepsPerBar: 16,
   bars: Object.freeze(SECTIONS.map((section, index) => Object.freeze(bar(index, section)))),
@@ -354,6 +352,6 @@ function productionBar(source, index) {
 // now with a firmer low/low-mid boundary and a consistently readable metallic
 // hook above the chug grid.
 export const SYNDICATE_RUN_THEME = Object.freeze({
-  ...SYNDICATE_RUN_ORIGINAL_THEME,
-  bars: Object.freeze(SYNDICATE_RUN_ORIGINAL_THEME.bars.map(productionBar)),
+  ...SYNDICATE_RUN_BASE_THEME,
+  bars: Object.freeze(SYNDICATE_RUN_BASE_THEME.bars.map(productionBar)),
 });

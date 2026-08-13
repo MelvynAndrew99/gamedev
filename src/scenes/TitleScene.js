@@ -28,21 +28,12 @@ import {
 } from '../systems/StoryProgress.js';
 import { achievementViews, getPlayerProfile } from '../systems/PlayerStats.js';
 import { MUSIC } from '../audio/MusicEngine.js';
-import {
-  CHROME_CREDITS_ORIGINAL_THEME,
-  SHOP_THEME,
-} from '../audio/tracks/shopTheme.js';
+import { SHOP_THEME } from '../audio/tracks/shopTheme.js';
 import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
-import {
-  NEON_GULCH_ORIGINAL_THEME,
-  NEON_GULCH_THEME,
-} from '../audio/tracks/neonGulchTheme.js';
+import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
 import { PROVING_GROUND_THEME } from '../audio/tracks/provingGroundTheme.js';
 import { REDLINE_GAUNTLET_THEME } from '../audio/tracks/redlineGauntletTheme.js';
-import {
-  SYNDICATE_RUN_ORIGINAL_THEME,
-  SYNDICATE_RUN_THEME,
-} from '../audio/tracks/syndicateRunTheme.js';
+import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
 import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
 import { TITLE_THEME } from '../audio/tracks/titleTheme.js';
 import { garageActionBlocked, garageItemBadge } from '../ui/GarageModel.js';
@@ -119,19 +110,13 @@ const STYLE_RECORDS = Object.freeze([
 const GARAGE_PLAYLIST = Object.freeze([
   Object.freeze({ label: 'NIGHT DRIVE', track: TITLE_THEME, discovered: () => true }),
   Object.freeze({ label: 'CHROME & CREDITS', track: SHOP_THEME, discovered: () => true }),
-  Object.freeze({ label: 'CHROME & CREDITS — ORIGINAL',
-    track: CHROME_CREDITS_ORIGINAL_THEME, discovered: () => true }),
   Object.freeze({ label: 'HIGH SPEED', track: HIGH_SPEED_THEME,
     discovered: (scene) => Boolean(scene.storyTiles[0]?.qualifier.complete) }),
   Object.freeze({ label: 'START SIGNAL', track: PROVING_GROUND_THEME,
     discovered: (scene) => Boolean(scene.storyTiles[0]?.qualifier.complete) }),
   Object.freeze({ label: 'NEON GULCH', track: NEON_GULCH_THEME,
     discovered: (scene) => Boolean(scene.storyTiles[1]?.qualifier.complete) }),
-  Object.freeze({ label: 'NEON GULCH — ORIGINAL', track: NEON_GULCH_ORIGINAL_THEME,
-    discovered: (scene) => Boolean(scene.storyTiles[1]?.qualifier.complete) }),
   Object.freeze({ label: 'SYNDICATE RUN', track: SYNDICATE_RUN_THEME,
-    discovered: (scene) => Boolean(scene.storyTiles[2]?.qualifier.complete) }),
-  Object.freeze({ label: 'SYNDICATE RUN — ORIGINAL', track: SYNDICATE_RUN_ORIGINAL_THEME,
     discovered: (scene) => Boolean(scene.storyTiles[2]?.qualifier.complete) }),
   Object.freeze({ label: 'REDLINE GAUNTLET', track: REDLINE_GAUNTLET_THEME,
     discovered: (scene) => scene.storyTiles.some((tile) => tile.rivals.complete) }),

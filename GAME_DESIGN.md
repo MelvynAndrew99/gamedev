@@ -191,10 +191,9 @@ locked slots. The player supports cursor/pointer selection, play, pause,
 previous/next shoulder shortcuts, and a close action. The current soundtrack is
 generated live by the tracker engine rather than loaded from external audio
 files, so choosing a theme starts its authored arrangement directly.
-Music revisions are additive: when an authored song is reworked, its original
-arrangement remains available as a clearly labeled Music Player entry. The
-garage therefore uses the hook-forward `Chrome & Credits` rework while
-`Chrome & Credits — Original` preserves the first jam arrangement.
+The Music Player contains one strongest production mix per composition.
+Superseded drafts do not appear as near-duplicate soundtrack entries; the
+garage uses the hook-forward `Chrome & Credits` production mix.
 
 Rival School introduces the Story campaign's moving opposition as a 35-second
 base wreck score attack, not a boss or a lap-limited race. Exactly three

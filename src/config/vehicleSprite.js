@@ -13,7 +13,7 @@ export const VEHICLE_SHEET_HEIGHT = VEHICLE_FRAME_HEIGHT * VEHICLE_PITCH_ROWS;
 // The deterministic concept extraction is calibrated to a 109-pixel opaque
 // neutral hull. Display scales preserve the gameplay and title footprints
 // previously tuned around collision and UI.
-export const VEHICLE_NEUTRAL_HULL_WIDTH = 109;
+export const VEHICLE_NEUTRAL_HULL_WIDTH = 108;
 export const VEHICLE_HULL_FRAME_RATIO =
   VEHICLE_NEUTRAL_HULL_WIDTH / VEHICLE_FRAME_WIDTH;
 export const VEHICLE_FRAME_ASPECT = VEHICLE_FRAME_HEIGHT / VEHICLE_FRAME_WIDTH;

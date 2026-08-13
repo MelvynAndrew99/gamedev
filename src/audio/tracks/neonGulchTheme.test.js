@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  NEON_GULCH_ORIGINAL_THEME,
-  NEON_GULCH_THEME,
-} from './neonGulchTheme.js';
+import { NEON_GULCH_THEME } from './neonGulchTheme.js';
 
 const hits = (pattern = []) => pattern.filter((value) => value != null).length;
 
@@ -35,10 +32,4 @@ test('bass and high motion sit below the produced melody in every busy section',
       assert.ok(bar.leadGain >= 1.12, `bar ${index} hook`);
     }
   }
-});
-
-test('the original tracker arrangement remains unchanged for the Music Player', () => {
-  assert.ok(hits(NEON_GULCH_ORIGINAL_THEME.bars[4].arp) > 0);
-  assert.equal(NEON_GULCH_ORIGINAL_THEME.bars[4].bassGain, undefined);
-  assert.deepEqual(NEON_GULCH_ORIGINAL_THEME.bars[4].lead, NEON_GULCH_THEME.bars[4].lead);
 });

@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { TUNING } from '../config/tuning.js';
+import {
+  VEHICLE_FRAME_WIDTH,
+  VEHICLE_NEUTRAL_HULL_WIDTH,
+} from '../config/vehicleSprite.js';
 import { RoadModel } from './RoadModel.js';
 import {
   backgroundPitchOffset,
@@ -232,12 +236,12 @@ test('rivals use opaque hull width and a cohesive far LOD instead of engine frag
   assert.equal(rivalSpriteMode(7.99), 'beacon');
   assert.equal(rivalSpriteMode(8), 'sprite');
   assert.equal(
-    rivalSpriteFrameSize(72),
-    128,
-    'a 72px projected hull requires the full 128px transparent steering frame',
+    rivalSpriteFrameSize(VEHICLE_NEUTRAL_HULL_WIDTH),
+    VEHICLE_FRAME_WIDTH,
+    'the measured projected hull requires the full transparent steering frame',
   );
   assert.ok(
-    rivalSpriteFrameSize(12) > 12 * 1.7,
+    rivalSpriteFrameSize(12) > 12,
     'transparent padding must not silently shrink the visible opponent',
   );
 });

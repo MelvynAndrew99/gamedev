@@ -54,111 +54,15 @@ const PROGRESSION = [
   }, // G#7 (V/i)
 ];
 
-function bassLine(root, pickup) {
-  return [
-    root, null, null, root + 12,
-    null, null, root + 7, null,
-    root, null, root + 12, null,
-    root + 7, null, pickup, null,
-  ];
-}
-
-// One compact, hummable shape: root-third-fifth-octave, then a seventh-
-// fifth-third answer. Repeating the contour over new chord colors is a very
-// 16-bit way to make a tiny note budget sound like a composed melody.
-const HOOK_A = [
-  0, null, null, 1, null, 2, null, 4,
-  null, 3, null, 2, null, 1, null, null,
-];
-const HOOK_B = [
-  0, null, 1, null, 2, null, 4, null,
-  5, null, 4, null, 3, 2, 1, null,
-];
-const BREAK_HOOK = [
-  0, null, null, null, 2, null, null, null,
-  3, null, null, null, 1, null, null, null,
-];
-const TURNAROUND = [
-  2, null, 3, null, 4, null, 5, null,
-  4, null, 3, 2, 1, null, 0, null,
-];
-
-// Quiet gated-saw answers between hook phrases: little scanner lights and
-// pneumatic-tool blips, never a constant racing arp.
-const GLINTS_A = [
-  null, null, 0, null, null, null, 2, null,
-  null, null, 1, null, null, null, 3, null,
-];
-const GLINTS_B = [
-  null, 1, null, null, null, 2, null, null,
-  null, 3, null, null, null, 2, null, null,
-];
-
-const KICK_GROOVE = [0, 4, 8, 11, 12];
-const KICK_BREAK = [0, 8, 11];
-const SNARE_BACKBEAT = [4, 12];
-const SNARE_FILL = [4, 12, 14, 15];
 const HAT_8TH = [0, 2, 4, 6, 8, 10, 12, 14];
 const HAT_16TH = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 const OPEN_HAT = [6, 14];
 
-function bar(index, { lead, arp = GLINTS_A, breakBeat = false, fill = false }) {
-  const chord = PROGRESSION[index % PROGRESSION.length];
-  return {
-    bassRootFreq: C_SHARP2,
-    leadRootFreq: C_SHARP4,
-    arpRootFreq: C_SHARP4,
-    padRootFreq: C_SHARP3,
-    bass: bassLine(chord.bassRoot, chord.pickup),
-    bassFM: true,
-    driveBass: false,
-    bassGain: 0.72,
-    sidechain: true,
-    sidechainDepth: 0.5,
-    chordTones: chord.chordTones,
-    leadTones: chord.leadTones,
-    lead,
-    leadSynth: 'chip',
-    leadGain: 1.28,
-    arp,
-    padStepsHeld: 16,
-    padSaw: true,
-    padCutoff: breakBeat ? 1250 : 1850,
-    kick: breakBeat ? KICK_BREAK : KICK_GROOVE,
-    kickGain: 0.56,
-    snare: fill ? SNARE_FILL : SNARE_BACKBEAT,
-    snareGain: 0.58,
-    hat: fill ? HAT_16TH : HAT_8TH,
-    hatGain: 0.58,
-    openHat: fill ? [3, 7, 11, 15] : OPEN_HAT,
-  };
-}
-
-// Preserve the jam's first arrangement as a playable soundtrack entry. Song
-// revisions are additive in Rhythmic Ride: an improved scene cue must never
-// erase the version the composer originally heard and approved.
-export const CHROME_CREDITS_ORIGINAL_THEME = {
-  bpm: 112,
-  stepsPerBar: 16,
-  // Just enough pocket to dance; far lighter than the former lounge shuffle.
-  swing: 0.2,
-  bars: [
-    bar(0, { lead: HOOK_A }),
-    bar(1, { lead: HOOK_A, arp: GLINTS_B }),
-    bar(2, { lead: HOOK_B }),
-    bar(3, { lead: TURNAROUND, arp: GLINTS_B }),
-    bar(4, { lead: HOOK_A, arp: GLINTS_B }),
-    bar(5, { lead: HOOK_B }),
-    bar(6, { lead: BREAK_HOOK, breakBeat: true, arp: GLINTS_B }),
-    bar(7, { lead: TURNAROUND, fill: true }),
-  ],
-};
-
-// "Chrome & Credits — Recharged" keeps the original harmony and repair-bay
+// "Chrome & Credits — Recharged" keeps the established harmony and repair-bay
 // identity but gives it the clearer hierarchy that made Night Drive land:
 // faster pulse, a two-bar rhythmic fingerprint, an immediate repeat, a real
-// subtractive breakdown, and a final high-register payoff. It is a rework,
-// not a replacement; the arrangement above remains in the Music Player.
+// subtractive breakdown, and a final high-register payoff. This is the sole
+// shipped version so the library offers only the strongest mix.
 const RECHARGED_HOOK = [
   0, null, 2, null, 4, null, 3, 2,
   null, 1, null, 2, null, 0, null, null,

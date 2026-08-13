@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  CHROME_CREDITS_ORIGINAL_THEME,
-  SHOP_THEME,
-} from './shopTheme.js';
+import { SHOP_THEME } from './shopTheme.js';
 
 const theme = SHOP_THEME;
 const hits = (pattern) => pattern.filter((value) => value != null).length;
@@ -77,17 +74,3 @@ test('the short form includes a subtractive breakdown and loop fill', () => {
   assert.ok(hits(turnaround.snare) > hits(breakdown.snare));
   assert.ok(hits(turnaround.hat) > hits(breakdown.hat));
 });
-
-test('the original Chrome & Credits arrangement remains intact and playable', () => {
-  const original = CHROME_CREDITS_ORIGINAL_THEME;
-  assert.equal(original.bpm, 112);
-  assert.equal(original.stepsPerBar, 16);
-  assert.equal(original.bars.length, 8);
-  assert.equal(original.swing, 0.2);
-  assert.deepEqual(original.bars[0].lead, HOOK_SIGNATURE);
-});
-
-const HOOK_SIGNATURE = [
-  0, null, null, 1, null, 2, null, 4,
-  null, 3, null, 2, null, 1, null, null,
-];

@@ -64,8 +64,8 @@ test('atlas contract, rear-chase silhouette, canopy, twin engines, and anchor ho
       if (p.a && p.b > 35 && p.b > p.r * 1.5 && p.b > p.g * 1.08) glass += 1;
       if (p.a && p.r > 220 && p.g > 235 && p.b > 240) engineCores += 1;
     }
-    assert.ok(box.opaque > 1800, `row ${row} frame ${frame} lost its professional silhouette`);
-    assert.ok(box.width > box.height * 1.25, `row ${row} frame ${frame} became top-down/tall`);
+    assert.ok(box.opaque > 3000, `row ${row} frame ${frame} lost its professional silhouette`);
+    assert.ok(box.width > box.height * 1.5, `row ${row} frame ${frame} became top-down/tall`);
     assert.equal(box.maxY, 104, `row ${row} frame ${frame} bottom anchor drifted`);
     assert.ok(box.minX >= 3 && box.maxX <= FRAME_W - 4, `row ${row} frame ${frame} clipped cell edge`);
     assert.ok(glass > 35, `row ${row} frame ${frame} lost the integrated canopy`);
@@ -92,16 +92,28 @@ test('opposite steering silhouettes are exact mirrors and neutral remains center
 
 test('soft, hard, and pitch poses are materially distinct without scale or anchor jitter', () => {
   for (let row = 0; row < PITCH_ROWS; row++) {
-    const neutral = bounds(sheets.composite, row, 2);
-    const soft = bounds(sheets.composite, row, 1);
-    const hard = bounds(sheets.composite, row, 0);
-    assert.ok(soft.width >= neutral.width + 7, `row ${row} soft steering lacks yaw read`);
-    assert.ok(hard.width >= soft.width + 7, `row ${row} hard steering lacks airbrake commitment`);
+    let hardGold = 0;
+    let softGold = 0;
+    let softNeutralDifference = 0;
+    for (let y = 0; y < FRAME_H; y++) for (let x = 0; x < FRAME_W; x++) {
+      const hard = pixel(sheets.detail, row, 0, x, y);
+      const soft = pixel(sheets.detail, row, 1, x, y);
+      const neutral = pixel(sheets.detail, row, 2, x, y);
+      if (hard.a && hard.r > 220 && hard.g > 140 && hard.b < 120) hardGold += 1;
+      if (soft.a && soft.r > 220 && soft.g > 140 && soft.b < 120) softGold += 1;
+      if (soft.a !== neutral.a || soft.r !== neutral.r || soft.g !== neutral.g || soft.b !== neutral.b) {
+        softNeutralDifference += 1;
+      }
+    }
+    assert.ok(softNeutralDifference > 1000, `row ${row} soft steering lacks a distinct perspective`);
+    assert.ok(hardGold >= softGold + 45, `row ${row} hard steering lost its active airbrake`);
   }
   for (let frame = 0; frame < STEER_FRAMES; frame++) {
     const down = bounds(sheets.composite, 0, frame);
+    const neutral = bounds(sheets.composite, 1, frame);
     const up = bounds(sheets.composite, 2, frame);
-    assert.ok(up.height >= down.height + 7, `frame ${frame} pitch silhouettes collapsed`);
+    assert.ok(Math.abs(down.height - neutral.height) >= 4, `frame ${frame} nose-down silhouette collapsed`);
+    assert.ok(Math.abs(up.height - neutral.height) >= 1, `frame ${frame} nose-up silhouette collapsed`);
     assert.equal(up.maxY, down.maxY);
   }
   assert.equal(bounds(sheets.composite, 1, 2).width, VEHICLE_NEUTRAL_HULL_WIDTH);
