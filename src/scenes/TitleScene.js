@@ -31,6 +31,8 @@ import {
   isStoryCampaignPlatinum,
 } from '../systems/StoryProgress.js';
 import { achievementViews, getPlayerProfile } from '../systems/PlayerStats.js';
+import { endlessRecordSnapshot } from '../systems/HighScores.js';
+import { endlessStageForDistance } from '../systems/EndlessProgression.js';
 import { MUSIC } from '../audio/MusicEngine.js';
 import { SHOP_THEME } from '../audio/tracks/shopTheme.js';
 import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
@@ -99,7 +101,7 @@ const COLORS = Object.freeze({
 // through one generic square icon treatment.
 const CAROUSEL_ICONS = Object.freeze({
   [FRONT_END_VIEWS.SCHOOL]: Object.freeze({ key: 'menu-icon-school', width: 102, height: 96 }),
-  [FRONT_END_VIEWS.STORY]: Object.freeze({ key: 'menu-icon-story', width: 108, height: 110 }),
+  [FRONT_END_VIEWS.STORY]: Object.freeze({ key: 'menu-icon-story', width: 126, height: 88 }),
   [FRONT_END_VIEWS.TROPHIES]: Object.freeze({ key: 'menu-icon-trophies', width: 110, height: 100 }),
   endless: Object.freeze({ key: 'menu-icon-endless', width: 126, height: 70 }),
   [FRONT_END_VIEWS.CUSTOM]: Object.freeze({ key: 'menu-icon-custom', width: 106, height: 108 }),
@@ -224,6 +226,10 @@ function shortPlace(place) {
   return `${place}${suffix}`;
 }
 
+function formatEndlessDistanceM(distanceM) {
+  return `${Math.floor(distanceM).toLocaleString()}m`;
+}
+
 function shortEarnedDate(timestamp) {
   if (!Number.isFinite(timestamp) || timestamp <= 0) return 'LEGACY SAVE';
   return `EARNED ${new Date(timestamp).toLocaleDateString(undefined, {
@@ -266,10 +272,13 @@ export class TitleScene extends Phaser.Scene {
     this.load.image('title-city-bg', 'assets/title-city-bg-v2.png');
     this.load.image('flight-school-city', 'assets/flight-school-city-v2.png');
     this.load.image('menu-icon-school', 'assets/menu-icon-school-v1.png');
-    this.load.image('menu-icon-story', 'assets/menu-icon-story-v1.png');
+    this.load.image('menu-icon-story', 'assets/menu-icon-story-v2.png');
     this.load.image('menu-icon-trophies', 'assets/menu-icon-trophies-v1.png');
     this.load.image('menu-icon-endless', 'assets/menu-icon-endless-v1.png');
     this.load.image('menu-icon-custom', 'assets/menu-icon-custom-v1.png');
+    this.load.image('story-gantry-proving-ground', 'assets/story-gantry-proving-ground-v1.png');
+    this.load.image('story-gantry-neon-gulch', 'assets/story-gantry-neon-gulch-v1.png');
+    this.load.image('story-gantry-syndicate-run', 'assets/story-gantry-syndicate-run-v1.png');
     this.load.spritesheet('trophy-atlas', 'assets/trophy-atlas-v1.png', {
       frameWidth: 627,
       frameHeight: 627,
@@ -438,6 +447,10 @@ export class TitleScene extends Phaser.Scene {
   }
 
   refreshProgress() {
+    // Read fresh each time create() runs so a just-finished Endless attempt
+    // (which writes its record before returning here) shows up immediately
+    // instead of the stale value from when this scene was first constructed.
+    this.endlessRecord = endlessRecordSnapshot();
     this.storyTiles = buildStoryCourseTiles(
       TRACKS,
       (track) => getStoryProgress(track.id, track.storyVersion ?? 1),
@@ -1007,6 +1020,24 @@ export class TitleScene extends Phaser.Scene {
       stroke: colorCss(COLORS.ink),
       strokeThickness: selected ? 5 : 3,
     }).setOrigin(0.5, 0);
+    if (selected && item.id === 'endless') {
+      const record = this.endlessRecord ?? { distanceM: 0, hasRun: false };
+      this.text(
+        x,
+        y + 82,
+        record.hasRun
+          ? `BEST ${formatEndlessDistanceM(record.distanceM)}`
+          : 'BEST — NO RUN',
+        {
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '9px',
+          fontStyle: 'bold',
+          color: colorCss(record.hasRun ? COLORS.gold : COLORS.muted),
+          stroke: colorCss(COLORS.ink),
+          strokeThickness: 3,
+        },
+      ).setOrigin(0.5, 0);
+    }
     if (selected && locked) {
       this.text(x, y + 76, 'LOCKED', {
         fontFamily: 'Arial, sans-serif', fontSize: '10px', fontStyle: 'bold',
@@ -1027,8 +1058,8 @@ export class TitleScene extends Phaser.Scene {
     if (!icon) return;
     const image = this.uiAdd(this.add.image(x, y - 8 * scale, icon.key))
       .setDisplaySize(icon.width * scale, icon.height * scale)
-      .setAlpha(locked ? 0.68 : selected ? 1 : 0.76);
-    if (locked) image.setTint(0x978da8);
+      .setAlpha(locked ? 0.82 : selected ? 1 : 0.76);
+    if (locked) image.setTint(0xb4acc0);
   }
 
   renderSubmenuHeader() {
@@ -2141,7 +2172,9 @@ export class TitleScene extends Phaser.Scene {
 
   renderPlayerRecords() {
     const totals = this.playerProfile.totals;
-    this.text(28, 104, 'LIFETIME TOTALS', {
+    this.drawEndlessRecordPanel(28, 104, 744, 54);
+
+    this.text(28, 176, 'LIFETIME TOTALS', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '11px',
       color: colorCss(COLORS.gold),
@@ -2152,33 +2185,74 @@ export class TitleScene extends Phaser.Scene {
       ['RIVALS WRECKED', Math.floor(totals.rivalsWrecked)],
       ['SPEED LINES', Math.floor(totals.speedLinesCrossed)],
     ].forEach(([label, value], index) => {
-      this.drawRecordStat(28 + index * 186, 122, 174, 65, label, value);
+      this.drawRecordStat(28 + index * 186, 193, 174, 58, label, value);
     });
 
-    this.text(28, 201, 'STYLE REWARDS — HOW TO EARN THEM', {
+    this.text(28, 265, 'STYLE REWARDS — HOW TO EARN THEM', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '11px',
       color: colorCss(COLORS.gold),
     });
     STYLE_RECORDS.forEach((record, index) => {
-      this.drawStyleRecord(28 + index * 148, 220, 140, 96, record, totals);
+      this.drawStyleRecord(28 + index * 148, 283, 140, 88, record, totals);
     });
 
-    this.text(28, 332, 'ACHIEVEMENTS', {
+    this.text(28, 385, 'ACHIEVEMENTS', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '11px',
       color: colorCss(COLORS.gold),
     });
-    this.playerAchievements.forEach((achievement, index) => {
-      this.drawAchievementRecord(28 + index * 186, 351, 174, 116, achievement);
-    });
-    this.text(28, 484,
+    this.text(772, 385,
       'TOTALS ALWAYS DISPLAY — YOUR FIRST RUN STARTS EVERY RECORD AT ZERO.', {
         fontFamily: 'Arial, sans-serif',
-        fontSize: '10px',
+        fontSize: '9px',
         fontStyle: 'bold',
         color: colorCss(COLORS.muted),
-      });
+      }).setOrigin(1, 0);
+    this.playerAchievements.forEach((achievement, index) => {
+      this.drawAchievementRecord(28 + index * 186, 403, 174, 108, achievement);
+    });
+  }
+
+  // A compact, premium-feeling hero row: distance owns the biggest number on
+  // the page, with the furthest-reached named stage as secondary context —
+  // matching the terminology players see mid-run in Endless itself.
+  drawEndlessRecordPanel(x, y, width, height) {
+    const record = this.endlessRecord ?? { distanceM: 0, hasRun: false };
+    const g = this.graphics();
+    g.fillStyle(0x0d0a26, 0.94);
+    g.fillRect(x, y, width, height);
+    g.lineStyle(2, record.hasRun ? COLORS.cyan : 0x5c5577, 1);
+    g.strokeRect(x, y, width, height);
+    g.fillStyle(record.hasRun ? COLORS.magenta : 0x3d315d, 1);
+    g.fillRect(x, y, 5, height);
+
+    this.text(x + 22, y + height / 2, '∞', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '30px',
+      fontStyle: 'bold',
+      color: colorCss(record.hasRun ? COLORS.cyan : COLORS.muted),
+    }).setOrigin(0.5);
+
+    this.text(x + 46, y + 8, 'BEST ENDLESS DISTANCE', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '10px',
+      color: colorCss(COLORS.gold),
+    });
+    this.text(x + 46, y + 22, record.hasRun ? formatEndlessDistanceM(record.distanceM) : '0m', {
+      fontSize: '22px',
+      color: colorCss(COLORS.white),
+    });
+
+    const status = record.hasRun
+      ? `FURTHEST: ${endlessStageForDistance(record.distanceM).name}`
+      : 'NO RUN';
+    this.text(x + width - 16, y + height / 2, status, {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '11px',
+      fontStyle: 'bold',
+      color: colorCss(record.hasRun ? COLORS.gold : COLORS.muted),
+    }).setOrigin(1, 0.5);
   }
 
   drawRecordStat(x, y, width, height, label, value) {

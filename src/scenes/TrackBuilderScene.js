@@ -47,6 +47,10 @@ export class TrackBuilderScene extends Phaser.Scene {
   }
 
   create() {
+    // Keep Projection Lab truthful when the editor was opened from the title
+    // carousel instead of from the Lab selector itself.
+    const trackSelect = document.getElementById('trackSelect');
+    if (trackSelect) trackSelect.value = 'track-builder';
     const saved = loadCustomTracks();
     this.draft = saved.find(({ id }) => id === this.editId) ??
       createCustomTrackDraft(saved.length + 1);

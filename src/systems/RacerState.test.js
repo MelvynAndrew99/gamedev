@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { RACER, sanitizeRacerProfile } from './RacerState.js';
 import { VEHICLE_LIVERIES } from '../config/vehicleSprite.js';
+import { applyEmergencyTow } from './Economy.js';
 
 function storage(initial = null) {
   const data = new Map(initial ? [['rhythmic-ride.garage.v1', JSON.stringify(initial)]] : []);
@@ -118,4 +119,19 @@ test('Endless uses a fresh disposable hull without reading or mutating Story dam
   RACER.beginEndlessRun();
   assert.equal(RACER.health, 100, 'the next Endless attempt is fresh again');
   RACER.endEndlessRun();
+});
+
+test('Story emergency tow is persisted immediately and remains a bounded floor after reload', () => {
+  globalThis.localStorage = storage({ version: 1, health: 0, money: 0 });
+  RACER.reloadProfile();
+
+  const tuning = { emergencyHealth: 25 };
+  assert.equal(applyEmergencyTow(RACER, tuning), 25);
+  assert.equal(RACER.health, 25);
+
+  // Models B/Escape, a scene exit, or a browser reload before Garage opens.
+  RACER.reloadProfile();
+  assert.equal(RACER.health, 25);
+  assert.equal(applyEmergencyTow(RACER, tuning), 0);
+  assert.equal(RACER.health, 25);
 });

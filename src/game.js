@@ -11,6 +11,7 @@ import { TrackBuilderScene } from './scenes/TrackBuilderScene.js';
 import { TRACKS, TRAINING_TRACKS } from './tracks/index.js';
 import { RACER } from './systems/RacerState.js';
 import { presentationFpsLimit } from './systems/FrameRatePolicy.js';
+import { installProjectionLabToggle } from './systems/ProjectionLabShell.js';
 
 // Emergency presentation fallback for unusual display/browser combinations.
 // Normal play follows requestAnimationFrame and uses smooth render-only rival
@@ -38,6 +39,16 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
+const projectionLab = document.getElementById('debug-panel');
+if (projectionLab) {
+  installProjectionLabToggle({
+    panel: projectionLab,
+    body: document.body,
+    windowTarget: window,
+    search: window.location.search,
+  });
+}
 
 // Projection Lab track picker (index.html #trackSelect) — a dev-tool
 // shortcut that jumps straight into any track from any scene, without
@@ -69,11 +80,22 @@ if (trackSelect) {
   endlessOpt.value = 'endless';
   endlessOpt.textContent = 'ENDLESS MODE';
   trackSelect.appendChild(endlessOpt);
+  const builderOpt = document.createElement('option');
+  builderOpt.value = 'track-builder';
+  builderOpt.textContent = 'TOOLS — TRACK EDITOR';
+  trackSelect.appendChild(builderOpt);
 
   trackSelect.addEventListener('change', () => {
-    RACER.resetRun(); // fresh car for the jump, same as picking it from the title menu
     game.scene.getScenes(true).forEach((scene) => game.scene.stop(scene.scene.key));
     const [mode, index] = trackSelect.value.split(':');
+    // Projection Lab is an authoring surface, so it intentionally bypasses
+    // the player-facing completion unlock without changing that saved gate.
+    // It is a scene destination rather than a disposable race attempt.
+    if (mode === 'track-builder') {
+      game.scene.start('TrackBuilderScene');
+      return;
+    }
+    RACER.resetRun(); // fresh car for a race jump, same as the title menu
     const data = mode === 'endless'
       ? { mode: 'endless' }
       : { mode, trackIndex: Number(index) };

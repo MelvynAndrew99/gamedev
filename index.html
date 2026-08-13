@@ -6,14 +6,20 @@
     <title>Rhythmic Ride</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; min-height: 100%; }
       body {
         background: #000;
         font-family: Arial, sans-serif;
         display: flex;
-        height: 100vh;
-        overflow: hidden;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        overflow: auto;
       }
       #debug-panel {
+        position: fixed;
+        z-index: 100;
+        inset: 0 auto 0 0;
         background: rgba(0, 0, 0, 0.9);
         border-right: 2px solid #00e5ff;
         padding: 20px;
@@ -21,8 +27,12 @@
         overflow-y: auto;
         color: #00e5ff;
         font-size: 12px;
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.65);
       }
-      #debug-panel h2 { font-size: 16px; margin-bottom: 12px; text-decoration: underline; }
+      #debug-panel[hidden] { display: none; }
+      #debug-panel h2 { font-size: 16px; margin-bottom: 4px; text-decoration: underline; }
+      .lab-shortcut { color: #fff; line-height: 1.5; margin-bottom: 12px; }
+      .lab-controls-copy { color: #fff; line-height: 1.55; margin: 12px 0 4px; }
       .debug-section { border-top: 1px solid rgba(0, 229, 255, 0.65); }
       .debug-section:last-of-type { border-bottom: 1px solid rgba(0, 229, 255, 0.65); }
       .debug-section summary {
@@ -44,18 +54,22 @@
         padding: 2px 6px; margin-top: 5px; font-weight: bold; border-radius: 3px;
       }
       #game-container {
-        flex: 1; display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
+        width: 800px;
+        height: 600px;
+        flex: 0 0 auto;
+        transition: transform 140ms ease-out;
       }
-      #game { background: #000; }
-      .controls { margin-top: 20px; color: #fff; text-align: center; }
-      .controls h2 { margin: 0 0 10px 0; }
-      .controls p { margin: 5px 0; }
+      #game { width: 800px; height: 600px; background: #000; }
+      #game canvas { display: block; }
+      @media (min-width: 1080px) {
+        body.projection-lab-open #game-container { transform: translateX(125px); }
+      }
     </style>
   </head>
   <body>
-    <div id="debug-panel">
-      <h2>🛠 Projection Lab</h2>
+    <aside id="debug-panel" aria-label="Projection Lab" hidden>
+      <h2>Projection Lab</h2>
+      <p class="lab-shortcut">F2 / Ctrl+Shift+L toggles this panel.</p>
 
       <details class="debug-section" open>
         <summary>TRACK</summary>
@@ -214,16 +228,15 @@
           </p>
         </div>
       </details>
-    </div>
+      <p class="lab-controls-copy">
+        Keyboard: arrows drive, C boosts, Z or X airbrakes, Escape pauses.<br />
+        Controller: stick steers, triggers drive, shoulders airbrake, Start pauses.<br />
+        Hit cones. Avoid rocks.
+      </p>
+    </aside>
 
     <div id="game-container">
       <div id="game"></div>
-      <div class="controls">
-        <h2>Rhythmic Ride</h2>
-        <p><strong>↑</strong> gas &nbsp; <strong>↓</strong> brake &nbsp; <strong>← →</strong> steer &nbsp; <strong>Z / X</strong> airbrakes</p>
-        <p>🎮 stick steer &nbsp; R2 gas &nbsp; L2 brake &nbsp; <strong>L1 / R1 airbrakes</strong> &nbsp; □ nitro</p>
-        <p>Cones warn. Rocks collect.</p>
-      </div>
     </div>
 
     <script type="module" src="/src/game.js"></script>

@@ -42,6 +42,7 @@ import {
 } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
 import {
+  applyEmergencyTow,
   applyPitCrewService,
   awardStoryPayout,
   consumeRaceLoadout,
@@ -124,6 +125,11 @@ import {
   updateFlight,
 } from '../systems/FlightSchool.js';
 import { flightCraftVisual } from '../systems/FlightPresentation.js';
+import {
+  TERMINAL_OUTCOMES,
+  commitTerminalOutcome,
+  createTerminalOutcomeState,
+} from '../systems/TerminalOutcome.js';
 
 // Theme identities can be shared by geometry variants (Training Loop and its
 // Story validation race). Endless keeps the original high-speed score.
@@ -235,6 +241,10 @@ export class GameScene extends Phaser.Scene {
       TUNING,
       this.endlessStage?.environment ??
         this.trackData?.environment ?? this.trackData?.id ?? 'endless',
+      {
+        storyGateId: this.mode === 'story' ? this.trackData?.id : null,
+        storyGateLabel: this.mode === 'story' ? this.trackData?.name : null,
+      },
     );
     this.player = new Player(TUNING);
     const rivalConfig = this.mode !== 'story' || this.storyPhase === STORY_PHASES.RIVALS
@@ -365,6 +375,7 @@ export class GameScene extends Phaser.Scene {
       ? this.buildAirtimeTrainingView()
       : null;
     this.done = false;
+    this.terminalOutcome = createTerminalOutcomeState();
 
     // Bottom-anchored (origin 0.5,1): the sprite's y IS its rear-bumper
     // line, not its center. Center-anchoring was the actual "too close to
@@ -598,6 +609,13 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.updateRivals(dt, input, previousRivalPlayer);
+    // Rival contact resolves before finish-line logic. If it destroyed the
+    // car, freeze this frame on the committed wreck instead of allowing the
+    // later race crossing to overwrite it with progression and a payout.
+    if (this.done) {
+      this.renderTerminalWorld();
+      return;
+    }
     const storyFinishers = this.storyRaceOrder?.update(this.rivalPack?.rivals ?? []) ?? [];
     storyFinishers.forEach((id) => this.rivalPack?.retireFinisher(id));
     this.storyEventView = this.buildStoryEventView();
@@ -668,6 +686,13 @@ export class GameScene extends Phaser.Scene {
         else if (this.iframes <= 0) this.onHit(s.def, s);
         else s.hit = false; // i-frames: hazard not consumed, just ghosted
       }
+    }
+    // Road damage has the same first-right-of-refusal as rival damage. This
+    // is the explicit finish-line policy: a fatal contact on the crossing
+    // frame is a wreck, because contacts are authoritative before lap state.
+    if (this.done) {
+      this.renderTerminalWorld();
+      return;
     }
 
     // Collision can turn an early gap landing into explicit safe-route
@@ -1317,8 +1342,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   failStoryQualifier() {
-    this.stopActiveFeedbackLoops();
-    this.done = true;
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.QUALIFIER_EXPIRED)) return;
     const target = this.trackData.qualifier.targetSeconds;
     submitQualifierResult(this.trackData, target, target, false);
     this.showBanner(
@@ -1328,9 +1352,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   failTimedElimination() {
-    this.stopActiveFeedbackLoops();
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.TRAINING_EXPIRED)) return;
     this.race?.finish();
-    this.done = true;
     this.trainingAdvanceTo = null;
     const view = this.timedElimination.view;
     const target = this.objectives.views.find(
@@ -2244,8 +2267,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   onWrecked() {
-    this.stopActiveFeedbackLoops();
-    this.done = true;
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.WRECKED)) return;
     if (this.mode === 'endless') {
       const dist = this.distanceM();
       const record = submitScore('endless', dist, 'max');
@@ -2253,11 +2275,17 @@ export class GameScene extends Phaser.Scene {
       this.showBanner(
         `WRECKED\n${dist}m${record ? '  NEW RECORD' : ''}\nTIPS $${this.pop.cash}\n\nENTER FOR TITLE`, 0);
     } else if (this.mode === 'story') {
+      // Commit the anti-deadlock tow in the same synchronous transaction as
+      // the wreck. A, B, Escape, a scene change, or a reload can no longer
+      // bypass it by avoiding the Garage entry path. applyEmergencyTow is a
+      // floor operation, so the legacy Garage safety call remains harmless
+      // and cannot farm additional repairs.
+      const towHealth = applyEmergencyTow(RACER, TUNING);
       this.garageData = {
         wrecked: true,
         retryTrackIndex: this.trackIndex,
         storyPhase: this.storyPhase,
-        receipt: 'WRECKED — NO RACE PURSE',
+        receipt: `WRECKED — EMERGENCY TOW +${towHealth} HULL — NO RACE PURSE`,
       };
       this.showBanner('WRECKED\n\nENTER FOR GARAGE', 0);
     } else if (this.mode === 'custom') {
@@ -2268,8 +2296,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   finishRace() {
-    this.stopActiveFeedbackLoops();
-    this.done = true;
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.FINISHED)) return;
     // The rival clock starts at the rolling line; its mastery time must use
     // the same origin instead of including the pre-start grid approach.
     const t = this.timedScoreAttack?.elapsedSeconds ??
@@ -2512,6 +2539,24 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.scene.start('TitleScene');
     }
+  }
+
+  beginTerminalOutcome(outcome) {
+    if (!commitTerminalOutcome(this.terminalOutcome, outcome)) return false;
+    this.done = true;
+    this.stopActiveFeedbackLoops();
+    return true;
+  }
+
+  renderTerminalWorld() {
+    this.renderer.render(
+      this.model,
+      this.player,
+      this.player.speed / TUNING.maxSpeed,
+      this.speedLineBurst,
+      this.sceneryDistance,
+      this.rivalPack?.renderViews,
+    );
   }
 
   returnToModeMenu() {

@@ -15,7 +15,18 @@ import {
   rivalSpriteFrameSize,
   rivalSpriteMode,
   RoadRenderer,
+  storyGantrySpec,
 } from './RoadRenderer.js';
+
+test('only authored Story tracks opt into themed gantries', () => {
+  assert.deepEqual(storyGantrySpec('training-validation', 'Proving Ground'), {
+    key: 'story-gantry-proving-ground',
+    label: 'PROVING GROUND',
+  });
+  assert.equal(storyGantrySpec('syndicate-run').horizontalScale, 1.1);
+  assert.equal(storyGantrySpec('training-air', 'Air School'), null);
+  assert.equal(storyGantrySpec(undefined, 'Race School'), null);
+});
 
 test('Flight School concourse opens around the viewport instead of framing the city', () => {
   const section = { from: 1180, to: 1660 };

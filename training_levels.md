@@ -478,8 +478,10 @@ should still teach one new verb. Combining skills is validation, not introductio
 ## Custom Track Builder unlock
 
 After finishing all five released lessons and attempting both Story events on
-all three courses, the Story submenu's third L/R page opens the Custom Track
-Builder. Scores and trophies do not gate it. The editor uses a connected
+all three courses, the locked Track Builder destination in the title carousel
+opens. Scores and trophies do not gate it. Projection Lab also exposes a
+developer-only Track Editor shortcut that bypasses this presentation gate
+without changing saved progression. The editor uses a connected
 top-down ribbon because the runtime road remains a linear pseudo-3D spline; its
 six road tiles compile directly to the normal track-data pieces. Players may
 layer cones, rocks, boosts, and ramps, apply one of four released environments,

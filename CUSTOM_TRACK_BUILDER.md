@@ -17,6 +17,10 @@ or a second racing engine.
 4. Select **Build a New Track**, drag road and object tiles onto the canvas,
    choose a Track Scene, then Save or Test Drive.
 
+During development, **Projection Lab → TOOLS — TRACK EDITOR** opens the editor
+directly. This is an authoring shortcut only: it does not satisfy or modify the
+player-facing completion unlock.
+
 Saved tracks support Race, Edit, and Delete from the library. Six local slots
 are available. Custom races are two laps, use isolated run damage, and do not
 award wallet money, trophies, achievements, or campaign progression.

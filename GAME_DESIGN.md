@@ -483,6 +483,10 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
 
 - Track, Audio, Physics, Handling, Camera, Graphics, and Status controls live in
   separate collapsible groups so the active tuning surface can remain visible.
+- The Course selector also exposes `TOOLS — TRACK EDITOR`. This developer-only
+  shortcut opens `TrackBuilderScene` directly and deliberately bypasses the
+  player-facing completion gate; it does not unlock Track Builder in saved
+  progression or create a race attempt.
 - Music and SFX sliders update their independent audio buses during a race.
   Their values persist through scene and track changes for the current session.
 - Keep control defaults synchronized with `TUNING`; a lab value must not silently
@@ -490,8 +494,8 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
 
 ### Custom Track Builder
 
-- The Story front end has three shoulder pages: Course Select, Pit Garage, and
-  Custom Tracks. Custom Tracks unlocks after the player finishes all five
+- Track Builder is a visible destination in the title carousel alongside the
+  other modes. It remains locked until the player finishes all five
   released Race School lessons and has completed at least one attempt of both
   Story event types on all three courses. Trophy rank, finish position, and
   takedown count do not affect this unlock. Endless and the `SOON` Flight School
@@ -518,6 +522,21 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
   branches, reverse routes, online sharing, enemy placement, and arbitrary
   terrain sculpting would require new runtime systems and are not implied by
   the top-down editor.
+
+### Title carousel art lessons
+
+- Design mode emblems for their final rendered size. Review the selected center
+  item and the smaller adjacent item at 800x600 before accepting source art.
+- Put the gameplay promise in the largest shapes. The revised Story icon makes
+  three rival craft the primary silhouette and reduces its track to a short
+  context wedge; the earlier detailed circuit was attractive but hid the idea.
+- Use shared material language—navy metal, pearl and gold structure, cyan and
+  magenta reflected light—to unify icons without adding boxes or badges.
+- Preserve each emblem's natural aspect ratio and simplify internal detail
+  before increasing display size. Readability comes from silhouette, value,
+  separation, and hierarchy rather than raw resolution.
+- Locked rewards remain visually desirable. Tint and alpha communicate state,
+  while an explicit text label carries the accessibility requirement.
 
 ### Roadside speed pylons
 

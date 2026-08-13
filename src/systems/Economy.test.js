@@ -54,6 +54,8 @@ test('emergency tow restores only the minimum retry health', () => {
   const wreck = racer(0, 0);
   assert.equal(applyEmergencyTow(wreck, tuning), 25);
   assert.equal(wreck.health, 25);
+  assert.equal(applyEmergencyTow(wreck, tuning), 0, 're-entering Garage cannot farm tow repairs');
+  assert.equal(wreck.health, 25);
 
   const healthy = racer(40, 0);
   assert.equal(applyEmergencyTow(healthy, tuning), 0);

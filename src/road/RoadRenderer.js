@@ -20,6 +20,35 @@ import { ParallaxBackground } from './ParallaxBackground.js';
 import { TracksideScenery } from './TracksideScenery.js';
 import { carSpriteFrame } from '../systems/AirtimeFx.js';
 
+const STORY_GANTRIES = Object.freeze({
+  'training-validation': Object.freeze({
+    key: 'story-gantry-proving-ground',
+    label: 'PROVING GROUND',
+  }),
+  'neon-gulch': Object.freeze({
+    key: 'story-gantry-neon-gulch',
+    label: 'NEON GULCH',
+  }),
+  'syndicate-run': Object.freeze({
+    key: 'story-gantry-syndicate-run',
+    label: 'SYNDICATE RUN',
+    // Freight pylons have broader feet than the other two arches. Spread only
+    // the horizontal projection so they clear the outer lanes without making
+    // the base grow downward into the player's crossing plane.
+    horizontalScale: 1.1,
+  }),
+});
+
+// Story passes its track ID explicitly. Looking at the environment alone would
+// accidentally reskin Race School's Proving Ground lesson, which intentionally
+// keeps the established vector timing gantry.
+export function storyGantrySpec(trackId, authoredLabel) {
+  const gantry = STORY_GANTRIES[trackId];
+  if (!gantry) return null;
+  const label = String(authoredLabel ?? gantry.label).trim() || gantry.label;
+  return Object.freeze({ ...gantry, label: label.toUpperCase() });
+}
+
 export function rivalRenderAlpha(rival = {}) {
   const telegraphAlpha = rival.state === 'telegraph'
     ? 0.72 + Math.sin((rival.stateTime ?? 0) * 26) * 0.22
@@ -123,7 +152,7 @@ export function blendEnvironmentColors(from = {}, to = {}, progress = 0) {
 }
 
 export class RoadRenderer {
-  constructor(scene, tuning, environmentId = 'endless') {
+  constructor(scene, tuning, environmentId = 'endless', options = {}) {
     this.scene = scene;
     this.t = tuning;
     this.w = scene.scale.width;
@@ -131,6 +160,7 @@ export class RoadRenderer {
     this.environment = getEnvironment(environmentId);
     this.flightPresentation = environmentId === 'flight-school';
     this.colors = { ...tuning.colors, ...this.environment.colors };
+    this.storyGantry = storyGantrySpec(options.storyGateId, options.storyGateLabel);
 
     this.g = scene.add.graphics().setDepth(-1);
     this.background = new ParallaxBackground(
@@ -141,12 +171,19 @@ export class RoadRenderer {
       tuning.segmentLength,
     );
     this.trackside = new TracksideScenery(scene, tuning, this.environment);
-    // Start/finish gantries: world geometry that rises ABOVE the road, so it
-    // lives on its own layer over the asphalt (depth -1) and roadside props
-    // (depth 5), but under the car (depth 10) — the car drives beneath it.
+    // Start/finish gantries: world geometry that rises ABOVE the road. The
+    // legacy vector layer remains under the vehicle; authored Story sprites
+    // render just above it so a near pylon naturally occludes the car rather
+    // than making the car appear pasted through a solid support.
     this.gates = scene.add.graphics().setDepth(6);
+    this.storyGateSprite = this.storyGantry
+      ? scene.add.image(0, 0, this.storyGantry.key)
+        .setOrigin(0.5, 1)
+        .setDepth(11)
+        .setVisible(false)
+      : null;
     this.gateLabel = scene.add
-      .text(0, 0, 'START / FINISH', {
+      .text(0, 0, this.storyGantry?.label ?? 'START / FINISH', {
         fontFamily: 'Arial Black, Impact, sans-serif',
         fontSize: '20px',
         fontStyle: 'bold',
@@ -155,7 +192,7 @@ export class RoadRenderer {
         strokeThickness: 4,
       })
       .setOrigin(0.5)
-      .setDepth(7)
+      .setDepth(this.storyGantry ? 12 : 7)
       .setVisible(false);
     // Warp streaks: over the road and props, UNDER the car (depth 10). Radiate
     // from the vanishing point so they read as the world rushing past, not as
@@ -397,13 +434,42 @@ export class RoadRenderer {
   renderGates(model, base) {
     const g = this.gates;
     g.clear();
+    this.storyGateSprite?.setVisible(false);
     this.gateLabel.setVisible(false);
     if (this.flightPresentation) return;
     for (let n = this.t.drawDistance - 1; n >= 0; n--) {
       const seg = model.segmentAt(base, n);
       if (!seg.gate || seg.clipped) continue;
-      this.drawGate(seg.p1.screen);
+      if (this.storyGantry) this.drawStoryGate(seg.p1.screen);
+      else this.drawGate(seg.p1.screen);
     }
+  }
+
+  // Story courses use authored transparent sprites whose materials belong to
+  // the location. School and every other mode retain the established vector
+  // gantry, keeping this polish pass deliberately scoped to the campaign.
+  drawStoryGate({ x, y, w }) {
+    if (w < 4 || !this.storyGateSprite) return;
+    const logicalWidth = w * 2.85;
+    const width = logicalWidth * (this.storyGantry.horizontalScale ?? 1);
+    const height = logicalWidth / this.storyGateSprite.width * this.storyGateSprite.height;
+    this.storyGateSprite
+      .setPosition(x, y)
+      .setDisplaySize(width, height)
+      .setVisible(true);
+
+    if (w < 14) return;
+    const label = this.gateLabel;
+    const panelWidth = width * 0.48;
+    const panelHeight = height * 0.13;
+    const labelScale = Math.min(
+      panelWidth / Math.max(1, label.width),
+      panelHeight / Math.max(1, label.height),
+    );
+    label
+      .setPosition(x, y - height * 0.79)
+      .setScale(labelScale)
+      .setVisible(true);
   }
 
   // Neon timing gantry: angular dark-metal pylons, cyan energy cores,
