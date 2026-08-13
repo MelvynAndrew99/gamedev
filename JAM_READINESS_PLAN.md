@@ -182,10 +182,10 @@ Acceptance:
 
 ## P2 — only after the release gate is green
 
-- Add favicon, page description, and an original social/itch preview image.
-- Add a short player README if the jam upload page cannot carry controls and known limitations.
+- **Completed:** favicon, page/storefront description, Open Graph/Twitter metadata, and an approved original title-city social image.
+- **Completed:** concise player/developer README with accurate controls, modes, jam limitations, Lab access, and upload commands.
 - Consider fuller volume/settings UI after presentation feedback.
-- Confirm every new generated asset is included in the release commit; do not rely on local untracked files.
+- **Packaging gate:** the production build contains the generated menu/gantry assets, but they must still be included in the eventual release commit; do not rely on local untracked files.
 
 ## Required fresh-save smoke gate
 

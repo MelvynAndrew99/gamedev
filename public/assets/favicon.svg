@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Rhythmic Ride">
+  <rect width="64" height="64" rx="12" fill="#09051f"/>
+  <path d="M3 14V7h54l4 4v46H7l-4-4z" fill="none" stroke="#ff2d95" stroke-width="4"/>
+  <path d="M11 48 25 15h9L20 48zm21 0 14-33h9L41 48z" fill="#f8f6ff"/>
+  <path d="m19 38 5-11h11l-3 7h-7l-2 4zm21 0 5-11h11l-3 7h-7l-2 4z" fill="#00e5ff"/>
+  <path d="M13 52h38" stroke="#ffcf3f" stroke-width="3"/>
+</svg>

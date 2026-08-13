@@ -1,7 +1,7 @@
 {
   "name": "phaser-racing-game",
   "version": "1.0.0",
-  "description": "A simple racing game built with Phaser.js",
+  "description": "A fast, music-driven 16-bit arcade racer built with Phaser.",
   "type": "module",
   "scripts": {
     "dev": "vite",
