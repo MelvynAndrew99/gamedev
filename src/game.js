@@ -11,7 +11,15 @@ import { TrackBuilderScene } from './scenes/TrackBuilderScene.js';
 import { TRACKS, TRAINING_TRACKS } from './tracks/index.js';
 import { RACER } from './systems/RacerState.js';
 import { presentationFpsLimit } from './systems/FrameRatePolicy.js';
-import { installProjectionLabToggle } from './systems/ProjectionLabShell.js';
+import {
+  installProjectionLabToggle,
+  isEditableControl,
+} from './systems/ProjectionLabShell.js';
+import {
+  AUDIO_SETTINGS,
+  installAudioMuteShortcut,
+} from './systems/AudioSettings.js';
+import { MUSIC } from './audio/MusicEngine.js';
 
 // Emergency presentation fallback for unusual display/browser combinations.
 // Normal play follows requestAnimationFrame and uses smooth render-only rival
@@ -38,7 +46,25 @@ const config = {
   backgroundColor: '#0b0630',
 };
 
+AUDIO_SETTINGS.apply(MUSIC);
 const game = new Phaser.Game(config);
+
+const audioToast = document.getElementById('audio-toast');
+let audioToastTimer = null;
+installAudioMuteShortcut({
+  windowTarget: window,
+  settings: AUDIO_SETTINGS,
+  engine: MUSIC,
+  isEditable: isEditableControl,
+  onChange: ({ musicEnabled, sfxEnabled }) => {
+    if (!audioToast) return;
+    const muted = !musicEnabled && !sfxEnabled;
+    audioToast.textContent = muted ? 'AUDIO MUTED' : 'AUDIO ON';
+    audioToast.classList.add('visible');
+    clearTimeout(audioToastTimer);
+    audioToastTimer = setTimeout(() => audioToast.classList.remove('visible'), 1200);
+  },
+});
 
 const projectionLab = document.getElementById('debug-panel');
 if (projectionLab) {

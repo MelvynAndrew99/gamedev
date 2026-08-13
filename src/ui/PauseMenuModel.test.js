@@ -5,6 +5,7 @@ import {
   PAUSE_ACTIONS,
   canPauseRace,
   movePauseSelection,
+  pauseActionLabel,
 } from './PauseMenuModel.js';
 
 test('pause is available only during a live finite event', () => {
@@ -16,9 +17,15 @@ test('pause is available only during a live finite event', () => {
   assert.equal(canPauseRace({ mode: 'training', trainingTutorial: true }), false);
 });
 
-test('pause selection wraps across all three actions', () => {
-  assert.deepEqual(PAUSE_ACTIONS.map(({ id }) => id), ['resume', 'restart', 'exit']);
-  assert.equal(movePauseSelection(0, -1), 2);
-  assert.equal(movePauseSelection(2, 1), 0);
+test('pause selection wraps across gameplay and audio actions', () => {
+  assert.deepEqual(PAUSE_ACTIONS.map(({ id }) => id), ['resume', 'music', 'sfx', 'restart', 'exit']);
+  assert.equal(movePauseSelection(0, -1), 4);
+  assert.equal(movePauseSelection(4, 1), 0);
   assert.equal(movePauseSelection(1, 1), 2);
+});
+
+test('pause audio labels expose channel state without relying on color', () => {
+  assert.equal(pauseActionLabel(PAUSE_ACTIONS[1], { musicEnabled: true }), 'MUSIC    ON');
+  assert.equal(pauseActionLabel(PAUSE_ACTIONS[1], { musicEnabled: false }), 'MUSIC    OFF');
+  assert.equal(pauseActionLabel(PAUSE_ACTIONS[2], { sfxEnabled: false }), 'SOUND FX    OFF');
 });

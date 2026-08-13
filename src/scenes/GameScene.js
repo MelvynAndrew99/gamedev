@@ -114,7 +114,9 @@ import {
   PAUSE_ACTIONS,
   canPauseRace,
   movePauseSelection,
+  pauseActionLabel,
 } from '../ui/PauseMenuModel.js';
+import { AUDIO_SETTINGS } from '../systems/AudioSettings.js';
 import { rumbleGamepad } from '../systems/Haptics.js';
 import {
   createFlightSchoolState,
@@ -456,6 +458,10 @@ export class GameScene extends Phaser.Scene {
       this.tweens.resumeAll();
       this.scene.stop('HudScene');
     });
+    const unsubscribeAudio = AUDIO_SETTINGS.subscribe(() => {
+      if (this.racePaused) this.renderPauseMenu();
+    });
+    this.events.once('shutdown', unsubscribeAudio);
 
     // Procedural score — synthesized live, not a loaded file (see
     // audio/MusicEngine.js). Starting it here rides the ENTER/click that
@@ -2648,6 +2654,10 @@ export class GameScene extends Phaser.Scene {
     const action = PAUSE_ACTIONS[this.pauseSelection]?.id;
     if (action === 'resume') {
       this.closePauseMenu();
+    } else if (action === 'music') {
+      AUDIO_SETTINGS.setChannel('music', MUSIC);
+    } else if (action === 'sfx') {
+      AUDIO_SETTINGS.setChannel('sfx', MUSIC);
     } else if (action === 'restart') {
       this.restartPausedEvent();
     } else if (action === 'exit') {
@@ -2691,10 +2701,10 @@ export class GameScene extends Phaser.Scene {
       0x050710,
       0.76,
     ));
-    ui.add(this.add.rectangle(centerX, centerY, 420, 390, 0x10142c, 0.98)
+    ui.add(this.add.rectangle(centerX, centerY, 420, 500, 0x10142c, 0.98)
       .setStrokeStyle(4, 0x00e5ff, 0.9));
-    ui.add(this.add.rectangle(centerX, centerY - 190, 330, 8, 0xff2d95, 1));
-    ui.add(this.add.text(centerX, centerY - 142, 'PAUSED', {
+    ui.add(this.add.rectangle(centerX, centerY - 248, 330, 8, 0xff2d95, 1));
+    ui.add(this.add.text(centerX, centerY - 207, 'PAUSED', {
       fontSize: '42px',
       color: '#ffffff',
       fontStyle: 'bold',
@@ -2705,7 +2715,7 @@ export class GameScene extends Phaser.Scene {
     const eventLabel = this.mode === 'story'
       ? `${this.trackData.name}  •  ${this.storyPhase === STORY_PHASES.RIVALS ? 'RIVAL RACE' : 'TIME TRIAL'}`
       : `${this.trackData.name}  •  ${this.mode === 'custom' ? 'CUSTOM TRACK' : 'RACE SCHOOL'}`;
-    ui.add(this.add.text(centerX, centerY - 91, eventLabel, {
+    ui.add(this.add.text(centerX, centerY - 158, eventLabel, {
       fontSize: '15px',
       color: '#9feeff',
       fontStyle: 'bold',
@@ -2713,9 +2723,10 @@ export class GameScene extends Phaser.Scene {
       wordWrap: { width: 370 },
     }).setOrigin(0.5));
 
+    const audioSettings = AUDIO_SETTINGS.get();
     PAUSE_ACTIONS.forEach((action, index) => {
       const selected = index === this.pauseSelection;
-      const y = centerY - 30 + index * 68;
+      const y = centerY - 100 + index * 57;
       const row = this.add.rectangle(
         centerX,
         y,
@@ -2736,7 +2747,7 @@ export class GameScene extends Phaser.Scene {
         this.activatePauseSelection();
       });
       ui.add(row);
-      ui.add(this.add.text(centerX, y, action.label, {
+      ui.add(this.add.text(centerX, y, pauseActionLabel(action, audioSettings), {
         fontSize: selected ? '22px' : '19px',
         color: selected ? '#ffffff' : '#c4c9dd',
         fontStyle: 'bold',
@@ -2752,10 +2763,10 @@ export class GameScene extends Phaser.Scene {
 
     ui.add(this.add.text(
       centerX,
-      centerY + 164,
-      '↑↓ SELECT   A / ENTER CONFIRM   B / ESC RESUME',
+      centerY + 224,
+      '↑↓ SELECT   A / ENTER CONFIRM   B / ESC RESUME   M MUTE ALL',
       {
-        fontSize: '13px', color: '#aeb6d4', fontStyle: 'bold', align: 'center',
+        fontSize: '11px', color: '#aeb6d4', fontStyle: 'bold', align: 'center',
       },
     ).setOrigin(0.5));
   }

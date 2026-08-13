@@ -26,6 +26,7 @@ function fakeAudioParam(value = 0) {
   return {
     value,
     setValueAtTime(next) { this.value = next; },
+    setTargetAtTime(next) { this.value = next; },
     exponentialRampToValueAtTime(next) { this.value = next; },
     linearRampToValueAtTime(next) { this.value = next; },
     cancelScheduledValues() {},
@@ -140,6 +141,43 @@ test('music and gameplay feedback retain independent live volume settings', () =
   } finally {
     MUSIC.setVolume(previousMusic);
     MUSIC.setSfxVolume(previousSfx);
+  }
+});
+
+test('muted buses stay silent when scenes reapply their normal mix volumes', () => {
+  const previous = {
+    ctx: MUSIC.ctx,
+    master: MUSIC.master,
+    sfxBus: MUSIC.sfxBus,
+    volume: MUSIC.volume,
+    sfxVolume: MUSIC.sfxVolume,
+    musicMuted: MUSIC.musicMuted,
+    sfxMuted: MUSIC.sfxMuted,
+  };
+  const musicGain = fakeAudioParam(0.2);
+  const sfxGain = fakeAudioParam(1);
+  try {
+    MUSIC.ctx = { currentTime: 3 };
+    MUSIC.master = fakeAudioNode({ gain: musicGain });
+    MUSIC.sfxBus = fakeAudioNode({ gain: sfxGain });
+    MUSIC.setMusicMuted(true);
+    MUSIC.setSfxMuted(true);
+    MUSIC.setVolume(0.3);
+    MUSIC.setSfxVolume(0.7);
+    assert.equal(musicGain.value, 0, 'scene music setup cannot bypass a saved mute');
+    assert.equal(sfxGain.value, 0, 'scene SFX setup cannot bypass a saved mute');
+    MUSIC.setMusicMuted(false);
+    MUSIC.setSfxMuted(false);
+    assert.equal(musicGain.value, 0.3);
+    assert.equal(sfxGain.value, 0.7);
+  } finally {
+    MUSIC.ctx = previous.ctx;
+    MUSIC.master = previous.master;
+    MUSIC.sfxBus = previous.sfxBus;
+    MUSIC.volume = previous.volume;
+    MUSIC.sfxVolume = previous.sfxVolume;
+    MUSIC.musicMuted = previous.musicMuted;
+    MUSIC.sfxMuted = previous.sfxMuted;
   }
 });
 

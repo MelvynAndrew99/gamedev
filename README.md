@@ -4,7 +4,7 @@ Rhythmic Ride is a fast, music-driven 16-bit arcade racer made for a game jam. L
 
 ## Play
 
-The game targets an 800×600 desktop browser canvas. Click or press a game button once if the browser requires interaction before enabling audio.
+The game targets an 800×600 desktop browser canvas. Click or press a game button once if the browser requires interaction before enabling audio. Press `M` anywhere to mute or restore all audio. Finite events also expose separate Music and Sound FX toggles in the pause menu.
 
 ### Keyboard
 
@@ -60,7 +60,7 @@ The production upload is the contents of `dist/`. Vite uses relative asset paths
 
 Projection Lab is hidden from the normal player presentation. Press **F2** or **Ctrl+Shift+L** to toggle it, or open the game with `?lab=1`.
 
-The Lab intentionally bypasses player progression for testing: it can launch any course or open the Track Editor without changing the saved unlock state. Its music and sound sliders are developer controls, not a finished player settings menu.
+The Lab intentionally bypasses player progression for testing: it can launch any course or open the Track Editor without changing the saved unlock state. Its music and sound sliders remain developer mix controls; player-facing Music and Sound FX toggles live in the pause menu.
 
 ## Jam scope
 

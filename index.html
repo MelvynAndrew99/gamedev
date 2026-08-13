@@ -85,6 +85,24 @@
       }
       #game { width: 800px; height: 600px; background: #000; }
       #game canvas { display: block; }
+      #audio-toast {
+        position: fixed;
+        z-index: 90;
+        left: 50%;
+        bottom: 24px;
+        transform: translate(-50%, 8px);
+        padding: 9px 18px;
+        border: 2px solid #00e5ff;
+        background: rgba(5, 7, 16, 0.94);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 100ms linear, transform 100ms ease-out;
+      }
+      #audio-toast.visible { opacity: 1; transform: translate(-50%, 0); }
       @media (min-width: 1080px) {
         body.projection-lab-open #game-container { transform: translateX(125px); }
       }
@@ -253,7 +271,7 @@
         </div>
       </details>
       <p class="lab-controls-copy">
-        Keyboard: arrows drive, C boosts, Z or X airbrakes, Escape pauses.<br />
+        Keyboard: arrows drive, C boosts, Z or X airbrakes, Escape pauses, M mutes.<br />
         Controller: stick steers, triggers drive, shoulders airbrake, Start pauses.<br />
         Hit cones. Avoid rocks.
       </p>
@@ -262,6 +280,7 @@
     <div id="game-container">
       <div id="game"></div>
     </div>
+    <div id="audio-toast" role="status" aria-live="polite"></div>
 
     <script type="module" src="/src/game.js"></script>
   </body>

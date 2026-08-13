@@ -157,7 +157,7 @@ Work:
 
 - Move the main title help above the documented 24px safe margin; combine redundant attract/help copy.
 - Raise actionable lock reasons, prices, result actions, and controls to at least 11–12px. Small decorative metadata may remain smaller.
-- Once Lab is hidden, provide a simple `M` mute shortcut or minimal pause-menu mute action. Do not build a full settings system today.
+- [x] Provide persistent Music and Sound FX toggles in finite-event pause menus plus a global `M` all-audio toggle for Title and Endless. Keep the scope to on/off controls rather than a full settings system.
 
 Acceptance:
 

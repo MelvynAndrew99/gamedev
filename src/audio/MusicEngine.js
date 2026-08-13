@@ -168,6 +168,8 @@ class MusicEngine {
     this.track = null;
     this.volume = 0.16;
     this.sfxVolume = 1.0;
+    this.musicMuted = false;
+    this.sfxMuted = false;
     this.lastConeVariation = -1;
     this.lastBoostPickupVariation = -1;
     this.lastBoostApplyVariation = -1;
@@ -195,9 +197,9 @@ class MusicEngine {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
-    this.master.gain.value = this.volume;
+    this.master.gain.value = this.musicMuted ? 0 : this.volume;
     this.sfxBus = this.ctx.createGain();
-    this.sfxBus.gain.value = this.sfxVolume;
+    this.sfxBus.gain.value = this.sfxMuted ? 0 : this.sfxVolume;
     this.mixBus = this.ctx.createGain();
     this.mixBus.gain.value = 1;
 
@@ -311,7 +313,14 @@ class MusicEngine {
 
   setVolume(v) {
     this.volume = v;
-    if (this.master) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    const target = this.musicMuted ? 0 : v;
+    if (this.master) this.master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
+  }
+
+  setMusicMuted(muted) {
+    this.musicMuted = !!muted;
+    const target = this.musicMuted ? 0 : this.volume;
+    if (this.master) this.master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.025);
   }
 
   // Scene transitions can duck the score without changing the player's saved
@@ -319,7 +328,7 @@ class MusicEngine {
   // across a phrase at full volume.
   fadeMusicTo(v, seconds = 0.65) {
     if (!this.master || !this.ctx) return false;
-    const target = Math.max(0.0001, Number(v) || 0.0001);
+    const target = this.musicMuted ? 0 : Math.max(0.0001, Number(v) || 0.0001);
     const duration = Math.max(0.01, Number(seconds) || 0.65);
     const gain = this.master.gain;
     const time = this.ctx.currentTime;
@@ -331,7 +340,14 @@ class MusicEngine {
 
   setSfxVolume(v) {
     this.sfxVolume = v;
-    if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    const target = this.sfxMuted ? 0 : v;
+    if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
+  }
+
+  setSfxMuted(muted) {
+    this.sfxMuted = !!muted;
+    const target = this.sfxMuted ? 0 : this.sfxVolume;
+    if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.025);
   }
 
   start(track) {
