@@ -46,6 +46,18 @@ export const OBSTACLES = {
     // governed by `w`, so this readability pass does not soften the mechanic.
     view: 0.38,
   },
+  flightRing: {
+    key: 'flight-ring',
+    kind: 'flight-ring',
+    pop: 0,
+    damage: 0,
+    slow: 1,
+    // Collision is resolved in three dimensions by FlightSchool.js. These
+    // values only satisfy the authored-object contract; ground collision
+    // intentionally ignores this object kind.
+    w: 0,
+    view: 0,
+  },
 };
 
 // Roadside decoration — can't be hit.

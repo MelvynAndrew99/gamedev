@@ -55,3 +55,20 @@ test('absolute segment indices preserve scenery cadence after Endless trimming',
 
   assert.deepEqual(after, before);
 });
+
+test('each world mixes speed-scale roadside detail with rarer signature landmarks', () => {
+  for (const id of ENVIRONMENT_IDS) {
+    const environment = getEnvironment(id);
+    const objects = Array.from({ length: 4000 }, (_, segment) =>
+      tracksideObjectForSegment(environment, segment)
+    ).filter(Boolean);
+    const signatures = objects.filter((object) => object.signature);
+    const roadside = objects.filter((object) => !object.signature);
+    assert.ok(signatures.length >= 4, `${id} needs recurring memorable landmarks`);
+    assert.ok(roadside.length > signatures.length * 4, `${id} keeps denser speed detail`);
+    assert.ok(
+      signatures.every((object) => object.size >= 1.4),
+      `${id} signature silhouettes must read above ordinary roadside scale`,
+    );
+  }
+});

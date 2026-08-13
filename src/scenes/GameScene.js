@@ -4,6 +4,8 @@
 
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
+import { createVehicleSprite } from '../entities/VehicleSprite.js';
+import { vehicleShadowFrame } from '../entities/VehicleShadow.js';
 import { RoadModel } from '../road/RoadModel.js';
 import { EndlessTrack } from '../road/EndlessTrack.js';
 import { RoadRenderer } from '../road/RoadRenderer.js';
@@ -26,6 +28,7 @@ import {
   airtimeFxFrame,
   airtimeTier,
   carSpriteFrame,
+  chaseSteerFrame,
   landingFxColor,
   landingFxStrength,
   nextAirtimePitch,
@@ -38,6 +41,14 @@ import {
   trainingMetricUsage,
 } from '../systems/TrainingProgress.js';
 import { RACER } from '../systems/RacerState.js';
+import {
+  applyEmergencyTow,
+  applyPitCrewService,
+  awardStoryPayout,
+  consumeRaceLoadout,
+  raceLoadout,
+  storyStyleBank,
+} from '../systems/Economy.js';
 import { Boost } from '../entities/Boost.js';
 import { RivalPack } from '../entities/RivalPack.js';
 import {
@@ -53,21 +64,90 @@ import { createTrackDiscipline, updateTrackDiscipline } from '../systems/TrackDi
 import { TimedElimination } from '../systems/TimedElimination.js';
 import { TimedScoreAttack } from '../systems/TimedScoreAttack.js';
 import { rivalFxSpec } from '../systems/RivalFx.js';
-import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
+import {
+  axisValue,
+  buttonDown,
+  dpadDown,
+  getPrimaryPad,
+} from '../systems/Gamepad.js';
 import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
+import {
+  STORY_PAGES,
+  STORY_PHASES,
+  modeMenuTarget,
+} from '../ui/FrontEndModel.js';
+import {
+  QualifierClock,
+  RivalRaceOrder,
+  objectivesForStoryPhase,
+  remainingStoryOpponents,
+} from '../systems/StoryEventState.js';
+import {
+  isStoryCampaignComplete,
+  isStoryCampaignPlatinum,
+  submitQualifierResult,
+  submitRivalResult,
+} from '../systems/StoryProgress.js';
+import {
+  ENDLESS_STYLE_RULES,
+  STORY_STYLE_RULES,
+  StoryStyleTracker,
+  storyStyleRulesForTrack,
+} from '../systems/StyleEvents.js';
+import {
+  ENDLESS_TRICK_HEAL,
+  endlessStageForDistance,
+} from '../systems/EndlessProgression.js';
+import {
+  HeldBoostAccumulator,
+  createPlayerStatEvent,
+  submitPlayerStatEvent,
+} from '../systems/PlayerStats.js';
 import { MUSIC } from '../audio/MusicEngine.js';
 import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
-import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
 import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
+import { PROVING_GROUND_THEME } from '../audio/tracks/provingGroundTheme.js';
+import { raceSchoolThemeForTrack } from '../audio/tracks/raceSchoolThemes.js';
 import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
+import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
+import {
+  PAUSE_ACTIONS,
+  canPauseRace,
+  movePauseSelection,
+  pauseActionLabel,
+} from '../ui/PauseMenuModel.js';
+import { AUDIO_SETTINGS } from '../systems/AudioSettings.js';
+import { rumbleGamepad } from '../systems/Haptics.js';
+import {
+  createFlightSchoolState,
+  flightRingHit,
+  flightRouteCue,
+  flightSchoolView,
+  isFlightSchoolEvent,
+  updateFlight,
+} from '../systems/FlightSchool.js';
+import { flightCraftVisual } from '../systems/FlightPresentation.js';
+import {
+  TERMINAL_OUTCOMES,
+  commitTerminalOutcome,
+  createTerminalOutcomeState,
+} from '../systems/TerminalOutcome.js';
 
 // Theme identities can be shared by geometry variants (Training Loop and its
 // Story validation race). Endless keeps the original high-speed score.
 const CAMPAIGN_THEMES = {
-  'training-loop': TRAINING_LOOP_THEME,
+  'proving-ground': PROVING_GROUND_THEME,
   'neon-gulch': NEON_GULCH_THEME,
   'syndicate-run': SYNDICATE_RUN_THEME,
 };
+
+const ENDLESS_THEMES = {
+  'high-speed': HIGH_SPEED_THEME,
+  'neon-gulch': NEON_GULCH_THEME,
+  'syndicate-run': SYNDICATE_RUN_THEME,
+};
+
+let runSequence = 0;
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -78,34 +158,101 @@ export class GameScene extends Phaser.Scene {
   init(data) {
     this.mode = data.mode ?? 'story';
     this.trackIndex = data.trackIndex ?? 0;
+    this.customTrack = data.customTrack ?? null;
+    this.customDraftId = data.customDraftId ?? data.customTrack?.customDraftId ?? null;
+    this.storyPhase = this.mode === 'story'
+      ? data.storyPhase ?? STORY_PHASES.QUALIFIER
+      : null;
     this.garageData = null;
   }
 
   create() {
+    if (this.mode === 'endless' || this.mode === 'custom') RACER.beginEndlessRun();
+    else RACER.endEndlessRun();
     // State lives HERE, not the constructor — create() re-runs per start.
     if (this.mode === 'endless') {
       this.model = new EndlessTrack(TUNING);
       this.race = null;
       this.trackData = null;
+      this.endlessStage = endlessStageForDistance(0);
     } else {
       const trackList = this.mode === 'training' ? TRAINING_TRACKS : TRACKS;
-      this.trackData = trackList[this.trackIndex];
+      this.trackData = this.mode === 'custom' ? this.customTrack : trackList[this.trackIndex];
+      if (!this.trackData) {
+        this.scene.start('TitleScene', modeMenuTarget('custom'));
+        return;
+      }
       this.model = new RoadModel(TUNING);
       this.model.buildFromData(this.trackData);
-      this.race = new RaceState(this.model, this.trackData.laps ?? 3, {
+      const storyEvent = this.mode === 'story'
+        ? this.storyPhase === STORY_PHASES.RIVALS
+          ? this.trackData.rivalRace
+          : this.trackData.qualifier
+        : null;
+      this.race = new RaceState(this.model, storyEvent?.laps ?? this.trackData.laps ?? 3, {
         finishOnLapLimit: this.trackData.finish !== 'objectives',
       });
     }
-    this.objectives = new ObjectiveState(this.trackData?.objectives, this.model);
+    const objectiveDefinitions = this.mode === 'story'
+      ? objectivesForStoryPhase(this.trackData?.objectives, this.storyPhase, this.race.laps)
+      : this.trackData?.objectives;
+    this.objectives = new ObjectiveState(objectiveDefinitions, this.model);
+    this.flightSchool = isFlightSchoolEvent(this.mode, this.trackData?.id)
+      ? createFlightSchoolState(this.trackData.flightTraining)
+      : null;
+    this.flightSchoolView = this.flightSchool
+      ? flightSchoolView(this.flightSchool)
+      : null;
     this.objectiveHudSequence = 0;
     this.objectiveHudEvents = [];
+    runSequence += 1;
+    this.gameplayRunId = `run-${Date.now().toString(36)}-${runSequence}`;
+    this.playerStatSequence = 0;
+    this.heldBoostStats = new HeldBoostAccumulator(
+      STORY_STYLE_RULES.longBurn.minimumHeldSeconds,
+    );
+    const styleBank = this.mode === 'story'
+      ? storyStyleBank(
+        RACER,
+        this.trackData.id,
+        this.trackData.storyVersion ?? 1,
+        this.storyPhase,
+      )
+      : null;
+    const styleEnabled = this.mode === 'story' || this.mode === 'endless';
+    this.styleTracker = styleEnabled
+      ? new StoryStyleTracker({
+        runId: this.gameplayRunId,
+        rules: this.mode === 'endless'
+          ? ENDLESS_STYLE_RULES
+          : storyStyleRulesForTrack(this.trackData),
+        cashAvailable: styleBank?.remaining ?? 0,
+        rewardHeal: this.mode === 'endless'
+          ? () => Math.min(
+            ENDLESS_TRICK_HEAL,
+            Math.max(0, RACER.maxHealth - RACER.health),
+          )
+          : null,
+        onReward: this.mode === 'endless'
+          ? (event) => this.applyEndlessTrickHeal(event)
+          : null,
+      })
+      : null;
     this.renderer = new RoadRenderer(
       this,
       TUNING,
-      this.trackData?.environment ?? this.trackData?.id ?? 'endless',
+      this.endlessStage?.environment ??
+        this.trackData?.environment ?? this.trackData?.id ?? 'endless',
+      {
+        storyGateId: this.mode === 'story' ? this.trackData?.id : null,
+        storyGateLabel: this.mode === 'story' ? this.trackData?.name : null,
+      },
     );
     this.player = new Player(TUNING);
-    this.rivalPack = this.trackData?.rivals
+    const rivalConfig = this.mode !== 'story' || this.storyPhase === STORY_PHASES.RIVALS
+      ? this.trackData?.rivals
+      : null;
+    this.rivalPack = rivalConfig
       ? new RivalPack(this.trackData.rivals, this.rivalTuning(), this.model)
       : null;
     // Racer count is an attempt contract, not a live despawn control. The Lab
@@ -124,6 +271,7 @@ export class GameScene extends Phaser.Scene {
       boostedTakedowns: 0,
       damageHits: 0,
     };
+    this.storyTakedownIds = new Set();
     this.rivalHudEvents = [];
     this.rivalHudSequence = 0;
     this.rivalAttackInput = { direction: 0, remaining: 0 };
@@ -151,26 +299,59 @@ export class GameScene extends Phaser.Scene {
       : null;
     this.rivalSchoolCompletePending = 0;
     this.rivalSchoolView = this.buildRivalSchoolView();
+    this.qualifierClock = this.mode === 'story' && this.storyPhase === STORY_PHASES.QUALIFIER
+      ? new QualifierClock(this.trackData.qualifier?.targetSeconds)
+      : null;
+    this.storyRaceOrder = this.mode === 'story' && this.storyPhase === STORY_PHASES.RIVALS
+      ? new RivalRaceOrder({
+        trackLength: this.model.trackLength,
+        laps: this.race.laps,
+        rivals: this.rivalPack?.rivals ?? [],
+      })
+      : null;
+    this.storyEventView = this.buildStoryEventView();
     // Player.position wraps at a campaign lap line. Scenery distance does not,
     // so background drift remains continuous rather than snapping each lap.
     this.sceneryDistance = 0;
 
-    // Rolling grid start: sit the car behind the start/finish line so the
-    // gantry is ahead and visible at the lights, then drive THROUGH it to
-    // begin. The line stays at position 0 (the lap-count wrap boundary), so
-    // crossing it and completing a lap are the same event on the same gate.
+    // Ordinary races use a rolling grid behind the lap line. Flight School
+    // starts in open air at route zero: there is no ramp, launch run, or
+    // visible start/finish structure in the sequel-preview lesson.
     if (this.race) {
-      this.player.position = this.model.trackLength - TUNING.gridSetback;
-      this.race.prevPos = this.player.position; // don't misread the spawn as a wrap
+      if (this.flightSchool?.phase === 'flight') {
+        this.player.position = 0;
+        this.player.beginSustainedFlight();
+        this.player.speed = TUNING.maxSpeed * Math.max(
+          0.5,
+          Number(this.trackData.flightTraining.initialCruiseSpeedMultiplier) || 0.78,
+        );
+        this.race.prevPos = 0;
+        this.race.crossedStart = true;
+      } else {
+        this.player.position = this.model.trackLength - TUNING.gridSetback;
+        this.race.prevPos = this.player.position; // don't misread the spawn as a wrap
+      }
     }
     this.pop = new Popularity(TUNING);
-    this.boost = new Boost(TUNING); // tap-stacked/held boost gauge, see Boost.js
+    this.raceLoadout = this.mode === 'story'
+      ? raceLoadout(RACER, TUNING.nitroMax)
+      : { capacity: TUNING.nitroMax, startingSlots: 0, consumed: {} };
+    this.raceLoadoutConsumed = this.mode !== 'story';
+    this.boost = new Boost(TUNING, this.raceLoadout.capacity);
+    for (let slot = 0; slot < this.raceLoadout.startingSlots; slot++) this.boost.collect();
+    const flightStartingBoosts = this.flightSchool
+      ? Math.max(0, Math.floor(
+        Number(this.trackData.flightTraining.startingBoostSlots) || 0,
+      ))
+      : 0;
+    for (let slot = 0; slot < flightStartingBoosts; slot++) this.boost.collect();
     this.topSpeedTier = 0; // highest boost tier reached this race, feeds the top_speed objective
     this.boostHoldHandle = null; // active sustained hold-drone SFX, if any
     this.airtimeAudioHandle = null;
     this.pendingAirtimeLanding = null;
     this.jumpLaunchedThisFrame = false;
     this.speedLineBurst = 0; // ramp/boost streak-bloom, decays over speedLineBurstTime
+    this.speedPadPulse = 0;
     this.wasOnZipper = false;
     this.trainingDamageHits = 0;
     this.trainingDamageMax = this.trackData?.trainingDamage?.maxHits ?? 0;
@@ -187,8 +368,8 @@ export class GameScene extends Phaser.Scene {
     this.failedTrainingCues = new Set();
     // Air School telemetry is intentionally public/pull-based: HudScene reads
     // one small view model without owning physics or training decisions.
-    this.airtimeTrainingConfig = this.trackData?.id === 'training-airtime'
-      ? this.trackData.airtimeTraining
+    this.airtimeTrainingConfig = this.mode === 'training'
+      ? this.trackData?.airtimeTraining ?? (this.flightSchool ? {} : null)
       : null;
     this.airtimeGapAttempt = null;
     this.airtimeFeedback = null;
@@ -196,6 +377,7 @@ export class GameScene extends Phaser.Scene {
       ? this.buildAirtimeTrainingView()
       : null;
     this.done = false;
+    this.terminalOutcome = createTerminalOutcomeState();
 
     // Bottom-anchored (origin 0.5,1): the sprite's y IS its rear-bumper
     // line, not its center. Center-anchoring was the actual "too close to
@@ -204,18 +386,39 @@ export class GameScene extends Phaser.Scene {
     // the top bigger. Bottom-anchoring means Car Size only ever grows the
     // car upward into the road, never off the bottom edge.
     this.carBaselineY = this.scale.height - 24;
-    this.carSprite = this.add
-      .sprite(this.scale.width / 2, this.carBaselineY, 'car', carSpriteFrame(2, 0))
-      .setOrigin(0.5, 1)
+    this.carShadow = this.add.ellipse(
+      this.scale.width / 2,
+      this.carBaselineY - 2,
+      118,
+      18,
+      0x03020d,
+      0.48,
+    ).setDepth(9);
+    this.carSprite = createVehicleSprite(
+      this,
+      this.scale.width / 2,
+      this.carBaselineY,
+      carSpriteFrame(2, 0),
+      RACER.carColor,
+    )
       .setScale(TUNING.carScale)
       .setDepth(10);
     this.createAirtimeVisuals();
+    this.speedPadGraphics = this.add.graphics().setDepth(11);
     this.createRivalVisuals();
 
     this.controls = new Controls(this);
-    this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
-    this.input.keyboard.on('keydown-ENTER', () => this.confirm());
-    this.input.keyboard.on('keydown-R', () => this.retryTraining());
+    this.racePaused = false;
+    this.pauseSelection = 0;
+    this.pauseUi = null;
+    this.input.keyboard.on('keydown-ESC', () => this.handleEscape());
+    this.input.keyboard.on('keydown-P', () => this.togglePause());
+    this.input.keyboard.on('keydown-ENTER', () => this.handleEnter());
+    this.input.keyboard.on('keydown-UP', () => this.movePauseMenu(-1));
+    this.input.keyboard.on('keydown-DOWN', () => this.movePauseMenu(1));
+    this.input.keyboard.on('keydown-R', () => {
+      if (!this.racePaused) this.retryTraining();
+    });
 
     this.iframes = 0; // post-hit invulnerability countdown
 
@@ -247,7 +450,18 @@ export class GameScene extends Phaser.Scene {
     // the player acknowledges the objectives and the race clock can start.
     this.hudLaunched = false;
     if (!this.awaitingBriefing) this.launchHud();
-    this.events.once('shutdown', () => this.scene.stop('HudScene'));
+    this.events.once('shutdown', () => {
+      // Scene transitions normally leave through releasePauseRuntime(). This
+      // fallback prevents Phaser's reusable scene clock/tweens staying paused
+      // if a debug command or external scene transition interrupts the menu.
+      this.time.paused = false;
+      this.tweens.resumeAll();
+      this.scene.stop('HudScene');
+    });
+    const unsubscribeAudio = AUDIO_SETTINGS.subscribe(() => {
+      if (this.racePaused) this.renderPauseMenu();
+    });
+    this.events.once('shutdown', unsubscribeAudio);
 
     // Procedural score — synthesized live, not a loaded file (see
     // audio/MusicEngine.js). Starting it here rides the ENTER/click that
@@ -256,7 +470,15 @@ export class GameScene extends Phaser.Scene {
     MUSIC.setVolume(TUNING.musicVolume);
     MUSIC.setSfxVolume(TUNING.sfxVolume);
     const themeId = this.trackData?.music ?? this.trackData?.id;
-    const theme = this.trackData ? CAMPAIGN_THEMES[themeId] ?? HIGH_SPEED_THEME : HIGH_SPEED_THEME;
+    const theme = this.mode === 'endless'
+      ? ENDLESS_THEMES[this.endlessStage.music]
+      : this.mode === 'training'
+        ? raceSchoolThemeForTrack(this.trackData?.id)
+      : this.mode === 'custom'
+        ? CAMPAIGN_THEMES[themeId] ?? TRAINING_LOOP_THEME
+      : this.trackData
+        ? CAMPAIGN_THEMES[themeId] ?? HIGH_SPEED_THEME
+        : HIGH_SPEED_THEME;
     MUSIC.start(theme);
     this.events.once('shutdown', () => MUSIC.stop());
     // The sustained hold-drone schedules its own stop far in the future —
@@ -264,6 +486,7 @@ export class GameScene extends Phaser.Scene {
     // needs its own explicit stop or the drone plays on regardless.
     this.events.once('shutdown', () => this.boostHoldHandle?.stop());
     this.events.once('shutdown', () => this.airtimeAudioHandle?.stop());
+    this.events.once('shutdown', () => this.flushHeldBoostStats());
   }
 
   update(time, delta) {
@@ -274,9 +497,35 @@ export class GameScene extends Phaser.Scene {
       a: buttonDown(pad, 0, 'A'),
       b: buttonDown(pad, 1, 'B'),
       x: buttonDown(pad, 2, 'X'),
+      start: buttonDown(pad, 9, 'start'),
+      up: dpadDown(pad, 'up') || axisValue(pad, 1) < -0.65,
+      down: dpadDown(pad, 'down') || axisValue(pad, 1) > 0.65,
     };
-    const padPrev = this.prevPad ?? { a: true, b: true, x: true };
+    const padPrev = this.prevPad ?? {
+      a: true, b: true, x: true, start: true, up: true, down: true,
+    };
     this.prevPad = padNow;
+
+    if (this.racePaused) {
+      if (
+        (padNow.start && !padPrev.start) ||
+        (padNow.b && !padPrev.b)
+      ) {
+        this.closePauseMenu();
+      } else if (padNow.up && !padPrev.up) {
+        this.movePauseMenu(-1);
+      } else if (padNow.down && !padPrev.down) {
+        this.movePauseMenu(1);
+      } else if (padNow.a && !padPrev.a) {
+        this.activatePauseSelection();
+      }
+      return;
+    }
+
+    if (padNow.start && !padPrev.start && this.pauseAvailable()) {
+      this.openPauseMenu();
+      return;
+    }
 
     if (this.done) {
       if (padNow.a && !padPrev.a) this.advance();
@@ -314,7 +563,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     const dt = Math.min(delta, 50) / 1000;
-    const input = this.controls.read(TUNING);
+    const input = this.controls.read(TUNING, {
+      flight: this.flightSchool?.phase === 'flight',
+    });
+    // Flight School is an on-rails lesson: forward motion is automatic while
+    // brake and boost remain meaningful speed choices. Other modes retain
+    // their normal throttle contract.
+    if (this.flightSchool?.phase === 'flight') input.throttle = 1;
     this.jumpLaunchedThisFrame = false;
     const previousPlayer = {
       position: this.player.position,
@@ -331,8 +586,17 @@ export class GameScene extends Phaser.Scene {
     // ceiling itself is enforced inside Player.update's own clamp (see
     // Boost.js and Player.js). Feed it in BEFORE update so it's live this frame.
     this.boost.update(dt, input.nitro);
+    this.styleTracker?.update(dt, {
+      boostHeld: this.boost.holding && input.nitro,
+    });
+    this.updateHeldBoostStats(dt, this.boost.holding && input.nitro);
     if (this.boost.justActivated > 0) {
       this.player.boost(TUNING.boostTierCeilings[this.boost.justActivated - 1]);
+      if (this.boost.justActivated === 3) {
+        this.styleTracker?.recordBoostTier(3);
+        if (this.mode === 'story') RACER.afterburnerEligible = true;
+        this.recordLifetimeStat('tierThreeBoosts');
+      }
     } else if (this.boost.justExtended) {
       this.player.boost(TUNING.boostTierCeilings[this.boost.tier - 1]);
     }
@@ -340,7 +604,27 @@ export class GameScene extends Phaser.Scene {
     input.boostActive = this.boost.tier > 0;
 
     this.player.update(dt, input, this.model);
+    if (this.updateFlightSchool(dt, input, previousPlayer)) {
+      this.renderer.render(
+        this.model,
+        this.player,
+        this.player.speed / TUNING.maxSpeed,
+        this.speedLineBurst,
+        this.sceneryDistance,
+      );
+      return;
+    }
     this.updateRivals(dt, input, previousRivalPlayer);
+    // Rival contact resolves before finish-line logic. If it destroyed the
+    // car, freeze this frame on the committed wreck instead of allowing the
+    // later race crossing to overwrite it with progression and a payout.
+    if (this.done) {
+      this.renderTerminalWorld();
+      return;
+    }
+    const storyFinishers = this.storyRaceOrder?.update(this.rivalPack?.rivals ?? []) ?? [];
+    storyFinishers.forEach((id) => this.rivalPack?.retireFinisher(id));
+    this.storyEventView = this.buildStoryEventView();
     this.updateRivalVisuals(dt);
     this.updateAirtimeAudio();
     this.updateAirtimeTraining(dt);
@@ -375,8 +659,17 @@ export class GameScene extends Phaser.Scene {
       });
       if (on && !this.wasOnZipper) {
         this.player.zip();
+        MUSIC.playSpeedLine();
+        this.speedLineBurst = 1;
+        this.speedPadPulse = 1;
+        this.cameras.main.shake(105, 0.006);
+        this.rumble({ duration: 65, strong: 0.08, weak: 0.34 });
         if (this.mode === 'endless') this.pop.add(TUNING.zipPop);
         this.recordObjective('zipper_hit');
+        const segment = this.model.findSegment(this.player.position + TUNING.playerZ);
+        const speedLineId = `${this.race?.lap ?? 1}:${segment.index}`;
+        this.styleTracker?.recordSpeedLine(speedLineId);
+        this.recordLifetimeStat('speedLinesCrossed');
         this.popup('SPEED LINE!', '#2ee56b');
       }
       this.wasOnZipper = on;
@@ -400,6 +693,13 @@ export class GameScene extends Phaser.Scene {
         else s.hit = false; // i-frames: hazard not consumed, just ghosted
       }
     }
+    // Road damage has the same first-right-of-refusal as rival damage. This
+    // is the explicit finish-line policy: a fatal contact on the crossing
+    // frame is a wreck, because contacts are authoritative before lap state.
+    if (this.done) {
+      this.renderTerminalWorld();
+      return;
+    }
 
     // Collision can turn an early gap landing into explicit safe-route
     // feedback, so publish telemetry after contact handling too.
@@ -416,14 +716,21 @@ export class GameScene extends Phaser.Scene {
     this.reactToBoost();
     this.iframes = Math.max(0, this.iframes - dt);
     this.speedLineBurst = Math.max(0, this.speedLineBurst - dt / TUNING.speedLineBurstTime);
+    this.speedPadPulse = Math.max(0, this.speedPadPulse - dt / 0.42);
     this.carSprite.setAlpha(this.iframes > 0 && Math.floor(this.iframes * 12) % 2 ? 0.4 : 1);
 
     if (this.mode === 'endless') {
       this.model.ensureAhead(this.player.position); // pave ahead of the car
+      this.updateEndlessStage();
     } else {
       const event = this.race.update(dt, this.player);
       if (event === 'start') {
+        if (!this.raceLoadoutConsumed) {
+          consumeRaceLoadout(RACER, TUNING.nitroMax);
+          this.raceLoadoutConsumed = true;
+        }
         this.timedScoreAttack?.start(this.rivalPack?.elapsed ?? 0);
+        this.qualifierClock?.start();
         this.showBanner('GO!', 800);
       } else if (event === 'lap') {
         this.recordObjective('lap_complete');
@@ -455,6 +762,15 @@ export class GameScene extends Phaser.Scene {
         this.finishRace();
       }
     }
+
+    if (
+      this.qualifierClock && !this.done &&
+      this.qualifierClock.update(dt, this.race.crossedStart) === 'expired'
+    ) {
+      this.race.finish();
+      this.failStoryQualifier();
+    }
+    this.storyEventView = this.buildStoryEventView();
 
     if (this.timedElimination && !this.done) {
       if (this.rivalSchoolCompletePending > 0) {
@@ -492,14 +808,23 @@ export class GameScene extends Phaser.Scene {
       this.rivalPack?.renderViews,
     );
 
-    // Steering FRAMES: 0=hard-left, 1=left, 2=straight, 3=right, 4=hard-right.
+    const sustainedFlight = this.flightSchool?.phase === 'flight';
     // Five buckets instead of three — needed once airbrakes are in the mix:
     // a shoulder-button bank needs to look visibly harder than a light stick
     // correction, and player.steer already blends stick + airbrake (see
-    // Player.update), so one signal drives the whole 5-way read.
-    const s = this.player.steer;
-    const steerFrame = s < -0.6 ? 0 : s < -0.2 ? 1 : s <= 0.2 ? 2 : s <= 0.6 ? 3 : 4;
-    this.carSprite.setFrame(carSpriteFrame(steerFrame, this.airVisual.pitch));
+    // Player.update), so one signal drives the whole 5-way read. The rear-view
+    // atlas lookup is mirrored so the visible bank follows screen movement.
+    const bank = sustainedFlight
+      ? this.flightSchool.bank
+      : this.player.steer;
+    const steerFrame = chaseSteerFrame(bank);
+    const flightVisual = sustainedFlight
+      ? flightCraftVisual(this.flightSchool, this.player.x)
+      : null;
+    this.carSprite.setFrame(carSpriteFrame(
+      steerFrame,
+      flightVisual?.pitch ?? this.airVisual.pitch,
+    ));
     // Physics supplies the arc; the visual policy adds readable compression,
     // pitch silhouette, and landing squash without rotating this rear-view
     // sprite into a steering-bank pose.
@@ -513,14 +838,78 @@ export class GameScene extends Phaser.Scene {
       landing: this.airVisual.landingKick,
       landingStrength: this.airVisual.landingStrength,
     });
-    this.carSprite.setScale(
-      TUNING.carScale * airFx.scaleX,
-      TUNING.carScale * airFx.scaleY,
-    );
-    this.carSprite.y = this.carBaselineY - airFx.liftPx;
-    this.carSprite.x =
-      this.scale.width / 2 + this.player.steer * 6 * speedPercent;
-    this.renderAirtimeVisuals(time, airFx);
+    if (flightVisual) {
+      this.carSprite.setScale(
+        TUNING.carScale * flightVisual.scaleX,
+        TUNING.carScale * flightVisual.scaleY,
+      );
+      this.carSprite.x = this.scale.width / 2 + flightVisual.xOffset;
+      this.carSprite.y = this.carBaselineY - flightVisual.liftPx;
+      this.carShadow.setAlpha(0);
+      this.renderFlightVisuals(time, flightVisual);
+    } else {
+      this.carSprite.setScale(
+        TUNING.carScale * airFx.scaleX,
+        TUNING.carScale * airFx.scaleY,
+      );
+      this.carSprite.y = this.carBaselineY - airFx.liftPx;
+      this.carSprite.x =
+        this.scale.width / 2 + this.player.steer * 6 * speedPercent;
+      const shadow = vehicleShadowFrame({
+        liftPx: airFx.liftPx,
+        airScaleX: airFx.scaleX,
+      });
+      this.carShadow
+        .setPosition(this.carSprite.x, this.carBaselineY - 2)
+        .setScale(shadow.scaleX, shadow.scaleY)
+        .setAlpha(shadow.alpha);
+      this.renderAirtimeVisuals(time, airFx);
+    }
+    this.renderSpeedPadFx();
+  }
+
+  renderFlightVisuals(time, visual) {
+    const trail = this.airTrailGraphics;
+    this.airAuraGraphics.clear();
+    this.airAeroGraphics.clear();
+    trail.clear();
+    if (this.done || !visual.airborne) return;
+
+    // Aircraft exhaust is continuous thrust, not the Air School trajectory
+    // streak. Two tight engine plumes preserve speed without implying an arc.
+    const pulse = 0.84 + Math.sin(time / 42) * 0.12;
+    const bottom = this.carSprite.y - 4;
+    const spread = Math.min(34, this.carSprite.displayWidth * 0.18);
+    const burn = Math.max(0.2, visual.engineIntensity) *
+      (this.flightSchool.afterburner > 0.1 ? 54 : 34);
+    for (const side of [-1, 1]) {
+      const x = this.carSprite.x + side * spread;
+      trail.lineStyle(8, 0x1269a8, 0.18 * pulse);
+      trail.lineBetween(x, bottom, x + side * 2, bottom + burn);
+      trail.lineStyle(3, 0x64efff, 0.82 * pulse);
+      trail.lineBetween(x, bottom, x + side * 2, bottom + burn * 0.82);
+      trail.lineStyle(1, 0xffffff, 0.94);
+      trail.lineBetween(x, bottom, x, bottom + burn * 0.42);
+    }
+  }
+
+  renderSpeedPadFx() {
+    const g = this.speedPadGraphics;
+    if (!g) return;
+    g.clear();
+    if (this.speedPadPulse <= 0) return;
+    const progress = 1 - this.speedPadPulse;
+    const cx = this.carSprite.x;
+    const y = this.carBaselineY - 35;
+    const radius = 44 + progress * 92;
+    const alpha = this.speedPadPulse * 0.9;
+    g.lineStyle(5 - progress * 3, 0x2ee56b, alpha);
+    g.strokeEllipse(cx, y, radius * 2, radius * 0.8);
+    g.lineStyle(3, 0xbfffd9, alpha * 0.85);
+    for (const side of [-1, 1]) {
+      g.lineBetween(cx + side * 34, y + 18, cx + side * (80 + progress * 65), y + 52);
+      g.lineBetween(cx + side * 46, y - 2, cx + side * (98 + progress * 75), y + 12);
+    }
   }
 
   createAirtimeVisuals() {
@@ -794,6 +1183,11 @@ export class GameScene extends Phaser.Scene {
   startRivalFx(kind, rival, { boosted = false } = {}) {
     if (!this.rivalFxGraphics) return;
     const spec = rivalFxSpec(kind, boosted);
+    this.rumble({
+      duration: kind === 'takedown' ? 210 : kind === 'incoming' ? 150 : 85,
+      strong: kind === 'takedown' ? 0.85 : kind === 'incoming' ? 0.58 : 0.28,
+      weak: kind === 'takedown' ? 0.62 : 0.32,
+    });
     const visible = rival?.screen?.visible;
     // Collision feedback must originate from the car the player actually saw.
     // An off-camera/stale contact keeps its audio but never fabricates a large
@@ -871,9 +1265,14 @@ export class GameScene extends Phaser.Scene {
 
   rivalTuning() {
     const policy = this.trackData?.rivals?.policy ?? {};
+    const finiteStoryRace = this.mode === 'story' &&
+      this.storyPhase === STORY_PHASES.RIVALS &&
+      !this.trackData?.rivals?.recycleWrecks;
     return {
       maxSpeed: TUNING.maxSpeed,
-      basePace: TUNING.rivalPace,
+      basePace: finiteStoryRace
+        ? this.trackData.rivals.racePace ?? 1.08
+        : TUNING.rivalPace,
       segmentLength: TUNING.segmentLength,
       catchUpLimit: TUNING.rivalCatchupCap,
       slowDownLimit: policy.maximumSlowDown ?? 0.08,
@@ -888,6 +1287,10 @@ export class GameScene extends Phaser.Scene {
       attackTellSeconds: TUNING.rivalTelegraph,
       contactCooldownSeconds: TUNING.rivalContactCooldown,
       minimumAttackInterval: TUNING.rivalAttackCooldown,
+      // Story's opponents are a finite race field, not replenishing targets.
+      // A car the player passes must stay behind unless it drives back under
+      // its own power; otherwise finishing order is only theatre.
+      stagingEnabled: !finiteStoryRace,
     };
   }
 
@@ -912,10 +1315,51 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
+  buildStoryEventView() {
+    if (this.mode !== 'story') return null;
+    if (this.storyPhase === STORY_PHASES.QUALIFIER) {
+      return {
+        phase: this.storyPhase,
+        targetSeconds: this.qualifierClock?.targetSeconds ??
+          this.trackData?.qualifier?.targetSeconds ?? 0,
+        goldSeconds: this.trackData?.qualifier?.goldSeconds ?? 0,
+        elapsedSeconds: this.qualifierClock?.elapsedSeconds ?? 0,
+        remainingSeconds: this.qualifierClock?.remainingSeconds ??
+          this.trackData?.qualifier?.targetSeconds ?? 0,
+      };
+    }
+    const rivals = this.rivalPack?.rivals ?? [];
+    const opponentCount = Math.max(1, this.rivalAttemptCount ??
+      this.trackData?.rivals?.count ?? 3);
+    const takedowns = this.rivalMetrics?.takedowns ?? 0;
+    return {
+      phase: this.storyPhase,
+      place: this.storyRaceOrder?.livePlace(
+        this.player?.position ?? 0,
+        this.race?.completedLaps ?? 0,
+        rivals,
+        this.race?.crossedStart ?? false,
+      ) ?? 1,
+      fieldSize: (this.rivalAttemptCount ?? 0) + 1,
+      takedowns,
+      opponentsLeft: remainingStoryOpponents(opponentCount, takedowns),
+      rivals: this.rivalPack?.renderViews ?? [],
+    };
+  }
+
+  failStoryQualifier() {
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.QUALIFIER_EXPIRED)) return;
+    const target = this.trackData.qualifier.targetSeconds;
+    submitQualifierResult(this.trackData, target, target, false);
+    this.showBanner(
+      `TIME UP\nTARGET ${fmtTime(target)}\n\nENTER FOR STORY`,
+      0,
+    );
+  }
+
   failTimedElimination() {
-    this.stopActiveFeedbackLoops();
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.TRAINING_EXPIRED)) return;
     this.race?.finish();
-    this.done = true;
     this.trainingAdvanceTo = null;
     const view = this.timedElimination.view;
     const target = this.objectives.views.find(
@@ -940,7 +1384,7 @@ export class GameScene extends Phaser.Scene {
       `\n${trophy}\n\nRAM FROM BEHIND OR PUSH WIDE\nX / R  RETRY`,
       0,
     );
-    this.showTrainingResultActions(false);
+    this.showTrainingResultActions();
   }
 
   rivalRoadPosition(cameraPosition = this.player.position) {
@@ -965,10 +1409,17 @@ export class GameScene extends Phaser.Scene {
     if (!pack) return;
 
     pack.setCount(this.rivalAttemptCount);
-    pack.setAggression(TUNING.rivalAggression);
+    const finiteStoryRace = this.mode === 'story' &&
+      this.storyPhase === STORY_PHASES.RIVALS &&
+      !this.trackData?.rivals?.recycleWrecks;
+    pack.setAggression(finiteStoryRace
+      ? this.trackData.rivals.aggression
+      : TUNING.rivalAggression);
     pack.t.maxSpeed = TUNING.maxSpeed;
     pack.t.segmentLength = TUNING.segmentLength;
-    pack.setBasePace(TUNING.rivalPace);
+    pack.setBasePace(finiteStoryRace
+      ? this.trackData.rivals.racePace ?? 1.08
+      : TUNING.rivalPace);
     pack.t.catchUpLimit = Math.min(0.12, Math.max(0, TUNING.rivalCatchupCap));
     pack.t.attackTellSeconds = Math.max(0.65, TUNING.rivalTelegraph);
     pack.t.contactCooldownSeconds = Math.max(0.75, TUNING.rivalContactCooldown);
@@ -1100,6 +1551,8 @@ export class GameScene extends Phaser.Scene {
             scoreTime,
           )) continue;
           this.rivalMetrics.takedowns += 1;
+          if (this.mode === 'story') this.storyTakedownIds.add(rival.id);
+          this.recordLifetimeStat('rivalsWrecked');
           if (input.boostActive) this.rivalMetrics.boostedTakedowns += 1;
           this.recordObjective('rival_takedown');
           if (!this.timedScoreAttack && this.timedElimination?.eliminate(rival.id)) {
@@ -1114,10 +1567,15 @@ export class GameScene extends Phaser.Scene {
           });
           this.startRivalFx('takedown', rival, { boosted: input.boostActive });
           this.speedLineBurst = Math.max(this.speedLineBurst, 1);
+          const finiteRivalsLeft = pack.rivals.filter((candidate) =>
+            candidate.active && !candidate.eliminated && candidate.state !== 'wrecked'
+          ).length;
           this.pushRivalHudEvent(
             this.timedScoreAttack
               ? `WRECK +1  •  ${this.timedScoreAttack.takedowns} TOTAL`
-              : `WRECKED  •  ${this.timedElimination?.carsRemaining ?? 0} LEFT`,
+              : this.timedElimination
+                ? `WRECKED  •  ${this.timedElimination.carsRemaining} LEFT`
+                : `WRECKED  •  ${finiteRivalsLeft} RACING`,
             'success',
           );
         } else {
@@ -1201,6 +1659,37 @@ export class GameScene extends Phaser.Scene {
     return Math.floor(this.player.position / 100);
   }
 
+  rumble(options) {
+    return rumbleGamepad(getPrimaryPad(this.input.gamepad), options);
+  }
+
+  updateEndlessStage() {
+    if (this.mode !== 'endless') return;
+    const next = endlessStageForDistance(this.distanceM());
+    if (next.id === this.endlessStage?.id) return;
+    this.endlessStage = next;
+    this.renderer.transitionEnvironment(next.environment, 1800);
+    MUSIC.fadeMusicTo(0.015, 0.8);
+    this.endlessMusicTransition?.remove(false);
+    this.endlessMusicTransition = this.time.delayedCall(850, () => {
+      MUSIC.start(ENDLESS_THEMES[next.music] ?? HIGH_SPEED_THEME);
+      MUSIC.fadeMusicTo(TUNING.musicVolume, 0.9);
+      this.endlessMusicTransition = null;
+    });
+  }
+
+  applyEndlessTrickHeal(event) {
+    if (this.mode !== 'endless') return 0;
+    const heal = Math.min(
+      Math.max(0, Math.floor(Number(event?.payload?.heal) || 0)),
+      Math.max(0, RACER.maxHealth - RACER.health),
+    );
+    if (heal <= 0) return 0;
+    RACER.repair(heal);
+    this.popup(`HULL +${heal}`, '#2ee56b');
+    return heal;
+  }
+
   // Adaptive onboarding: a clean bend silently measures the result. Staying
   // on the road skips instruction; touching the shoulder schedules a safe,
   // freeze-frame rehearsal on the recovery straight before the cone chicane.
@@ -1280,7 +1769,7 @@ export class GameScene extends Phaser.Scene {
         this.carSprite.setFrame(carSpriteFrame(2, 0));
       }
     } else if (correctHeld) {
-      this.carSprite.setFrame(carSpriteFrame(direction > 0 ? 4 : 0, 0));
+      this.carSprite.setFrame(carSpriteFrame(direction > 0 ? 0 : 4, 0));
       tutorial.step++;
       tutorial.waitingForRelease = true;
       tutorial.acceptAt = this.time.now + 160;
@@ -1334,7 +1823,7 @@ export class GameScene extends Phaser.Scene {
       const segment = this.model.findSegment(
         this.player.position + TUNING.playerZ,
       ).index;
-      if (this.airtimeGapAttempt && !this.airtimeGapAttempt.resolved) {
+      if (gap && this.airtimeGapAttempt && !this.airtimeGapAttempt.resolved) {
         const outcome = airtimeGapOutcome({
           ready: this.airtimeGapAttempt.ready,
           landingSegment: segment,
@@ -1372,8 +1861,10 @@ export class GameScene extends Phaser.Scene {
     const segment = this.model.findSegment(
       this.player.position + TUNING.playerZ,
     ).index;
-    const requiredSpeed = TUNING.maxSpeed * gap.requiredSpeedMultiplier;
-    const onGapApproach = segment >= gap.approachStartSegment &&
+    const requiredSpeed = gap
+      ? TUNING.maxSpeed * gap.requiredSpeedMultiplier
+      : 0;
+    const onGapApproach = !!gap && segment >= gap.approachStartSegment &&
       segment <= gap.rockEndSegment;
     const phase = this.player.airborne
       ? 'airborne'
@@ -1382,17 +1873,81 @@ export class GameScene extends Phaser.Scene {
         : this.airtimeFeedback
           ? 'landed'
           : 'approach';
+    const flight = this.flightSchool ? flightSchoolView(this.flightSchool) : null;
+    const flightSegment = this.model.findSegment(
+      this.player.position + TUNING.playerZ,
+    ).index;
+    const routeCue = flight
+      ? flightRouteCue(
+        this.flightSchool,
+        this.trackData.objects?.filter((object) => object.kind === 'flightRing'),
+        {
+          x: this.player.x,
+          altitude: flight.altitude,
+          segment: flightSegment,
+        },
+      )
+      : null;
     return {
       phase,
+      flightAssist: Boolean(this.trackData?.flightTraining),
+      flightPhase: this.flightSchool?.phase ?? null,
       currentAirSeconds: this.player.airborne ? this.player.jumpElapsed : 0,
       bestAirSeconds: this.player.bestAirtime,
       glide: this.player.glide,
       speed: this.player.speed,
       requiredSpeed,
-      gapReady: (this.boost?.tier ?? 0) > 0 && this.player.speed >= requiredSpeed,
+      gapReady: gap
+        ? (this.boost?.tier ?? 0) > 0 && this.player.speed >= requiredSpeed
+        : true,
       message: this.airtimeFeedback?.message ?? '',
       messageTone: this.airtimeFeedback?.tone ?? 'info',
+      altitude: this.flightSchool?.altitude ?? 0,
+      verticalSpeed: flight?.verticalSpeed ?? 0,
+      flightPitch: flight?.pitch ?? 0,
+      flightBank: flight?.bank ?? 0,
+      flightBraking: flight?.braking ?? 0,
+      flightAfterburner: flight?.afterburner ?? 0,
+      flightRouteCue: routeCue,
+      ringsHit: this.flightSchool?.ringsHit.size ?? 0,
+      ringsTotal: this.flightSchool?.ringCount ?? 0,
     };
+  }
+
+  updateFlightSchool(dt, input, previousPlayer) {
+    const state = this.flightSchool;
+    if (!state || this.done) return false;
+    const config = this.trackData.flightTraining;
+    const crossed = crossedRoadSegments(
+      this.player,
+      this.model,
+      TUNING,
+      previousPlayer,
+    );
+
+    if (state.phase !== 'flight') {
+      this.flightSchoolView = flightSchoolView(state);
+      return false;
+    }
+
+    updateFlight(state, dt, input, config);
+    for (const { segment, x } of crossed) {
+      for (const ring of segment.sprites) {
+        if (ring.def?.kind !== 'flight-ring' || ring.hit) continue;
+        if (!flightRingHit(state, ring, { x, altitude: state.altitude })) continue;
+        ring.hit = true;
+        this.recordObjective('object_hit', { sprite: ring });
+        MUSIC.playSpeedLine();
+        this.speedLineBurst = 1;
+        this.rumble({ duration: 70, strong: 0.08, weak: 0.3 });
+        this.popup(
+          `RING ${state.ringsHit.size} / ${state.ringCount}`,
+          state.ringsHit.size === state.ringCount ? '#ffcf3f' : '#00e5ff',
+        );
+      }
+    }
+    this.flightSchoolView = flightSchoolView(state);
+    return false;
   }
 
   isAirtimeGapRock(sprite) {
@@ -1413,6 +1968,15 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (!this.player.justLanded) return;
+
+    this.recordLifetimeStat('airtimeSeconds', this.player.lastAirtime);
+    if (this.player.boostedLaunch) {
+      const qualified = this.styleTracker?.recordLanding({
+        boosted: true,
+        seconds: this.player.lastAirtime,
+      }) ?? this.player.lastAirtime >= 0.85;
+      if (qualified) this.recordLifetimeStat('boostedHangtimes');
+    }
 
     const control = this.airtimeAudioHandle?.getControl?.() ?? 'neutral';
     this.airtimeAudioHandle?.stop();
@@ -1447,6 +2011,32 @@ export class GameScene extends Phaser.Scene {
     this.pendingAirtimeLanding = null;
     this.boostHoldHandle?.stop();
     this.boostHoldHandle = null;
+  }
+
+  recordLifetimeStat(stat, amount = 1) {
+    this.playerStatSequence += 1;
+    return submitPlayerStatEvent(createPlayerStatEvent(
+      this.gameplayRunId,
+      this.playerStatSequence,
+      stat,
+      amount,
+      Date.now(),
+    ));
+  }
+
+  updateHeldBoostStats(dt, held) {
+    const result = this.heldBoostStats.update(dt, held);
+    if (result.longBurn) this.recordLifetimeStat('longBurns');
+    if (result.completedSeconds > 0) {
+      this.recordLifetimeStat('heldBoostSeconds', result.completedSeconds);
+    }
+  }
+
+  flushHeldBoostStats() {
+    const result = this.heldBoostStats.breakSegment();
+    if (result.completedSeconds > 0) {
+      this.recordLifetimeStat('heldBoostSeconds', result.completedSeconds);
+    }
   }
 
   // Reacts once per frame to what Boost.update() just reported. Physics was
@@ -1513,6 +2103,10 @@ export class GameScene extends Phaser.Scene {
     // needs for variety.
     this.coneHits++;
     this.conesThisLap++;
+    const coneId = `${this.race?.lap ?? 1}:` +
+      `${sprite.trackObjectId ?? sprite.objectiveId ?? this.coneHits}`;
+    this.styleTracker?.recordCone(coneId);
+    this.recordLifetimeStat('conesSmashed');
     if (this.mode === 'training') this.trainingConeHits++;
     this.juiceConeHit(sprite, {
       index: objective ? objective.progress : this.coneHits,
@@ -1559,11 +2153,17 @@ export class GameScene extends Phaser.Scene {
     // sustained tone. The grounded policy may resume it after landing.
     this.boostHoldHandle?.stop();
     this.boostHoldHandle = null;
-    this.player.launch({ boosted });
+    const liftMultiplier = this.trackData?.airtimeTraining?.liftMultiplier ?? 1;
+    this.player.launch({ boosted, liftMultiplier });
     this.jumpLaunchedThisFrame = true;
     this.airtimeAudioHandle?.stop();
     const speedRatio = this.player.launchSpeed / TUNING.maxSpeed;
     MUSIC.playRampTakeoff({ boosted, speedRatio });
+    this.rumble({
+      duration: boosted ? 125 : 90,
+      strong: boosted ? 0.32 : 0.16,
+      weak: boosted ? 0.58 : 0.38,
+    });
     this.airtimeAudioHandle = MUSIC.startAirtimeFlight({ boosted, speedRatio });
     const rampSegment = this.model.segments.find(
       (segment) => segment.sprites.includes(sprite),
@@ -1584,6 +2184,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   onHit(def, sprite = null) {
+    // A collision ends the current style line. Completed rewards stay banked,
+    // but partial cone/speed/hold streaks must be rebuilt cleanly.
+    this.styleTracker?.breakStreaks();
+    this.rumble({
+      duration: 180,
+      strong: Math.min(1, 0.35 + Math.max(0, def.damage ?? 0) / 40),
+      weak: 0.48,
+    });
+    this.flushHeldBoostStats();
     if (this.isAirtimeGapRock(sprite)) {
       // The collision sweep covers the entire landing frame. A successful
       // flight may cross the last rock segment while airborne and touch down
@@ -1635,35 +2244,36 @@ export class GameScene extends Phaser.Scene {
       if (!this.trainingDamageTaught) {
         this.trainingDamageTaught = true;
         this.showBanner(
-          'ROCKS CRACK YOUR WINDSCREEN\nSteer around them to stay clean\nCones mark the mastery line\nCLEAN + ALL CONES FOR GOLD',
-          3200,
+          'ROCKS CAUSE CRACKS\nAVOID ROCKS  •  HIT CONES',
+          1900,
         );
       }
       // Training damage is communication, not punishment: no speed loss,
       // campaign hull damage, wreck, or restart. The cracks affect the medal.
       this.cameras.main.shake(140, 0.01);
-      this.carSprite.setTint(0xff5555).setTintMode(Phaser.TintModes.FILL);
-      this.time.delayedCall(120, () => this.carSprite.clearTint());
+      this.carSprite.impactFlash(0xff5555);
+      this.time.delayedCall(120, () => this.carSprite.clearImpactFlash());
       return;
     }
     if (this.mode === 'endless') this.pop.bust();
     this.player.speed *= def.slow;       // momentum is the immediate price
-    const wrecked = RACER.damage(def.damage); // health is the long-term one
+    MUSIC.playDamageImpact({ severity: Math.max(0.7, def.damage / 20) });
+    this.popup(`HULL -${def.damage}`, '#ff5555');
+    // Story writes the persistent garage hull; Endless is scoped by
+    // RacerState to this single distance attempt.
+    const wrecked = RACER.damage(def.damage);
     this.iframes = TUNING.iframes;
     // Feedback within the same frame as the hit: shake scales with damage,
     // car flashes red. The player should FEEL the difference between a
     // cone and a rock before the health bar finishes updating.
     this.cameras.main.shake(140, def.damage >= 20 ? 0.012 : 0.004);
-    this.carSprite
-      .setTint(0xff4444)
-      .setTintMode(Phaser.TintModes.FILL);
-    this.time.delayedCall(120, () => this.carSprite.clearTint());
+    this.carSprite.impactFlash(0xff4444);
+    this.time.delayedCall(120, () => this.carSprite.clearImpactFlash());
     if (wrecked) this.onWrecked();
   }
 
   onWrecked() {
-    this.stopActiveFeedbackLoops();
-    this.done = true;
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.WRECKED)) return;
     if (this.mode === 'endless') {
       const dist = this.distanceM();
       const record = submitScore('endless', dist, 'max');
@@ -1671,24 +2281,41 @@ export class GameScene extends Phaser.Scene {
       this.showBanner(
         `WRECKED\n${dist}m${record ? '  NEW RECORD' : ''}\nTIPS $${this.pop.cash}\n\nENTER FOR TITLE`, 0);
     } else if (this.mode === 'story') {
+      // Commit the anti-deadlock tow in the same synchronous transaction as
+      // the wreck. A, B, Escape, a scene change, or a reload can no longer
+      // bypass it by avoiding the Garage entry path. applyEmergencyTow is a
+      // floor operation, so the legacy Garage safety call remains harmless
+      // and cannot farm additional repairs.
+      const towHealth = applyEmergencyTow(RACER, TUNING);
       this.garageData = {
         wrecked: true,
         retryTrackIndex: this.trackIndex,
-        receipt: 'WRECKED — NO RACE PURSE',
+        storyPhase: this.storyPhase,
+        receipt: `WRECKED — EMERGENCY TOW +${towHealth} HULL — NO RACE PURSE`,
       };
       this.showBanner('WRECKED\n\nENTER FOR GARAGE', 0);
+    } else if (this.mode === 'custom') {
+      this.showBanner('CUSTOM RUN ENDED\n\nENTER FOR CUSTOM TRACKS', 0);
     } else {
       this.showBanner('TRAINING ENDED\n\nENTER FOR TITLE', 0);
     }
   }
 
   finishRace() {
-    this.stopActiveFeedbackLoops();
-    this.done = true;
+    if (!this.beginTerminalOutcome(TERMINAL_OUTCOMES.FINISHED)) return;
     // The rival clock starts at the rolling line; its mastery time must use
     // the same origin instead of including the pre-start grid approach.
     const t = this.timedScoreAttack?.elapsedSeconds ??
       this.timedElimination?.elapsedSeconds ?? this.race.time;
+    if (this.mode === 'custom') {
+      const record = submitScore(this.trackData.id, t, 'min');
+      this.showBanner(
+        `CUSTOM TRACK COMPLETE\n${fmtTime(t)}` +
+        `${record ? '  •  NEW BEST' : ''}\n\nENTER FOR CUSTOM TRACKS`,
+        0,
+      );
+      return;
+    }
     if (this.mode === 'training') {
       const target = this.objectives.views.find(
         (objective) => objective.id === this.trackData.scoring.objective,
@@ -1732,8 +2359,32 @@ export class GameScene extends Phaser.Scene {
       const goldTarget = this.trackData.scoring?.thresholds
         ?.find((threshold) => threshold.rank === 'gold')?.minimum ?? target.total;
       const perfect = result.trophy?.rank === 'gold';
+      if (this.flightSchool) {
+        const medal = result.trophy
+          ? `${result.trophy.rank.toUpperCase()} TROPHY  ${'★'.repeat(result.trophy.stars)}`
+          : `NO TROPHY  •  BRONZE AT 6 RINGS`;
+        this.trainingAdvanceTo = null;
+        this.showBanner(
+          `${perfect ? 'PERFECT FLIGHT!' : 'FLIGHT COMPLETE'}\n` +
+          `RINGS  ${scoredProgress} / ${target.totalLabel}\n${medal}\n` +
+          `${fmtTime(t)}${result.newBest ? '  •  NEW BEST' : ''}\n\n` +
+          `THANK YOU FOR PLAYING RHYTHMIC RIDE\n` +
+          `THE ROAD WAS ONLY THE BEGINNING…\n` +
+          `FLIGHT RETURNS IN RHYTHMIC RIDE 2`,
+          0,
+        );
+        this.celebrateTrainingFinish(perfect, result.trophy?.stars ?? 0);
+        this.showTrainingResultActions();
+        return;
+      }
       const nextTrack = TRAINING_TRACKS[this.trackIndex + 1];
-      this.trainingAdvanceTo = nextTrack && nextTrack.status !== 'placeholder'
+      const nextNeedsStoryPlatinum = nextTrack?.unlock?.type === 'story_platinum';
+      const nextMasteryUnlocked = !nextNeedsStoryPlatinum ||
+        isStoryCampaignPlatinum(TRACKS);
+      this.trainingAdvanceTo = nextTrack &&
+        nextTrack.status !== 'placeholder' &&
+        nextTrack.status !== 'coming_soon' &&
+        nextMasteryUnlocked
         ? this.trackIndex + 1
         : null;
       const damageLine = metricUsage.damage && this.trainingDamageMax > 0
@@ -1760,7 +2411,11 @@ export class GameScene extends Phaser.Scene {
         : '';
       const nextLine = this.trainingAdvanceTo == null
         ? (nextTrack
-          ? `NEXT: ${nextTrack.name} — COMING SOON`
+          ? nextTrack.status === 'coming_soon'
+            ? `NEXT: ${nextTrack.name} — COMING SOON`
+            : nextNeedsStoryPlatinum
+            ? `NEXT: ${nextTrack.name} — PLATINUM ALL THREE RIVAL RACES`
+            : `NEXT: ${nextTrack.name} — COMING SOON`
           : 'TRAINING TRACK COMPLETE')
         : `LEVEL ${this.trainingAdvanceTo + 1} UNLOCKED: ` +
           `${TRAINING_TRACKS[this.trainingAdvanceTo].name}`;
@@ -1777,29 +2432,90 @@ export class GameScene extends Phaser.Scene {
         0,
       );
       this.celebrateTrainingFinish(perfect, result.trophy?.stars ?? 0);
-      this.showTrainingResultActions(this.trainingAdvanceTo != null);
+      this.showTrainingResultActions();
+      return;
+    }
+    if (this.mode === 'story' && this.storyPhase === STORY_PHASES.QUALIFIER) {
+      const target = this.trackData.qualifier.targetSeconds;
+      const elapsed = this.qualifierClock?.elapsedSeconds ?? this.race.time;
+      const result = submitQualifierResult(this.trackData, elapsed, target, true);
+      if (result.qualified) this.recordLifetimeStat('qualifiersCleared');
+      const payout = awardStoryPayout(RACER, {
+        trackId: this.trackData.id,
+        version: this.trackData.storyVersion ?? 1,
+        phase: STORY_PHASES.QUALIFIER,
+        attemptNumber: result.progress.qualifierAttempts,
+        won: result.qualified,
+        styleCash: this.styleTracker?.cashEarned ?? 0,
+      });
+      const crew = result.qualified
+        ? applyPitCrewService(RACER)
+        : { level: RACER.pitCrewLevel, health: 0 };
+      this.garageData = {
+        completedTrackIndex: this.trackIndex,
+        storyPhase: this.storyPhase,
+        receipt: `${payout.claim ?? 'NO PURSE'} +$${payout.purse}   STYLE +$${payout.style}` +
+          `${payout.spending?.total > 0 ? `   GARAGE -$${payout.spending.total}` : ''}` +
+          `${crew.health > 0 ? `   PIT CREW +${crew.health} HULL` : ''}`,
+      };
+      this.showBanner(
+        `${result.qualified ? `${result.award.toUpperCase()} TIME!` : 'TIME MISSED'}\n` +
+          `${fmtTime(elapsed)}  •  TARGET ${fmtTime(target)}` +
+          `${result.newBest ? '\nNEW BEST' : ''}` +
+          `${result.qualified ? `\n${payout.claim} $${payout.purse}` +
+            `  •  STYLE $${payout.style}\nWALLET $${RACER.money}` : ''}` +
+          '\n\nENTER FOR GARAGE',
+        0,
+      );
       return;
     }
     const record = submitScore(this.trackData.id, t, 'min');
-    // Race cash remains time-based while the new course score comes from
-    // completed objectives. Objective points can be balanced independently
-    // without turning every stunt contact into currency.
-    const par = this.trackData.par ?? 120;
-    const timeCash = TUNING.basePayout + Math.max(0, Math.round((par - t) * TUNING.parRate));
-    RACER.money += timeCash;
-    const last = this.trackIndex >= TRACKS.length - 1;
+    const place = this.storyRaceOrder?.playerPlace(this.race.lastCrossingFraction) ?? 1;
+    const rivalResult = this.mode === 'story' && this.storyPhase === STORY_PHASES.RIVALS
+      ? submitRivalResult(this.trackData, {
+        place,
+        time: t,
+        takedowns: this.rivalMetrics.takedowns,
+      })
+      : null;
+    if (rivalResult?.won) this.recordLifetimeStat('rivalWins');
+    const payout = awardStoryPayout(RACER, {
+      trackId: this.trackData.id,
+      version: this.trackData.storyVersion ?? 1,
+      phase: STORY_PHASES.RIVALS,
+      attemptNumber: rivalResult?.progress.rivalAttempts ?? 0,
+      won: rivalResult?.won,
+      fullClear: rivalResult?.fullClear,
+      styleCash: this.styleTracker?.cashEarned ?? 0,
+      rivalIds: [...this.storyTakedownIds],
+    });
+    const crew = applyPitCrewService(RACER);
+    const campaignComplete = Boolean(rivalResult?.award) && isStoryCampaignComplete(TRACKS);
     this.garageData = {
       nextTrackIndex: this.trackIndex + 1,
-      complete: last,
-      receipt: `RACING +$${timeCash}   OBJECTIVES ${this.objectives.score} PTS`,
+      completedTrackIndex: this.trackIndex,
+      storyPhase: this.storyPhase,
+      complete: Boolean(campaignComplete),
+      receipt: `${payout.claim ?? 'NO PURSE'} +$${payout.purse}` +
+        `   STYLE +$${payout.style}   TAKEDOWNS +$${payout.bounties}` +
+        `${payout.spending?.total > 0 ? `   GARAGE -$${payout.spending.total}` : ''}` +
+        `${crew.health > 0 ? `   PIT CREW +${crew.health} HULL` : ''}`,
     };
+    const storyAward = rivalResult?.award?.toUpperCase() ?? null;
+    const opponentsLeft = remainingStoryOpponents(
+      this.rivalAttemptCount ?? this.trackData?.rivals?.count ?? 3,
+      this.rivalMetrics?.takedowns ?? 0,
+    );
     this.showBanner(
-      `FINISH  ${fmtTime(t)}${record ? '  NEW RECORD' : ''}\n` +
+      `${rivalResult ? `${storyAward ? `${storyAward}  •  ` : ''}${place === 1 ? 'VICTORY' : `${place}${place === 2 ? 'ND' : place === 3 ? 'RD' : 'TH'} PLACE`}  •  ` : 'FINISH  '}` +
+        `${fmtTime(t)}${record ? '  NEW RECORD' : ''}\n` +
+        `${rivalResult ? `${opponentsLeft} OPPONENT${opponentsLeft === 1 ? '' : 'S'} LEFT\n` : ''}` +
         `OBJECTIVES ${this.objectives.completedCount}/${this.objectives.views.length}` +
         `  •  ${this.objectives.score} PTS\n` +
-        `RACING $${timeCash}\n` +
+        `${payout.claim ?? 'NO PURSE'} $${payout.purse}` +
+        `  •  STYLE $${payout.style}  •  TAKEDOWNS $${payout.bounties}\n` +
         `WALLET $${RACER.money}\n\n` +
-        (last ? 'CAMPAIGN COMPLETE\nENTER FOR GARAGE' : 'ENTER FOR GARAGE'),
+        (campaignComplete ? 'CAMPAIGN COMPLETE\nENTER FOR GARAGE' : 'ENTER FOR GARAGE'),
       0
     );
   }
@@ -1807,29 +2523,252 @@ export class GameScene extends Phaser.Scene {
   advance() {
     if (!this.done) return;
     if (this.mode === 'training') {
-      if (this.trainingAdvanceTo != null) {
-        this.scene.start('GameScene', {
-          mode: 'training',
-          trackIndex: this.trainingAdvanceTo,
-        });
-      } else {
-        this.scene.start('TitleScene');
-      }
+      this.returnToModeMenu();
       return;
     }
     if (this.mode === 'story' && this.garageData) {
-      this.scene.start('GarageScene', this.garageData);
+      const focusIndex = this.garageData.completedTrackIndex ??
+        this.garageData.retryTrackIndex ?? this.trackIndex;
+      this.scene.start('TitleScene', {
+        ...modeMenuTarget(
+          'story',
+          focusIndex,
+          this.garageData.storyPhase ?? this.storyPhase,
+          STORY_PAGES.GARAGE,
+        ),
+        garageData: this.garageData,
+      });
       return;
     }
-    const last = this.trackIndex >= TRACKS.length - 1;
-    if (this.mode === 'story' && !last) {
-      this.scene.start('GameScene', {
-        mode: 'story',
-        trackIndex: this.trackIndex + 1,
-      });
+    if (this.mode === 'story' || this.mode === 'custom') {
+      this.returnToModeMenu();
     } else {
       this.scene.start('TitleScene');
     }
+  }
+
+  beginTerminalOutcome(outcome) {
+    if (!commitTerminalOutcome(this.terminalOutcome, outcome)) return false;
+    this.done = true;
+    this.stopActiveFeedbackLoops();
+    return true;
+  }
+
+  renderTerminalWorld() {
+    this.renderer.render(
+      this.model,
+      this.player,
+      this.player.speed / TUNING.maxSpeed,
+      this.speedLineBurst,
+      this.sceneryDistance,
+      this.rivalPack?.renderViews,
+    );
+  }
+
+  returnToModeMenu() {
+    this.scene.start(
+      'TitleScene',
+      modeMenuTarget(this.mode, this.trackIndex, this.storyPhase),
+    );
+  }
+
+  pauseAvailable() {
+    return canPauseRace({
+      mode: this.mode,
+      done: this.done,
+      awaitingBriefing: this.awaitingBriefing,
+      trainingTutorial: Boolean(this.trainingTutorial),
+    });
+  }
+
+  handleEscape() {
+    if (this.racePaused) {
+      this.closePauseMenu();
+    } else if (this.pauseAvailable()) {
+      this.openPauseMenu();
+    } else {
+      this.quitToTitle();
+    }
+  }
+
+  handleEnter() {
+    if (this.racePaused) this.activatePauseSelection();
+    else this.confirm();
+  }
+
+  togglePause() {
+    if (this.racePaused) this.closePauseMenu();
+    else if (this.pauseAvailable()) this.openPauseMenu();
+  }
+
+  openPauseMenu() {
+    if (this.racePaused || !this.pauseAvailable()) return;
+    this.racePaused = true;
+    this.pauseSelection = 0;
+    this.renderPauseMenu();
+
+    this.pauseHudWasActive = this.scene.isActive('HudScene');
+    if (this.pauseHudWasActive) this.scene.pause('HudScene');
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    MUSIC.pausePlayback();
+  }
+
+  closePauseMenu() {
+    if (!this.racePaused) return;
+    this.releasePauseRuntime();
+    // Treat held buttons as already down so closing with A/Start cannot also
+    // accelerate, boost, or reopen the menu on the same physical press.
+    this.prevPad = null;
+  }
+
+  releasePauseRuntime() {
+    this.pauseUi?.destroy(true);
+    this.pauseUi = null;
+    this.racePaused = false;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    if (this.pauseHudWasActive && this.scene.isPaused('HudScene')) {
+      this.scene.resume('HudScene');
+    }
+    this.pauseHudWasActive = false;
+    MUSIC.resumePlayback();
+  }
+
+  movePauseMenu(direction) {
+    if (!this.racePaused) return;
+    const next = movePauseSelection(
+      this.pauseSelection,
+      direction,
+      PAUSE_ACTIONS.length,
+    );
+    if (next === this.pauseSelection) return;
+    this.pauseSelection = next;
+    MUSIC.playMenuMove(direction);
+    this.rumble({ duration: 28, strong: 0.04, weak: 0.14 });
+    this.renderPauseMenu();
+  }
+
+  activatePauseSelection() {
+    if (!this.racePaused) return;
+    const action = PAUSE_ACTIONS[this.pauseSelection]?.id;
+    if (action === 'resume') {
+      this.closePauseMenu();
+    } else if (action === 'music') {
+      AUDIO_SETTINGS.setChannel('music', MUSIC);
+    } else if (action === 'sfx') {
+      AUDIO_SETTINGS.setChannel('sfx', MUSIC);
+    } else if (action === 'restart') {
+      this.restartPausedEvent();
+    } else if (action === 'exit') {
+      this.exitPausedEvent();
+    }
+  }
+
+  restartPausedEvent() {
+    if (!this.racePaused) return;
+    const launchData = {
+      mode: this.mode,
+      trackIndex: this.trackIndex,
+      ...(this.mode === 'story' ? { storyPhase: this.storyPhase } : {}),
+      ...(this.mode === 'custom' ? {
+        customTrack: this.customTrack,
+        customDraftId: this.customDraftId,
+      } : {}),
+    };
+    this.releasePauseRuntime();
+    this.scene.start('GameScene', launchData);
+  }
+
+  exitPausedEvent() {
+    if (!this.racePaused) return;
+    this.releasePauseRuntime();
+    this.returnToModeMenu();
+  }
+
+  renderPauseMenu() {
+    this.pauseUi?.destroy(true);
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+    const ui = this.add.container(0, 0).setDepth(200);
+    this.pauseUi = ui;
+
+    ui.add(this.add.rectangle(
+      centerX,
+      centerY,
+      this.scale.width,
+      this.scale.height,
+      0x050710,
+      0.76,
+    ));
+    ui.add(this.add.rectangle(centerX, centerY, 420, 500, 0x10142c, 0.98)
+      .setStrokeStyle(4, 0x00e5ff, 0.9));
+    ui.add(this.add.rectangle(centerX, centerY - 248, 330, 8, 0xff2d95, 1));
+    ui.add(this.add.text(centerX, centerY - 207, 'PAUSED', {
+      fontSize: '42px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      stroke: '#050710',
+      strokeThickness: 7,
+    }).setOrigin(0.5));
+
+    const eventLabel = this.mode === 'story'
+      ? `${this.trackData.name}  •  ${this.storyPhase === STORY_PHASES.RIVALS ? 'RIVAL RACE' : 'TIME TRIAL'}`
+      : `${this.trackData.name}  •  ${this.mode === 'custom' ? 'CUSTOM TRACK' : 'RACE SCHOOL'}`;
+    ui.add(this.add.text(centerX, centerY - 158, eventLabel, {
+      fontSize: '15px',
+      color: '#9feeff',
+      fontStyle: 'bold',
+      align: 'center',
+      wordWrap: { width: 370 },
+    }).setOrigin(0.5));
+
+    const audioSettings = AUDIO_SETTINGS.get();
+    PAUSE_ACTIONS.forEach((action, index) => {
+      const selected = index === this.pauseSelection;
+      const y = centerY - 100 + index * 57;
+      const row = this.add.rectangle(
+        centerX,
+        y,
+        340,
+        52,
+        selected ? 0x293b69 : 0x171c38,
+        1,
+      ).setStrokeStyle(selected ? 3 : 1, selected ? 0xffcf3f : 0x596080, 1)
+        .setInteractive({ useHandCursor: true });
+      row.on('pointerover', () => {
+        if (!this.racePaused || this.pauseSelection === index) return;
+        this.pauseSelection = index;
+        this.renderPauseMenu();
+      });
+      row.on('pointerdown', () => {
+        if (!this.racePaused) return;
+        this.pauseSelection = index;
+        this.activatePauseSelection();
+      });
+      ui.add(row);
+      ui.add(this.add.text(centerX, y, pauseActionLabel(action, audioSettings), {
+        fontSize: selected ? '22px' : '19px',
+        color: selected ? '#ffffff' : '#c4c9dd',
+        fontStyle: 'bold',
+        stroke: '#080a16',
+        strokeThickness: 4,
+      }).setOrigin(0.5));
+      if (selected) {
+        ui.add(this.add.text(centerX - 149, y, '▶', {
+          fontSize: '20px', color: '#ffcf3f', stroke: '#080a16', strokeThickness: 3,
+        }).setOrigin(0.5));
+      }
+    });
+
+    ui.add(this.add.text(
+      centerX,
+      centerY + 224,
+      '↑↓ SELECT   A / ENTER CONFIRM   B / ESC RESUME   M MUTE ALL',
+      {
+        fontSize: '11px', color: '#aeb6d4', fontStyle: 'bold', align: 'center',
+      },
+    ).setOrigin(0.5));
   }
 
   confirm() {
@@ -1854,7 +2793,8 @@ export class GameScene extends Phaser.Scene {
       submitScore('endless', this.distanceM(), 'max');
       RACER.money += this.pop.cash;
     }
-    this.scene.start('TitleScene');
+    if (this.mode === 'custom') this.scene.start('TitleScene', modeMenuTarget('custom'));
+    else this.scene.start('TitleScene');
   }
 
   recordObjective(event, payload = {}) {
@@ -1964,7 +2904,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  showTrainingResultActions(hasNext) {
+  showTrainingResultActions() {
     const makeButton = (x, label, color, action) => {
       const button = this.add.text(x, 520, label, {
         fontSize: '15px',
@@ -1984,15 +2924,12 @@ export class GameScene extends Phaser.Scene {
       return button;
     };
 
-    makeButton(hasNext ? 190 : 285, 'X / R  RETRY', '#7a2458', () => this.retryTraining());
-    if (hasNext) {
-      makeButton(400, 'A / ENTER  NEXT', '#146b4a', () => this.advance());
-    }
+    makeButton(285, 'X / R  RETRY', '#7a2458', () => this.retryTraining());
     makeButton(
-      hasNext ? 620 : 515,
-      hasNext ? 'B / ESC  TITLE' : 'A / ENTER  TITLE',
+      515,
+      'A / ENTER  RACE SCHOOL',
       '#244c7a',
-      () => this.quitToTitle(),
+      () => this.returnToModeMenu(),
     );
   }
 
@@ -2013,11 +2950,24 @@ export class GameScene extends Phaser.Scene {
       0x0a0a14,
       0.9,
     ).setStrokeStyle(2, 0x00e5ff, 0.65).setAlpha(0).setDepth(40);
-    const title = this.add.text(centerX + 70, panelTop + 30, this.trackData.name, {
+    const storyEventLabel = this.mode === 'story'
+      ? this.storyPhase === STORY_PHASES.RIVALS
+        ? '  •  RIVAL RACE'
+        : '  •  BEAT THE CLOCK'
+      : '';
+    const title = this.add.text(
+      centerX + 70,
+      panelTop + 30,
+      `${this.trackData.name}${storyEventLabel}`,
+      {
       fontSize: '25px', color: '#ff2d95', fontStyle: 'bold',
       stroke: '#0a0a14', strokeThickness: 4,
-    }).setOrigin(0.5).setAlpha(0).setDepth(41);
-    const intro = this.add.text(centerX + 70, panelTop + 69, this.trackData.intro, {
+      },
+    ).setOrigin(0.5).setAlpha(0).setDepth(41);
+    const storyIntro = this.mode === 'story' && this.storyPhase === STORY_PHASES.QUALIFIER
+      ? `${this.trackData.intro}\nBEAT ${fmtTime(this.trackData.qualifier.targetSeconds)}`
+      : this.trackData.intro;
+    const intro = this.add.text(centerX + 70, panelTop + 69, storyIntro, {
       fontSize: '16px', color: '#ffffff', align: 'center',
       stroke: '#0a0a14', strokeThickness: 4,
       wordWrap: { width: this.scale.width - 180 },

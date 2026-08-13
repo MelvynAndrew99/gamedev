@@ -64,23 +64,20 @@ test('cones never appear to announce ground boosts', () => {
   }
 });
 
-test('cones announce rocks, never ramps', () => {
+test('Story cones are authored objectives rather than hazard warnings', () => {
   for (const track of [trainingValidation, neonGulch, syndicateRun]) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
-
-    for (let i = 0; i < model.segments.length; i++) {
-      for (const cone of model.segments[i].sprites.filter((s) => s.key === 'cone')) {
-        let payload = null;
-        for (let j = i + 1; j < Math.min(model.segments.length, i + 70) && !payload; j++) {
-          payload = model.segments[j].sprites.find((candidate) =>
-            (candidate.key === 'rock' || candidate.key === 'ramp') &&
-            Math.abs(candidate.offset - cone.offset) < 0.25
-          )?.key ?? null;
-        }
-        assert.equal(payload, 'rock', `${track.id}: cone at segment ${i}`);
-      }
-    }
+    const cones = model.segments.flatMap((segment) => segment.sprites)
+      .filter((sprite) => sprite.key === 'cone');
+    assert.ok(cones.length > 0, `${track.id}: needs cone objectives`);
+    assert.ok(cones.every((cone) => cone.objectiveId), `${track.id}: unscored warning cone`);
+    assert.ok(cones.every((cone) => cone.persistentHit), `${track.id}: cone progress must persist`);
+    assert.equal(
+      new Set(cones.map((cone) => cone.trackObjectId)).size,
+      cones.length,
+      `${track.id}: Story cone IDs must be unique`,
+    );
   }
 });
 
@@ -158,31 +155,61 @@ test('campaign tracks stamp their authored precision-driving sequence', () => {
   }
 });
 
-test('campaign geometry preserves recovery beats around authored skill checks', () => {
+test('Story courses sustain long boost-launch-precision flow with recovery', () => {
   const tracks = [trainingValidation, neonGulch, syndicateRun];
-  // Proving Ground repeats Training's isolated shoulder-button gate. Its
-  // single +8 hairpin is sharper than later races' individual bends; those
-  // races escalate through tighter decision spacing and compound pressure.
-  const expectedMaxCurve = [8, 5, 7];
-  const models = tracks.map((track) => {
+  for (const track of tracks) {
     const model = new RoadModel(TUNING);
     model.buildFromData(track);
-    return model;
-  });
+    assert.ok(model.segments.length >= 3000, `${track.id}: substantial one-lap course`);
+    assert.ok(track.design.cycles.length >= 6 && track.design.cycles.length <= 8);
+    assert.equal(track.storyVersion, 1);
+    assert.equal(track.qualifier.laps, 1);
+    assert.equal(track.rivalRace.laps, 3);
+    assert.equal(track.rivalRace.startsLocked, true);
+    assert.ok(track.qualifier.targetSeconds > model.trackLength / TUNING.maxSpeed);
+    assert.ok(track.qualifier.targetSeconds < model.trackLength / TUNING.maxSpeed * 1.8);
+    assert.equal(track.rivals.count, 3);
+    assert.equal(track.rivals.maxCount, 3);
+    assert.equal(track.rivals.spawns.length, 3);
+    assert.equal(track.rivals.recycleWrecks, false);
+    assert.ok(track.rivals.racePace >= 1.04 && track.rivals.racePace <= 1.16);
+    assert.ok(track.rivals.aggression >= 0.38 && track.rivals.aggression <= 0.65);
+    assert.equal(new Set(track.rivals.spawns.map((rival) => rival.id)).size, 3);
 
-  assert.deepEqual(
-    models.map((model) => Math.max(...model.segments.map((segment) => Math.abs(segment.curve)))),
-    expectedMaxCurve
-  );
-  assert.ok(
-    minimumPlacementGap(trainingValidation) >
-    minimumPlacementGap(neonGulch) &&
-    minimumPlacementGap(neonGulch) >
-    minimumPlacementGap(syndicateRun),
-    'decision spacing should tighten through the campaign'
-  );
+    const roadTypes = new Set(track.pieces.map(([type]) => type));
+    for (const required of ['straight', 'curve', 'hill', 'dirt', 'chicane']) {
+      assert.ok(roadTypes.has(required), `${track.id}: missing ${required} road`);
+    }
+    track.design.cycles.forEach((cycle, index) => {
+      assert.ok(cycle.from <= cycle.to, `${track.id}: inverted cycle ${cycle.id}`);
+      if (index > 0) {
+        assert.ok(
+          cycle.from > track.design.cycles[index - 1].to,
+          `${track.id}: overlapping cycle ${cycle.id}`,
+        );
+      }
+      assert.ok(cycle.safeLine && cycle.committedLine && cycle.flow);
+      assert.ok(
+        track.patterns.placements.some(({ at }) => at >= cycle.from && at <= cycle.to),
+        `${track.id}: cycle ${cycle.id} needs a launch`,
+      );
+      assert.ok(
+        track.objects.some(({ kind, at }) => (
+          kind === 'boost' && at >= cycle.from && at <= cycle.to
+        )),
+        `${track.id}: cycle ${cycle.id} needs a boost opportunity`,
+      );
+    });
+    for (const placement of track.patterns.placements) {
+      assert.ok(['ramp', 'rampRocks'].includes(placement.kind));
+      assert.ok(
+        track.objects.some((object) => (
+          object.kind === 'boost' && object.at < placement.at && object.at >= placement.at - 120
+        )),
+        `${track.id}: ramp at ${placement.at} needs a readable pre-launch boost`,
+      );
+    }
 
-  for (const track of tracks) {
     assert.equal(track.pieces[0][0], 'straight', `${track.id}: opening runway`);
     assert.ok(track.pieces[0][1] >= 25, `${track.id}: opening runway length`);
     assert.equal(track.pieces.at(-1)[0], 'straight', `${track.id}: finish recovery`);
@@ -198,11 +225,50 @@ test('campaign geometry preserves recovery beats around authored skill checks', 
         `${track.id}: more than two technical pieces without a recovery beat`
       );
     }
+
+    for (const zone of track.rivals.attackZones) {
+      const segments = model.segments.slice(zone.from, zone.to + 1);
+      assert.ok(segments.length >= 40, `${track.id}: attack zone must be readable`);
+      assert.ok(segments.every((segment) => segment.curve === 0));
+      assert.ok(segments.every((segment) => segment.p2.world.y === segment.p1.world.y));
+      assert.ok(segments.every((segment) => segment.sprites.every((sprite) => (
+        !['rock', 'ramp', 'cone', 'boost'].includes(sprite.key)
+      ))));
+      assert.ok(segments.every((segment) => !segment.launchApproach));
+    }
+
+    const collisionReach = TUNING.playerW + OBSTACLES.rock.w;
+    const threadObjects = track.objects.filter((object) => object.id.includes('thread-'));
+    assert.ok(threadObjects.length >= 6, `${track.id}: needs authored needle gates`);
+    assert.ok(
+      new Set(threadObjects.map((object) => object.at)).size >= 4,
+      `${track.id}: precision damage reads must recur through the course`,
+    );
+    for (const segment of model.segments) {
+      const rocks = segment.sprites.filter((sprite) => sprite.key === 'rock');
+      if (rocks.length === 0) continue;
+      assert.ok(
+        [-0.66, 0, 0.66].some((lane) => (
+          rocks.every((rock) => Math.abs(rock.offset - lane) >= collisionReach)
+        )),
+        `${track.id}: full-road rock wall at ${segment.index}`,
+      );
+    }
   }
 });
 
-test('training is the longer cone-only version of the story proving ground', () => {
-  assert.deepEqual(trainingLoop.pieces, trainingValidation.pieces);
+test('Story course construction is deterministic across retries', () => {
+  for (const track of [trainingValidation, neonGulch, syndicateRun]) {
+    const first = new RoadModel(TUNING);
+    const second = new RoadModel(TUNING);
+    first.buildFromData(track);
+    second.buildFromData(track);
+    assert.deepEqual(interactiveLayout(first), interactiveLayout(second), track.id);
+  }
+});
+
+test('Cone Control remains a focused school lesson beside the longer Story proving ground', () => {
+  assert.notDeepEqual(trainingLoop.pieces, trainingValidation.pieces);
   assert.equal(trainingLoop.laps, 2);
   assert.equal(trainingLoop.finish, 'laps');
   assert.equal(trainingLoop.objects.length, 60);
@@ -210,6 +276,9 @@ test('training is the longer cone-only version of the story proving ground', () 
   const model = new RoadModel(TUNING);
   model.buildFromData(trainingLoop);
   assert.ok(model.segments.length >= 1100, 'training lap should have room to settle between reads');
+  const storyModel = new RoadModel(TUNING);
+  storyModel.buildFromData(trainingValidation);
+  assert.ok(storyModel.segments.length > model.segments.length * 2);
 
   const interactive = model.segments.flatMap((segment) => segment.sprites)
     .filter((sprite) => sprite.def);
@@ -220,8 +289,8 @@ test('training is the longer cone-only version of the story proving ground', () 
 });
 
 test('Rival School turns the shared loop into a circulating three-rival score attack', () => {
-  assert.equal(TRAINING_TRACKS.length, 5);
-  assert.equal(TRAINING_TRACKS.at(-1).id, 'training-rivals');
+  assert.equal(TRAINING_TRACKS.length, 6);
+  assert.equal(TRAINING_TRACKS[4].id, 'training-rivals');
   assert.deepEqual(trainingRivals.pieces, trainingLoop.pieces);
   assert.equal(trainingRivals.laps, 1);
   assert.equal(trainingRivals.finish, 'objectives');
@@ -330,8 +399,10 @@ test('Cone Control separates its diagnostic from the cone-lined final hairpin', 
   assert.ok(hairpin.every((object) => object.at >= 1194 && object.at < 1278));
   assert.ok(setup.at(-1).offset > 0.5, 'setup line should stage the outside lane');
   assert.ok(
-    hairpin.every((object) => object.offset === 0.57),
-    'hairpin cones should hold one collectible right-lane line',
+    hairpin.every((object) => object.offset === 0.57 || (
+      object.id === 'hairpin-10' && object.offset === 0.6
+    )),
+    'hairpin cones should hold one right-lane line with a small late-apex allowance',
   );
 });
 
@@ -520,6 +591,31 @@ test('Air School preserves the shared loop and authors a safe speed-gated gap', 
       `rock row ${at} should close the complete road`,
     );
   }
+});
+
+test('Flight School begins airborne with only ten authored aerial rings', () => {
+  const flight = TRAINING_TRACKS[5];
+  assert.equal(flight.id, 'training-flight');
+  assert.equal(flight.unlock.type, 'story_platinum');
+  assert.equal(flight.laps, 1);
+  assert.equal(flight.flightTraining.ringCount, 10);
+  assert.equal(flight.flightTraining.airborneStart, true);
+  assert.equal(flight.startFinish, false);
+  assert.equal(flight.decoration.roadsidePosts, false);
+  const model = new RoadModel(TUNING);
+  model.buildFromData(flight);
+  const ramps = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.key === 'ramp');
+  const rings = model.segments.flatMap((segment) => segment.sprites)
+    .filter((sprite) => sprite.key === 'flight-ring');
+  assert.equal(ramps.length, 0);
+  assert.equal(rings.length, 10);
+  assert.equal(model.segments.some((segment) => segment.gate), false);
+  assert.equal(model.segments.some((segment) => segment.startLine), false);
+  assert.ok(flight.objects.every((object) => object.kind === 'flightRing'));
+  assert.ok(rings.every((ring) => ring.objectiveId === 'flight-rings'));
+  assert.ok(rings.every((ring) => ring.altitude >= 0.3 && ring.altitude <= 0.85));
+  assert.ok(model.segments.length > 2800);
 });
 
 test('Redline preserves the shared loop geometry and is no longer a placeholder', () => {

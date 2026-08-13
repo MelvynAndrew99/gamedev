@@ -7,6 +7,8 @@ import { RoadModel } from '../road/RoadModel.js';
 import { checkObstacleHit } from '../systems/Collision.js';
 import trainingHazardWeave from '../tracks/training-hazard-weave.json' with { type: 'json' };
 import trainingAirtime from '../tracks/training-airtime.json' with { type: 'json' };
+import trainingLoop from '../tracks/training-loop.json' with { type: 'json' };
+import syndicateRun from '../tracks/syndicate-run.json' with { type: 'json' };
 import { Player } from './Player.js';
 
 function drive(piece, controls, { startX = 0, speed = 0.9 } = {}) {
@@ -107,10 +109,15 @@ const NEUTRAL_INPUT = {
   airbrakeL: false, airbrakeR: false, nitro: false,
 };
 
-function completeJump({ speed = 1, glide = 0, boosted = false } = {}) {
+function completeJump({
+  speed = 1,
+  glide = 0,
+  boosted = false,
+  liftMultiplier = 1,
+} = {}) {
   const player = new Player(TUNING);
   player.speed = TUNING.maxSpeed * speed;
-  player.launch({ boosted });
+  player.launch({ boosted, liftMultiplier });
   let landingEvents = 0;
   for (let frame = 0; frame < 300 && (player.airborne || frame === 0); frame++) {
     player.update(1 / 120, { ...NEUTRAL_INPUT, glide }, flatModel());
@@ -245,6 +252,79 @@ test('Air School teaches nose-down precision by placing boost after the short la
   assert.equal(neutral.collected, false);
 });
 
+test('Flight School sustained flight is explicit and does not alter ordinary jumps', () => {
+  const normal = completeJump({ speed: 1, glide: 0 });
+  assert.equal(normal.player.airborne, false, 'ordinary jump still lands');
+
+  const player = new Player(TUNING);
+  player.speed = TUNING.maxSpeed;
+  player.beginSustainedFlight({ boosted: true });
+  for (let frame = 0; frame < 600; frame++) {
+    player.update(
+      1 / 60,
+      { ...NEUTRAL_INPUT, glide: frame < 300 ? 1 : -1 },
+      flatModel(),
+    );
+  }
+  assert.equal(player.airborne, true, 'sequel preview remains in flight');
+  assert.equal(player.sustainedFlight, true);
+  assert.equal(player.jumpElapsed > 9.9, true);
+});
+
+test('Flight School aircraft is not centrifugally pushed by the road below', () => {
+  const curved = {
+    trackLength: 1e9,
+    findSegment: () => ({
+      curve: 8,
+      surface: 'road',
+      p1: { world: { y: 0 } },
+      p2: { world: { y: 0 } },
+    }),
+  };
+  const flight = new Player(TUNING);
+  flight.speed = TUNING.maxSpeed;
+  flight.beginSustainedFlight();
+  flight.update(1 / 60, { ...NEUTRAL_INPUT, throttle: 1 }, curved);
+  assert.equal(flight.x, 0);
+
+  const jump = new Player(TUNING);
+  jump.speed = TUNING.maxSpeed;
+  jump.launch();
+  jump.update(1 / 60, { ...NEUTRAL_INPUT, throttle: 1 }, curved);
+  assert.notEqual(jump.x, 0, 'ordinary racing jumps still inherit course pressure');
+});
+
+test('Flight School preserves racer inputs as useful arcade flight tools', () => {
+  const model = flatModel();
+  const neutral = new Player(TUNING);
+  const controlled = new Player(TUNING);
+  for (const player of [neutral, controlled]) {
+    player.speed = TUNING.maxSpeed;
+    player.beginSustainedFlight();
+  }
+
+  neutral.update(0.25, { ...NEUTRAL_INPUT, throttle: 1 }, model);
+  controlled.update(0.25, {
+    ...NEUTRAL_INPUT,
+    steer: 1,
+    brake: 1,
+    airbrakeR: true,
+    boostActive: false,
+  }, model);
+  assert.ok(controlled.x > 0.7, 'steer plus airbrake commits to a fast bank');
+  assert.ok(controlled.speed < neutral.speed, 'aerial brake buys setup time with speed');
+
+  const boosted = new Player(TUNING);
+  boosted.speed = TUNING.maxSpeed;
+  boosted.beginSustainedFlight({ boosted: true });
+  boosted.update(0.25, {
+    ...NEUTRAL_INPUT,
+    boostActive: true,
+    boostCeiling: TUNING.boostTierCeilings[0],
+  }, model);
+  assert.ok(boosted.speed > neutral.speed, 'familiar boost remains useful in flight');
+});
+
 test('boost() gives a capped activation kick instead of teleporting to redline', () => {
   const player = new Player(TUNING);
   player.speed = TUNING.maxSpeed * 0.5;
@@ -316,6 +396,74 @@ test('Cone Control final hairpin requires steering plus the matching shoulder', 
       );
     }
   }
+});
+
+test('Cone Control final hairpin can collect its entire cone line in one skilled hold', () => {
+  const model = new RoadModel(TUNING);
+  model.buildFromData(trainingLoop);
+  const player = new Player(TUNING);
+  player.position = 1140 * TUNING.segmentLength - TUNING.playerZ;
+  player.x = 0.48;
+  player.speed = TUNING.maxSpeed;
+  const contacts = [];
+
+  while (model.findSegment(player.position + TUNING.playerZ).index <= 1274) {
+    const previous = { position: player.position, x: player.x };
+    const correcting = player.x > 0.48;
+    player.update(1 / 60, {
+      ...NEUTRAL_INPUT,
+      throttle: 1,
+      steer: correcting ? -1 : 0,
+      airbrakeL: correcting,
+    }, model);
+    const contact = checkObstacleHit(player, model, TUNING, previous);
+    if (contact) contacts.push(contact.trackObjectId);
+  }
+
+  assert.deepEqual(contacts, [
+    'setup-09', 'setup-10', 'setup-11', 'setup-12',
+    'hairpin-01', 'hairpin-02', 'hairpin-03', 'hairpin-04',
+    'hairpin-05', 'hairpin-06', 'hairpin-07', 'hairpin-08',
+    'hairpin-09', 'hairpin-10', 'hairpin-11', 'hairpin-12',
+  ]);
+});
+
+test('Syndicate Run qualifier target leaves room for a clean no-boost driving line', () => {
+  const model = new RoadModel(TUNING);
+  model.buildFromData(syndicateRun);
+  const player = new Player(TUNING);
+  let elapsed = 0;
+  let completed = false;
+
+  while (elapsed < syndicateRun.qualifier.targetSeconds) {
+    const segment = model.findSegment(player.position + TUNING.playerZ);
+    const speedPercent = player.speed / TUNING.maxSpeed;
+    // Feed-forward cancels the known centrifugal term; the small centering
+    // term models a skilled analog correction. Airbrake joins only when a
+    // sharp curve asks for more than ordinary steering can supply.
+    const requested = segment.curve * speedPercent * TUNING.centrifugal - player.x * 2;
+    const steer = Math.max(-1, Math.min(1, requested));
+    const shoulder = Math.abs(requested) > 1;
+    const previous = player.position;
+    player.update(1 / 60, {
+      ...NEUTRAL_INPUT,
+      throttle: 1,
+      steer,
+      airbrakeL: shoulder && requested < 0,
+      airbrakeR: shoulder && requested > 0,
+    }, model);
+    elapsed += 1 / 60;
+    if (player.position < previous) {
+      completed = true;
+      break;
+    }
+  }
+
+  assert.equal(completed, true, 'a clean line must cross the finish before the clock');
+  assert.ok(
+    elapsed <= syndicateRun.qualifier.targetSeconds - 5,
+    `qualifier should preserve at least five seconds of execution allowance, got ${elapsed.toFixed(2)}s`,
+  );
 });
 
 function driveHazardMasterySector({ from, to, startX, controls }) {

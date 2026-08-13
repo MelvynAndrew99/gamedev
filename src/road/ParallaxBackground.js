@@ -11,11 +11,13 @@
 
 export class ParallaxBackground {
   constructor(scene, width, height, environment, segmentLength) {
+    this.scene = scene;
     this.w = width;
     this.h = height;
     this.environment = environment;
     this.segmentLength = segmentLength;
-    this.sky = scene.add.graphics().setDepth(-6);
+    this.sky = scene.add.graphics().setDepth(-7);
+    this.plate = this.createPlate(environment);
     this.atmosphere = scene.add.graphics().setDepth(-5);
     this.stars = makeStars(environment, width, height);
     this.layers = environment.layers.map((config, index) => ({
@@ -28,7 +30,27 @@ export class ParallaxBackground {
     this.drawAtmosphere(0, 0);
   }
 
+  displayObjects() {
+    return [
+      this.sky,
+      this.plate,
+      this.atmosphere,
+      ...this.layers.map((layer) => layer.graphics),
+    ].filter(Boolean);
+  }
+
+  setAlpha(alpha) {
+    this.displayObjects().forEach((object) => object.setAlpha(alpha));
+    return this;
+  }
+
+  destroy() {
+    this.displayObjects().forEach((object) => object.destroy());
+  }
+
   drawSky() {
+    this.sky.clear();
+    if (this.plate) return;
     const bands = this.environment.colors.skyBands;
     const horizon = this.h / 2;
     const bandH = horizon / bands.length;
@@ -38,6 +60,28 @@ export class ParallaxBackground {
       this.sky.fillRect(0, index * bandH, this.w, height);
     });
 
+  }
+
+  setEnvironment(environment) {
+    this.environment = environment;
+    this.plate?.destroy();
+    this.plate = this.createPlate(environment);
+    this.stars = makeStars(environment, this.w, this.h);
+    environment.layers.forEach((config, index) => {
+      if (!this.layers[index]) return;
+      this.layers[index].config = config;
+      this.layers[index].shapes = makeShapes(config, environment.seed + index * 997);
+    });
+    this.drawSky();
+    this.drawAtmosphere(0, 0);
+  }
+
+  createPlate(environment) {
+    const key = environment.backgroundAsset;
+    if (!key || !this.scene.textures?.exists(key)) return null;
+    return this.scene.add.image(this.w / 2, this.h / 2, key)
+      .setDisplaySize(this.w * 1.03, this.h * 1.03)
+      .setDepth(-6);
   }
 
   drawAtmosphere(curveOffset, horizonOffset) {
@@ -69,6 +113,12 @@ export class ParallaxBackground {
   }
 
   render(distance, curveOffset, horizonOffset = 0) {
+    if (this.plate) {
+      this.plate.setPosition(
+        this.w / 2 - curveOffset * 0.08,
+        this.h / 2 + horizonOffset * 0.12,
+      );
+    }
     this.drawAtmosphere(curveOffset, horizonOffset);
     for (const layer of this.layers) {
       const { graphics, config, shapes } = layer;
@@ -140,7 +190,7 @@ function wrap(value, min, max) {
 }
 
 function drawTerrain(g, config, shapes, tileX, baseY, screenHeight) {
-  g.fillStyle(config.color, 1);
+  g.fillStyle(config.color, config.alpha ?? 1);
   g.beginPath();
   g.moveTo(tileX, screenHeight);
   // First and last samples share a height, so adjacent tiles meet as one
@@ -155,12 +205,13 @@ function drawTerrain(g, config, shapes, tileX, baseY, screenHeight) {
 }
 
 function drawCity(g, config, shapes, tileX, baseY, screenHeight) {
-  g.fillStyle(config.color, 1);
+  const alpha = config.alpha ?? 1;
+  g.fillStyle(config.color, alpha);
   g.fillRect(tileX, baseY, config.tileWidth + 1, screenHeight - baseY);
   for (const building of shapes) {
     const x = Math.round(tileX + building.x);
     const y = Math.round(baseY - building.height);
-    g.fillStyle(config.color, 1);
+    g.fillStyle(config.color, alpha);
     g.fillRect(x, y, building.width + 1, building.height + 1);
 
     if (building.antenna) {

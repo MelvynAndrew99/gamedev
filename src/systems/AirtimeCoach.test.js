@@ -124,6 +124,20 @@ test('authored success and failure feedback takes priority without changing cont
   assert.equal(afterGap.title, 'TRY AGAIN');
 });
 
+test('Flight School introduces dedicated persistent-flight instruments', () => {
+  const ready = airtimeCoachView({ flightAssist: true }, 'gamepad');
+  assert.equal(ready.title, 'FLIGHT SYSTEMS READY');
+  assert.equal(ready.detail, 'ENTER THE FIRST RING');
+  assert.match(ready.controls, /STICK FLY/);
+  const flying = airtimeCoachView({
+    flightAssist: true, flightPhase: 'flight', altitude: 0.62,
+    ringsHit: 4, ringsTotal: 10,
+  }, 'gamepad');
+  assert.equal(flying.title, 'FLIGHT MODE');
+  assert.equal(flying.value, 'RINGS 4/10');
+  assert.match(flying.controls, /BRAKE/);
+});
+
 test('every live detail fits the compact one-line coach budget', () => {
   const views = [
     airtimeCoachView(),

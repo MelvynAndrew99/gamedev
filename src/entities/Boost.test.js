@@ -158,6 +158,14 @@ test('the bank never exceeds nitroMax or drops below zero', () => {
   assert.equal(boost.slots, 0);
 });
 
+test('a one-race fourth slot increases capacity without changing the tuning singleton', () => {
+  const boost = new Boost(TUNING, 4);
+  for (let index = 0; index < 8; index++) boost.collect();
+  assert.equal(boost.capacity, 4);
+  assert.equal(boost.slots, 4);
+  assert.equal(TUNING.nitroMax, 3);
+});
+
 test('ceilingMultiplier eases back down to exactly overspeedCap after the decay tail', () => {
   const boost = new Boost(TUNING);
   boost.collect();

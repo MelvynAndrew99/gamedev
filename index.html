@@ -3,17 +3,47 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Destruction Racer</title>
+    <meta
+      name="description"
+      content="A fast, music-driven 16-bit arcade racer. Master Race School, challenge rivals in the Rematch Cup, and chase an endless distance record."
+    />
+    <meta name="theme-color" content="#09051f" />
+    <meta name="application-name" content="Rhythmic Ride" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Rhythmic Ride" />
+    <meta
+      property="og:description"
+      content="Learn the line, hit the rhythm, and outrun the Rematch Cup in a neon 16-bit arcade racer."
+    />
+    <meta property="og:image" content="./assets/title-city-bg-v2.png" />
+    <meta property="og:image:width" content="1448" />
+    <meta property="og:image:height" content="1086" />
+    <meta property="og:image:alt" content="A neon city and reflective racing grid at sunset." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Rhythmic Ride" />
+    <meta
+      name="twitter:description"
+      content="A fast, music-driven 16-bit arcade racer built for the game jam."
+    />
+    <meta name="twitter:image" content="./assets/title-city-bg-v2.png" />
+    <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml" />
+    <title>Rhythmic Ride</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; min-height: 100%; }
       body {
         background: #000;
         font-family: Arial, sans-serif;
         display: flex;
-        height: 100vh;
-        overflow: hidden;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        overflow: auto;
       }
       #debug-panel {
+        position: fixed;
+        z-index: 100;
+        inset: 0 auto 0 0;
         background: rgba(0, 0, 0, 0.9);
         border-right: 2px solid #00e5ff;
         padding: 20px;
@@ -21,8 +51,12 @@
         overflow-y: auto;
         color: #00e5ff;
         font-size: 12px;
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.65);
       }
-      #debug-panel h2 { font-size: 16px; margin-bottom: 12px; text-decoration: underline; }
+      #debug-panel[hidden] { display: none; }
+      #debug-panel h2 { font-size: 16px; margin-bottom: 4px; text-decoration: underline; }
+      .lab-shortcut { color: #fff; line-height: 1.5; margin-bottom: 12px; }
+      .lab-controls-copy { color: #fff; line-height: 1.55; margin: 12px 0 4px; }
       .debug-section { border-top: 1px solid rgba(0, 229, 255, 0.65); }
       .debug-section:last-of-type { border-bottom: 1px solid rgba(0, 229, 255, 0.65); }
       .debug-section summary {
@@ -44,18 +78,40 @@
         padding: 2px 6px; margin-top: 5px; font-weight: bold; border-radius: 3px;
       }
       #game-container {
-        flex: 1; display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
+        width: 800px;
+        height: 600px;
+        flex: 0 0 auto;
+        transition: transform 140ms ease-out;
       }
-      #game { background: #000; }
-      .controls { margin-top: 20px; color: #fff; text-align: center; }
-      .controls h2 { margin: 0 0 10px 0; }
-      .controls p { margin: 5px 0; }
+      #game { width: 800px; height: 600px; background: #000; }
+      #game canvas { display: block; }
+      #audio-toast {
+        position: fixed;
+        z-index: 90;
+        left: 50%;
+        bottom: 24px;
+        transform: translate(-50%, 8px);
+        padding: 9px 18px;
+        border: 2px solid #00e5ff;
+        background: rgba(5, 7, 16, 0.94);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 100ms linear, transform 100ms ease-out;
+      }
+      #audio-toast.visible { opacity: 1; transform: translate(-50%, 0); }
+      @media (min-width: 1080px) {
+        body.projection-lab-open #game-container { transform: translateX(125px); }
+      }
     </style>
   </head>
   <body>
-    <div id="debug-panel">
-      <h2>🛠 Projection Lab</h2>
+    <aside id="debug-panel" aria-label="Projection Lab" hidden>
+      <h2>Projection Lab</h2>
+      <p class="lab-shortcut">F2 / Ctrl+Shift+L toggles this panel.</p>
 
       <details class="debug-section" open>
         <summary>TRACK</summary>
@@ -197,8 +253,8 @@
         <div class="debug-section-body">
           <div class="debug-control">
             <label for="carScale">Car Size</label>
-            <input type="range" id="carScale" min="1.5" max="8" value="5" step="0.1" />
-            <div class="value" id="carScaleValue">5</div>
+            <input type="range" id="carScale" min="0.65" max="3.25" value="1.4" step="0.05" />
+            <div class="value" id="carScaleValue">1.4</div>
           </div>
         </div>
       </details>
@@ -214,17 +270,17 @@
           </p>
         </div>
       </details>
-    </div>
+      <p class="lab-controls-copy">
+        Keyboard: arrows drive, C boosts, Z or X airbrakes, Escape pauses, M mutes.<br />
+        Controller: stick steers, triggers drive, shoulders airbrake, Start pauses.<br />
+        Hit cones. Avoid rocks.
+      </p>
+    </aside>
 
     <div id="game-container">
       <div id="game"></div>
-      <div class="controls">
-        <h2>Destruction Racer</h2>
-        <p><strong>↑</strong> gas &nbsp; <strong>↓</strong> brake &nbsp; <strong>← →</strong> steer &nbsp; <strong>Z / X</strong> airbrakes</p>
-        <p>🎮 stick steer &nbsp; R2 gas &nbsp; L2 brake &nbsp; <strong>L1 / R1 airbrakes</strong> &nbsp; □ nitro</p>
-        <p>Cones warn. Rocks collect.</p>
-      </div>
     </div>
+    <div id="audio-toast" role="status" aria-live="polite"></div>
 
     <script type="module" src="/src/game.js"></script>
   </body>

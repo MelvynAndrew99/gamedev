@@ -1,4 +1,4 @@
-# Destruction Racer — Music Design Brief
+# Rhythmic Ride — Music Design Brief
 
 ## Core promise
 
@@ -23,7 +23,35 @@ The target is **catchy, danceable, futuristic, and dynamic**. A track should
 feel good under active play and still reward someone listening to several
 loops on headphones.
 
-## Reference standard: “Controlled Burn”
+The Music Player ships one strongest production mix per composition.
+Superseded arrangements are removed from the runtime library so players do not
+have to distinguish near-duplicate versions during a jam-sized campaign.
+
+The five ordinary Race School lessons use one composition with five lesson mixes,
+not five unrelated
+songs. Course variants may shift tempo by at most 8 BPM and transpose the
+motif by at most four semitones; arrangement changes should identify the skill
+(clearer collision space, acceleration pulse, airy register, or rival breakbeat)
+while `Open Circuit` remains recognizable within one phrase.
+
+Flight School is the deliberate exception because it is a separate post-game
+location and sequel preview rather than another driving lesson. Its original
+theme, `Cloudline Promise`, uses a D-major I–V–vi–IV synth-pop lift at 140 BPM,
+with syncopated octave bass, glassy keys, a gated supporting arp, and a chorus
+that grows from eighth-note motion into a 16th-note payoff. It must not reuse
+Open Circuit's A-minor harmony or hook. The distinct song tells the player that
+the rules and the world have changed before the flight mechanic fully opens.
+For the jam build, the Flight School course remains a non-launchable `SOON`
+preview, but `Cloudline Promise` is deliberately available in the unlocked
+Music Player so the finished audio is not hidden with the work-in-progress map.
+
+## Reference standards: “Night Drive” and “Controlled Burn”
+
+`src/audio/tracks/titleTheme.js` (`Night Drive`) is the production clarity
+reference: a short hook states itself immediately, bass stays physical without
+masking it, and percussion creates motion at restrained gain. A Story cue may
+be longer, heavier, or more sectional, but its main idea must remain at least
+as easy to follow. Do not copy Night Drive's F-minor writing or hook contour.
 
 `src/audio/tracks/syndicateRunTheme.js` is the current reference for musical
 hierarchy and dynamic pacing. Do not copy its E-minor progression, hook, riff,
@@ -213,7 +241,12 @@ engine default:
 | Field | Controls | Practical use |
 | --- | --- | --- |
 | `bassGain` | Synth-bass note gain | Reduce low-end crowding or distinguish interlude/drive |
-| `leadGain` | Default/chip lead gain | Bring a square-wave hook forward; other lead synths currently use fixed voice gain |
+| `bassCutoff` | Synth-bass low-pass cutoff in Hz | Keep saw/FM edge out of the hook's low-mid register |
+| `bassHighpass` | Optional synth-bass high-pass in Hz | Trim speaker-moving sub energy for a specific mix without thinning every cue |
+| `leadGain` | Chip, saw, metal, guitar, or keys lead gain | Keep the hook forward without raising the whole music bus |
+| `arpGain` | Gated motion-arp gain | Preserve speed texture below the melody |
+| `chugGain` | Cyber-chug gain | Control low-mid density independently of bass |
+| `guitarGain` | Supporting power-chord gain | Keep acoustic-like accents behind synthetic voices |
 | `kickGain` | Kick gain | Keep pulse below melody or enlarge a climax |
 | `snareGain` | Snare noise/body gain | Scale backbeat between half-time and payoff |
 | `hatGain` | Closed/open hat gain | Preserve motion without high-frequency fatigue |
@@ -240,14 +273,24 @@ changing individual patches.
 
 ## Repeated gameplay audio
 
-Frequently repeated contacts use variation pools, not one sample or patch with
-identical settings. Change at least pitch contour, filtering, timbre, level, or
-stereo position, and prevent immediate repetition. Cone destruction currently
-uses five synthetic composite-impact variants. Each one covers a broad range by
-layering a low body thump, a midrange plastic knock, and a short filtered high
-crack; variation changes the balance without turning successive contacts into
-pitched chirps. Milestones may add grounded harmony or a fanfare, but should not
-erase the physical-impact family shared by ordinary hits.
+Frequently repeated gameplay cues use variation pools, not one sample or patch
+with identical settings. Every recurring family ships with at least three
+variants and prevents immediate repetition. Variation changes pitch contour,
+filtering, envelope, timbre, and/or stereo position—not merely gain.
+
+Each cue is a composite with three perceptual jobs:
+
+- **low body** supplies weight and physical consequence;
+- **mid material** identifies plastic, chassis, engine, tire, or reward tone;
+- **high detail** supplies crack, air, debris, speed, or celebratory sparkle.
+
+Cone hits, boosts and speed lines, rival warnings/contact/takedowns, time
+bonuses, glass and hull damage, ramp takeoff/landing/misses, pickups, and
+completion cues all follow this contract. Their balances remain distinct: a
+boost favors sustained air, damage favors body and material, and rewards favor
+mid/high harmony without losing a short low anchor. The shared mix limiter is
+still only peak protection; do not compensate for weak layers by making the
+whole composite louder.
 
 ## Futuristic 16-bit palette
 

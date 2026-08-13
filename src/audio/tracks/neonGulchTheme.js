@@ -174,11 +174,48 @@ const SECTIONS = [
   final(RIFF_A, false), final(RIFF_A, false), final(RIFF_A, false), final(RIFF_A, true),  // push, riff comes home
 ];
 
-export const NEON_GULCH_THEME = {
+// Base arrangement used to produce the sole shipped Open Road mix.
+const NEON_GULCH_BASE_THEME = Object.freeze({
   bpm: 160,
   stepsPerBar: 16,
   // Light swing on the off-beat 16ths — the funk pocket. Small on purpose:
   // at 160 BPM a heavy shuffle would fight the racing pulse.
   swing: 0.12,
-  bars: SECTIONS.map((section, i) => bar(i, section)),
-};
+  bars: Object.freeze(SECTIONS.map((section, i) => Object.freeze(bar(i, section)))),
+});
+
+function productionBar(source, index) {
+  const intro = index < 2;
+  const acceleration = index >= 2 && index < 4;
+  const firstHook = index >= 4 && index < 8;
+  const breakdown = index >= 12 && index < 15;
+  const fill = index === 15;
+  const payoff = index >= 16;
+
+  return Object.freeze({
+    ...source,
+    // State the riff by itself for two bars before the gated speed texture
+    // returns. That makes the melody memorable instead of merely brighter.
+    arp: firstHook && index < 6 ? undefined : source.arp,
+    bassGain: breakdown ? 0.6 : intro ? 0.68 : payoff ? 0.76 : 0.72,
+    bassCutoff: breakdown ? 700 : payoff ? 1040 : 940,
+    bassHighpass: 49,
+    leadGain: breakdown ? 0.84 : intro || acceleration ? 0.72 : payoff ? 1.18 : 1.12,
+    arpGain: payoff ? 0.52 : 0.46,
+    guitarGain: 0.62,
+    padGain: breakdown ? 0.46 : intro ? 0.4 : 0.34,
+    padCutoff: breakdown ? 680 : intro ? 980 : payoff ? 1980 : fill ? 1760 : 1580,
+    sidechainDepth: payoff ? 0.5 : 0.56,
+    kickGain: breakdown ? 0.5 : payoff ? 0.72 : 0.66,
+    snareGain: breakdown ? 0.46 : fill ? 0.72 : 0.62,
+    hatGain: breakdown ? 0.36 : payoff ? 0.48 : 0.44,
+  });
+}
+
+// "Neon Gulch — Open Road Mix": same E-major song and recognizable
+// double-hit/octave hook, now with controlled bass, quieter hats/arp, and a
+// deliberately exposed first hook statement modeled on Night Drive's clarity.
+export const NEON_GULCH_THEME = Object.freeze({
+  ...NEON_GULCH_BASE_THEME,
+  bars: Object.freeze(NEON_GULCH_BASE_THEME.bars.map(productionBar)),
+});

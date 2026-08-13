@@ -186,7 +186,7 @@ test('destroyed training glass loses the trophy but still completes and unlocks 
   };
 
   try {
-    const result = submitTrainingResult(track, 2, 100, { damageHits: 4 });
+    const result = submitTrainingResult(track, 2, 100, { damageHits: 4, timestamp: 1000 });
     assert.equal(result.trophy, null);
     assert.equal(result.best.completed, true);
     assert.equal(result.best.stars, 0);
@@ -207,8 +207,8 @@ test('training persistence keeps only the best lesson result and does not farm s
 
   try {
     const track = { id: 'test-loop', objects: Array(30), scoring: { ...scoring, version: 1 } };
-    const first = submitTrainingResult(track, 26, 90);
-    const replay = submitTrainingResult(track, 20, 80);
+    const first = submitTrainingResult(track, 26, 90, { timestamp: 1000 });
+    const replay = submitTrainingResult(track, 20, 80, { timestamp: 2000 });
 
     assert.equal(first.newBest, true);
     assert.equal(replay.newBest, false);
@@ -223,9 +223,60 @@ test('training persistence keeps only the best lesson result and does not farm s
       offTrackEvents: 0,
       boostedTakedowns: 0,
       trophy: 'silver',
+      trophyEarnedAt: 1000,
       stars: 2,
     });
     assert.equal(totalTrainingStars(), 2);
+  } finally {
+    if (originalStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = originalStorage;
+  }
+});
+
+test('school trophy dates record the earned rank and do not change for a better same-rank replay', () => {
+  const values = new Map();
+  const originalStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const track = { id: 'dated-loop', objects: Array(30), scoring: { ...scoring, version: 1 } };
+
+  try {
+    submitTrainingResult(track, 26, 90, { timestamp: 1000 });
+    submitTrainingResult(track, 27, 80, { timestamp: 2000 });
+    assert.equal(getTrainingResult(track.id).trophyEarnedAt, 1000);
+
+    submitTrainingResult(track, 30, 79, { timestamp: 3000 });
+    assert.equal(getTrainingResult(track.id).trophy, 'gold');
+    assert.equal(getTrainingResult(track.id).trophyEarnedAt, 3000);
+  } finally {
+    if (originalStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = originalStorage;
+  }
+});
+
+test('legacy trophies keep an unknown date until the player earns a higher rank', () => {
+  const values = new Map();
+  const originalStorage = globalThis.localStorage;
+  const track = { id: 'legacy-loop', objects: Array(30), scoring: { ...scoring, version: 1 } };
+  values.set('destruction-racer.training.v1', JSON.stringify({
+    [track.id]: {
+      version: 1, completed: true, bestProgress: 26, total: 30, bestTime: 90,
+      damageHits: 0, conesMissed: 0, offTrackEvents: 0, boostedTakedowns: 0,
+      trophy: 'silver', stars: 2,
+    },
+  }));
+  globalThis.localStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+
+  try {
+    submitTrainingResult(track, 27, 80, { timestamp: 2000 });
+    assert.equal(getTrainingResult(track.id).trophyEarnedAt, null);
+    submitTrainingResult(track, 30, 79, { timestamp: 3000 });
+    assert.equal(getTrainingResult(track.id).trophyEarnedAt, 3000);
   } finally {
     if (originalStorage === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = originalStorage;
@@ -273,6 +324,30 @@ test('a staged placeholder is visible in the curriculum but remains locked', () 
       },
     ];
     submitTrainingResult(tracks[0], 30, 90);
+    assert.equal(highestUnlockedTrainingIndex(tracks), 0);
+  } finally {
+    if (originalStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = originalStorage;
+  }
+});
+
+test('a coming-soon course stays out of sequential release progression', () => {
+  const values = new Map();
+  const originalStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+
+  try {
+    const tracks = [
+      { id: 'released', objects: [], scoring: { ...scoring, version: 1 } },
+      {
+        id: 'preview', status: 'coming_soon', objects: [],
+        scoring: { ...scoring, version: 1 },
+      },
+    ];
+    submitTrainingResult(tracks[0], 10, 90);
     assert.equal(highestUnlockedTrainingIndex(tracks), 0);
   } finally {
     if (originalStorage === undefined) delete globalThis.localStorage;

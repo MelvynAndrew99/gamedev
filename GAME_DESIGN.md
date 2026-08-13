@@ -1,8 +1,8 @@
-# Destruction Racer — Track Design Brief
+# Rhythmic Ride — Track Design Brief
 
 ## Core promise
 
-Destruction Racer is a pseudo-3D, flow-first arcade racer. Controlling the
+Rhythmic Ride is a pseudo-3D, flow-first arcade racer. Controlling the
 car at speed is the main pleasure. Track objects create readable decisions
 without repeatedly stopping the player's momentum.
 
@@ -54,12 +54,11 @@ release. Do it once; repetition should come from driving, not recurring panels.
 
 ## Object language
 
-- **Cones are danger indicators in Story and Endless.** A line of ordinary
-  cones says that rocks are closing that lane. Cones never announce ramps,
-  nitro pickups, or ground zippers. They are harmless and grant no economy
-  reward. Objective-linked cones are the documented Training mode exception:
-  the HUD explicitly asks the player to hit them, and contact grants persistent
-  objective progress, points, and impact feedback. See
+- **Story and Training cones are authored targets.** Every one has a stable ID,
+  belongs to a visible objective, and rewards deliberate contact with progress,
+  points, and impact feedback. They never act as warnings. Endless alone keeps
+  ordinary warning cones: a line says rocks are closing that lane, never that a
+  ramp, nitro pickup, or ground zipper follows. See
   [training_levels.md](./training_levels.md).
 - **Rocks are momentum hazards.** They punish an unread or poorly executed
   line. They should not create unavoidable full-road walls.
@@ -87,7 +86,7 @@ release. Do it once; repetition should come from driving, not recurring panels.
 
 A strong section usually follows:
 
-1. **Read** — show geometry and cone warnings.
+1. **Read** — reveal geometry, route objects, and any Endless warning cones.
 2. **Choose** — present a safe line and a committed line.
 3. **Execute** — curve, zipper, ramp, hazard, or surface test.
 4. **Pay off** — speed, air, combo, shortcut feeling, or objective progress.
@@ -145,9 +144,121 @@ one compact ramp swoosh hands the audio mix to a single collision-resolved
 landing beat. Held-boost audio also yields at ramp contact while its physics
 continue through flight. Same-frame boost
 and ramp contact merge into one launch beat instead of stacking popups, shakes,
-or risers. Training result screens
-explicitly offer Retry and Next Track instead of treating completion as an
-automatic return to the title.
+or risers. Training result screens explicitly offer Retry and Race School.
+Completion returns to the course grid with the finished lesson selected rather
+than launching the next lesson automatically.
+
+Air School remains the fourth normal sequential lesson, followed by Rival School.
+A separate sixth course, Flight School, remains visible in the jam build as a
+`SOON` preview tile. It cannot be launched from the player-facing Race School
+menu and is excluded from School trophy totals even when every Story Rival Race
+is Platinum. Its implementation remains available through Projection Lab for
+development, and its `Cloudline Promise` theme remains playable in the unlocked
+Music Player. See `FLIGHT_SCHOOL_README.md` for the post-jam handoff and the
+steps required to restore its original Story-Platinum release gate.
+Flight School is not an extension of Air School and is never added to Endless,
+Story, or the ordinary Race School courses. It is a self-contained post-game
+thank-you and a playable preview of the paid sequel. The familiar car, boost,
+music, precision language, and existing 5×3 steering/pitch sprite sheet carry
+forward, but the player begins Flight School already airborne at cruise speed.
+There is no downhill launch run, ramp, chasm, road-surface lesson, or missed-
+takeoff restart. The course teaches flight from its first controllable frame.
+
+Steering banks left/right, W/S or the vertical stick controls pitch and altitude,
+Circle/B (or the normal brake input) scrubs airspeed, and the existing boost adds
+afterburner thrust. The lesson begins with a full three-slot boost bank rather
+than placing ground pickups before flight. Forward flight is automatic, so
+throttle is not an extra lesson requirement. Ten large neon flight rings form the
+complete objective route. Their early placements teach altitude gently before
+later rings ask for combined vertical and lateral precision. A ring miss lowers
+the result but does not destroy the player: Bronze requires six, Silver eight,
+and Gold all ten.
+
+Flight response is deliberately arcade-readable rather than simulated. Pitch
+quickly commands a bounded climb or dive rate, then self-levels when released;
+bank follows the horizontal input with stronger shoulder-airbrake commitment.
+The craft retains forward momentum, familiar boost adds afterburner speed, and
+the aerial brake trades that speed for setup time. The middle route passes
+through Aurora Concourse, a wide open-atrium building with target rings fully
+inside its entrance and exit. Flying through is the showcase line, while a
+missed ring leaves a safe exterior route and costs only trophy progress.
+
+Flight School takes place at Aurora Skyport, canonically separate from Race
+School's coastal proving ground. It is an inhabited highland academy district,
+not an open-sky race course: dark steel towers, habitat terraces, skybridges,
+misty green terrain, and a narrow cyan transit spine all belong to the same
+physical location. Aurora Concourse spans that route as a monumental open
+atrium; the craft approaches, enters, and exits its solid projected frame while
+following rings five and six. That transit spine exists only in the environment
+art: Flight School draws no procedural road, translucent guide channel, roadside
+posts, checkered line, or start/finish gantry over it.
+
+The visual hierarchy uses near-black navy, graphite, steel blue, electric cyan,
+ice white, and restrained amber windows. Violet, magenta, and coral are not the
+level's dominant atmosphere. The project-owned generated plate is stored as
+`public/assets/flight-school-city-v2.png`. It was generated with the two local
+concept paintings as palette, architecture, and composition references while
+explicitly excluding vehicles, HUD, text, rings, logos, floating light strips,
+and recognizable third-party locations or trade dress. Live road projection,
+architectural occlusion, rings, vehicle, motion, and HUD remain separate game
+layers rather than being baked into the image.
+
+Flight School has its own modern instrument layout instead of inheriting Air
+School's coach card. A chamfered upper-left mode/ring read, thin top course
+progress rail, and compact lower-right speed read keep the center flight
+corridor open. The authored rings themselves are the flight targets; no central
+crosshair or targeting reticle is drawn. During sustained flight, the existing atlas
+bank and pitch poses plus continuous engine thrust communicate motion. Finite
+jump squash/stretch, arc lift, ground shadow, apex halo, hang-time tiers,
+active-aero vanes, landing burst, and `AIRTIME`/`LANDED` copy remain exclusive
+to ordinary jumps and Air School.
+
+When Flight School is restored after the jam, completing the one-run course
+completes the game and displays a thank-you/sendoff
+for *Rhythmic Ride*, followed by the original teaser: “THE ROAD WAS ONLY THE
+BEGINNING… FLIGHT RETURNS IN RHYTHMIC RIDE 2.” Flight School awards its normal
+training trophy but adds no repeatable economy payout and unlocks no further
+content. Its purpose is to end this free game on a new mechanical promise and
+leave players interested in the sequel, not to silently change the base game's
+racing or Endless rules.
+
+The Trophy Room has two shoulder-tabbed pages. `L`/`R` (or keyboard `Q`/`E`)
+switch between School Trophies and Player Records. The first page contains only
+the six school results, stars, and all-Gold status. The second contains lifetime
+totals, the complete style-reward reference, and achievement progress; zeroes are
+shown explicitly rather than hiding records the player has not started.
+
+Story uses the same shoulder-tabbed submenu pattern. `L`/`R` (keyboard `Q`/`E`)
+switches between Course Select and Pit Garage without leaving the front end.
+Both pages share the existing `Chrome & Credits` shop cue, which begins on
+entry to Story and continues uninterrupted across tab changes. Story results
+and wrecks return to this submenu with the Garage tab open; a wreck applies the
+existing emergency tow once. Repairs, wallet, and remaining hull survive the
+tab switch back to Course Select and the next Story launch; entering Story from
+a fresh title-menu session retains the normal fresh-run reset.
+
+Story hull damage persists through its Garage economy. Endless is deliberately
+isolated: every distance attempt starts at full hull, damage lasts only for that
+attempt, and returning to the title reveals the unchanged Story hull. Refreshing
+or wrecking during Endless can never overwrite the saved Story condition.
+
+During a live Story or Race School event, `Start`, `P`, or `Escape` opens the
+pause overlay and freezes simulation, clocks, HUD motion, music, and sound. The
+three actions are Resume, Restart Event, and Exit to Course Select; D-pad/arrows,
+confirm/back, and pointer input all share the same selection. Restart preserves
+the current Story hull and does not refund race-prep items already consumed at
+the rolling start. Endless intentionally has no pause overlay: its single-run
+distance challenge retains the existing immediate-exit behavior on `Escape`.
+
+Buying the Music Player opens a full soundtrack library inside the Garage.
+Discovered themes show their title and BPM; undiscovered themes remain anonymous
+locked slots. The player supports cursor/pointer selection, play, pause,
+previous/next shoulder shortcuts, and a close action. The current soundtrack is
+generated live by the tracker engine rather than loaded from external audio
+files, so choosing a theme starts its authored arrangement directly.
+The Music Player contains one strongest production mix per composition.
+Superseded drafts do not appear as near-duplicate soundtrack entries; the
+garage uses the hook-forward `Chrome & Credits` production mix.
 
 Rival School introduces the Story campaign's moving opposition as a 35-second
 base wreck score attack, not a boss or a lap-limited race. Exactly three
@@ -172,8 +283,9 @@ as distant quarry near the horizon; some approach from behind as challengers.
 Entries are separated by at least 2.2 seconds, vary lane and distance, and keep
 collision disabled during their fade. Passed rivals first chase back under
 their own wheels and are repositioned only after falling genuinely off-camera.
-Story races do not enable this training-only circulation director. Contact
-debris clears before the next driving decision.
+Story races do not enable this training-only circulation director or its
+proximity-staging fallback: passed rivals remain behind unless they drive back.
+Contact debris clears before the next driving decision.
 
 The course ribbon is a neutral loop locator showing the player and all three
 living rivals by stable shape and color. TIME and TAKEDOWNS replace the
@@ -184,10 +296,37 @@ use local windscreen feedback and a small momentum tax, never campaign hull or
 a hard wreck. The score can exceed eight; the objective display may cap at its
 authored goal, but results and persistence use the uncapped takedown count.
 
-Proving Ground is the first Story race. It uses the same geometry with campaign
-warnings, hazards, route offers, rewards, normal three-lap finish rules, and the
-Training Loop music/environment identity. Its job is to validate learned skills,
-not introduce them simultaneously for the first time.
+Proving Ground is the first Story course and the welcoming application of Race
+School skills. It is a new long-form route rather than a copy of the school
+loop. Its six boost-to-launch cycles introduce Story's authored cone targets,
+mixed surfaces, optional committed lines, and broad passing zones.
+
+Every Story course has two events on the same route. **Beat the Clock** is a
+solo one-lap qualifier whose authored target unlocks that course's **Rival
+Race**. Rival Race runs three laps and adds exactly three finite opponents:
+lap one is the read, while later laps reward optimized boost and damage-free
+lines. The player can win by
+out-driving them or remove them with takedowns. Results persist separately and
+both events return to the Story submenu instead of advancing automatically.
+Winning the race earns Gold; winning while removing all three finite opponents
+earns Platinum and marks the course 100% complete.
+The live placement chip counts opponents left rather than reporting takedowns.
+
+Story difficulty is physical rather than theatrical. Each course repeats
+thread-the-needle rock gates between its launch cycles, every gate leaves a
+traversable response, and collision avoidance matters because Story damage has
+an immediate low crash, hull callout, speed loss, shake, and car flash. Speed
+lines answer with an aerodynamic rush, screen streak bloom, camera kick, and a
+short expanding energy ring. Manual boost uses a longer filtered wind swoosh
+with a quiet rising engine bed rather than a spring or impact contour. Story
+ramps retain the live airtime timer and landing value learned in Air School.
+
+Story also names repeatable skill sequences as **Style Rewards**: five distinct
+cones, three distinct road Speed Lines, qualified boosted hangtime, a tier-three
+boost, and a sustained Long Burn. Rewards use an ordered action-sports
+celebration lane and feed versioned lifetime records shown in the Trophy Room.
+The complete trigger, persistence, accessibility, and future asynchronous
+multiplayer boundary is specified in `STYLE_REWARDS.md`.
 
 ### Neon Gulch
 
@@ -198,6 +337,8 @@ Purpose: teach momentum management across hills, dirt, and stronger curves.
   zones; its authored pattern sequence introduces the airborne combo line.
 - Downhill speed should feed a readable curve or optional committed line.
 - Alternate technical sections with fast release sections.
+- Seven boost-to-air cycles build from readable crest launches into dirt
+  transfers and linked airbrake choices.
 - Objectives can combine actions, such as maintain a speed threshold through a
   sector or chain a zipper into a ramp.
 
@@ -212,6 +353,9 @@ Purpose: test route memory and chained execution.
 - Use the sharpest curves after adequate sightline and braking room.
 - Objectives can span a lap: ramps hit, hazards avoided, or a multi-part
   speed/air chain.
+- Eight long-form cycles create one substantial finale lap; route memory comes
+  from how each landing sets up the next precision beat, not from repeating the
+  same short lap.
 
 ## Endless Mode
 
@@ -232,8 +376,9 @@ construction, decoration, and object rules live in `src/road/RoadModel.js` and
   straights, stronger terrain, and tighter pattern spacing.
 - Preserve at least one valid response to every formation, even at maximum
   difficulty.
-- Keep cone language identical to campaign mode: cones resolve into rocks,
-  never ramps or boosts.
+- Keep Endless cone language internally consistent: its ordinary warning cones
+  resolve into rocks, never ramps or boosts. Story and Training instead use
+  stable-ID objective cones as defined above.
 - Maintain the read–choose–execute–payoff–breathe rhythm. Later difficulty may
   shorten the breath, but should not delete readability.
 - Keep pickups useful and fair as the road is generated. A newly stamped
@@ -288,48 +433,110 @@ camera settings, HUD layout, or rendering—not as incidental implementation.
   landmarks repeat consistently each lap; Endless scenery cadence survives
   segment trimming. These objects are non-collidable and render below all
   gameplay props.
+- Each environment combines two scales: frequent small infrastructure supplies
+  peripheral speed cues, while rarer signature silhouettes provide memorable
+  route identity. Signature objects stay farther outside the shoulders and
+  may never obscure the driving line. Race School uses the same vocabulary at
+  lower density and scale so it continues to read as a controlled lesson site.
 - Near-future landmarks favor recognizable infrastructure—renewables, power
   lines, commuter or freight corridors, and evolving city edges—over fantasy
   megastructures. The world should feel plausibly one generation ahead.
 
 ### Player car sprite
 
-- `tools/gen-car.js` is the source of truth for `public/assets/car.png`.
-  Regenerate the sheet from the low-poly model instead of painting individual
-  frames, so every steering pose remains one coherent vehicle.
-- The sheet contains three rows of five `64x56` frames: nose-down, neutral,
-  and nose-up. Every row retains gameplay steering order—hard left, slight
-  left, straight, slight right, hard right—and opposite steering silhouettes
-  must remain mirrored. Airtime pitch eases toward the analog glide input and
-  returns through neutral after contact; it never reuses screen-space roll as
-  pitch because that would conflict with the steering read.
-- The car uses the game's low, directly-behind chase-camera perspective
-  (`CAM_PITCH = 0`), not the overhead Mode-7 angle used by the F-Zero reference
-  art. Every frame should remain substantially wider than it is tall, and the
-  straight frame should clearly present the rear of the vehicle.
-- The cockpit must read as glass at every yaw: a cyan teardrop dome with a
-  visible reflection and a base that follows the sloping hull. Canopy rails,
-  highlights, fins, or other accents must stay inside the vehicle silhouette;
-  long floating bars or constant-height slabs become beaks, gun barrels, or
-  disconnected overhangs in turning frames.
-- The in-race car is bottom-anchored so scaling grows it upward onto the road,
-  not below the canvas. `TUNING.carScale` is the shared size for gameplay and
-  the title screen; the Projection Lab must initialize to the same value
-  (currently `5`). A sprite with different visible bounds requires all three
-  presentations to be checked together. Collision width remains the separate
-  `TUNING.playerW` gameplay value.
-- `tools/gen-car.test.js` protects the rear-view proportions, visible glass,
-  frame dimensions, and left/right symmetry. Update the generator and its
-  expectations together when deliberately changing the vehicle.
+- `art/pulsewing-concept-v1.png` is the original image-generated art-direction
+  source for the Pulsewing hover racer. It is deliberately not shipped as a
+  loose game sprite. `tools/gen-car.js` deterministically isolates, cleans,
+  mirrors, anchors, and separates it into the synchronized runtime atlases
+  `car-v2.png`, `car-v2-paint.png`, and `car-v2-detail.png`.
+- Each runtime sheet is an exact `640x336`: three rows of five `128x112`
+  frames. Source rows remain stable for deterministic generation; the runtime
+  maps the visually verified upper/lower silhouettes to nose-up/nose-down so
+  controller pitch agrees with the chase view. Columns remain hard left,
+  soft left, straight, soft right, and hard right. Opposite steering poses are
+  exact mirrors of one authored side, and all fifteen poses share one center
+  and bottom contact anchor. Airtime pitch returns through neutral after
+  contact and never substitutes screen-space roll for pitch.
+- The vehicle uses a low rear-chase view: its stern, twin propulsion housings,
+  integrated glass canopy, underbody, and shallow V tail are the first read.
+  The hard-turn frames add an attached active-airbrake silhouette; the soft
+  poses remain unmistakably between neutral and hard commitment.
+- Rival identity is a material operation, not a whole-sprite tint. The
+  grayscale paint atlas receives the livery color while the detail atlas keeps
+  the canopy, engine cores and rings, pearl structure, gold tempo stripe, and
+  dark outline unchanged. Player, title, and rivals all use the same layered
+  sprite factory and the same frame policy.
+- The in-race and title vehicles are bottom-anchored so scale grows upward onto
+  the road. Their display scales are independently calibrated from the same
+  measured opaque hull width because their compositions have different space;
+  rival perspective sizing uses that hull ratio rather than transparent frame
+  width. A road-bound contact shadow shrinks and fades as the car rises so jump
+  height remains readable while the chassis never looks pasted onto the road.
+  Collision width remains the independent `TUNING.playerW` gameplay value.
+- `tools/gen-car.test.js` protects deterministic regeneration, atlas order,
+  hard alpha, rear-view proportions, twin propulsion, canopy/detail survival,
+  mirrored yaw, distinct pitch, active-airbrake cues, shared anchors, and the
+  paint/detail partition. `VehicleSprite.test.js` protects frame synchronization
+  and material-safe livery/damage tint restoration.
 
 ### Projection Lab
 
 - Track, Audio, Physics, Handling, Camera, Graphics, and Status controls live in
   separate collapsible groups so the active tuning surface can remain visible.
+- The Course selector also exposes `TOOLS — TRACK EDITOR`. This developer-only
+  shortcut opens `TrackBuilderScene` directly and deliberately bypasses the
+  player-facing completion gate; it does not unlock Track Builder in saved
+  progression or create a race attempt.
 - Music and SFX sliders update their independent audio buses during a race.
   Their values persist through scene and track changes for the current session.
 - Keep control defaults synchronized with `TUNING`; a lab value must not silently
   change production behavior just because a race scene initializes its hooks.
+
+### Custom Track Builder
+
+- Track Builder is a visible destination in the title carousel alongside the
+  other modes. It remains locked until the player finishes all five
+  released Race School lessons and has completed at least one attempt of both
+  Story event types on all three courses. Trophy rank, finish position, and
+  takedown count do not affect this unlock. Endless and the `SOON` Flight School
+  preview are deliberately excluded because neither has a normal completion.
+- The builder is a top-down tile deck over an 8×8 canvas. Road tiles are dragged
+  onto the one pulsing open connection, guaranteeing a single bounded route the
+  pseudo-3D renderer can race without intersections or branching. Straight,
+  left bend, right bend, hill, dirt, and chicane tiles compile into the existing
+  `pieces` schema; this is presentation over the established linear road model,
+  not a second incompatible track engine.
+- Cones, rocks, boost pickups, and ramps layer onto any placed road tile. The
+  horizontal drop point selects left, center, or right lane. One gameplay prop
+  occupies a tile so every result stays readable at racing speed.
+- Authors choose Coastal School, Midnight Circuit, Neon Gulch, or Freight Belt
+  independently from geometry. The selected environment supplies scenery,
+  palette, and compatible music while gameplay colors retain their standard
+  meaning.
+- A route needs 6–18 road tiles. Up to six sanitized, versioned drafts persist
+  locally. Saved tracks may be raced, reopened for editing, renamed, or deleted;
+  Test Drive saves first and immediately launches an isolated two-lap custom
+  race. Custom damage never changes the Story garage hull, and custom races
+  award no campaign money, trophies, or progression.
+- The freeform map is intentionally a jam scope boundary. Intersections,
+  branches, reverse routes, online sharing, enemy placement, and arbitrary
+  terrain sculpting would require new runtime systems and are not implied by
+  the top-down editor.
+
+### Title carousel art lessons
+
+- Design mode emblems for their final rendered size. Review the selected center
+  item and the smaller adjacent item at 800x600 before accepting source art.
+- Put the gameplay promise in the largest shapes. The revised Story icon makes
+  three rival craft the primary silhouette and reduces its track to a short
+  context wedge; the earlier detailed circuit was attractive but hid the idea.
+- Use shared material language—navy metal, pearl and gold structure, cyan and
+  magenta reflected light—to unify icons without adding boxes or badges.
+- Preserve each emblem's natural aspect ratio and simplify internal detail
+  before increasing display size. Readability comes from silhouette, value,
+  separation, and hierarchy rather than raw resolution.
+- Locked rewards remain visually desirable. Tint and alpha communicate state,
+  while an explicit text label carries the accessibility requirement.
 
 ### Roadside speed pylons
 
@@ -427,6 +634,12 @@ Use this checklist whenever changing the world, assets, or gameplay rules:
 - Add or update the shared definition and collision behavior.
 - Add the asset to loading/rendering and verify its scale at near and far
   projection distances.
+- Keep road-object communication inside the racing world. Hazards use a clear
+  physical silhouette and contrast against the surface; speed pads and other
+  pickups use distinctive authored art or road paint. Do not surround routine
+  objects with floating rings, brackets, or targeting chrome—the object itself
+  should provide the driving read unless the mechanic is explicitly a scanner
+  or lock-on system.
 - Decide explicitly how campaign tracks place it.
 - Decide explicitly how Endless Mode generates it and how its frequency scales.
 - Check interactions with cones, zippers, ramps, rocks, dirt, airborne state,
@@ -469,11 +682,13 @@ where the rule is introduced.
 
 ## Objective and persistence direction
 
-Track objectives are data, not scene-specific code. Training currently ships a
-`hit_all` objective linked to authored objects by stable IDs. Story courses use
-`complete_laps` and `count_event` goals for ramps and speed lines. Each objective
-has a point value; normal objectives contribute it only when complete. Collection
-lessons may use `pointsPerUnit` when partial progress is itself the scored result.
+Track objectives are data, not scene-specific code. Training and Story may ship
+a `hit_all` objective linked to authored cones by stable IDs. Story courses also
+use `complete_laps` and `count_event` goals for ramps, speed lines, and rival
+takedowns. Rival-only goals are hidden during the solo qualifier. Each objective
+has a point value; normal objectives contribute it only when complete.
+Collection lessons may use `pointsPerUnit` when partial progress is itself the
+scored result.
 
 ```json
 {

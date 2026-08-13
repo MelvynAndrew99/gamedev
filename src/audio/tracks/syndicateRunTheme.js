@@ -307,8 +307,51 @@ const SECTIONS = [
   REBUILD_A, REBUILD_B, REBUILD_C, REBUILD_FILL,                    // loop turnaround
 ];
 
-export const SYNDICATE_RUN_THEME = {
+// Base arrangement used to produce the sole shipped Controlled Burn mix.
+const SYNDICATE_RUN_BASE_THEME = Object.freeze({
   bpm: 166,
   stepsPerBar: 16,
-  bars: SECTIONS.map((section, index) => bar(index, section)),
-};
+  bars: Object.freeze(SECTIONS.map((section, index) => Object.freeze(bar(index, section)))),
+});
+
+function productionBar(source, index) {
+  const intro = index < 4;
+  const build = index >= 4 && index < 8;
+  const groove = index >= 8 && index < 16;
+  const pre = index >= 16 && index < 20;
+  const payoffSection = index >= 20 && index < 28;
+  const interlude = index >= 28 && index < 32;
+  const exposedHook = index >= 8 && index < 10;
+
+  return Object.freeze({
+    ...source,
+    // The drop earns two bars where the metallic melody is unmistakable.
+    // Keep the chug's downbeat silhouette, then restore its full syncopated
+    // grid for the answer; the cyber-metal identity never disappears.
+    chug: exposedHook
+      ? source.chug.map((tone, step) => step % 4 === 0 ? tone : null)
+      : source.chug,
+    // The bass owns the floor; chug owns a narrower low-mid slice; the hook
+    // receives the foreground gain. None of the three needs the limiter to
+    // decide which voice wins a crowded downbeat.
+    bassGain: interlude ? 0.62 : intro ? 0.66 : payoffSection ? 0.76 : 0.72,
+    bassCutoff: interlude ? 650 : payoffSection ? 900 : 820,
+    bassHighpass: 50,
+    chugGain: interlude ? 0.48 : intro ? 0.58 : payoffSection ? 0.68 : 0.64,
+    guitarGain: 0.56,
+    leadGain: interlude ? 0.86 : intro ? 1.04 : payoffSection ? 1.2 : groove ? 1.16 : 1.1,
+    padGain: interlude ? 0.42 : intro ? 0.38 : payoffSection ? 0.3 : 0.34,
+    kickGain: interlude ? Math.min(source.kickGain, 0.48) : payoffSection ? 0.78 : Math.min(source.kickGain, 0.7),
+    snareGain: interlude ? Math.min(source.snareGain, 0.5) : payoffSection ? 0.74 : Math.min(source.snareGain, 0.68),
+    hatGain: interlude ? Math.min(source.hatGain, 0.4) : payoffSection ? 0.5 : Math.min(source.hatGain, 0.46),
+    sidechainDepth: intro ? 0.64 : interlude ? 0.68 : payoffSection ? 0.5 : pre || build ? 0.54 : 0.56,
+  });
+}
+
+// "Controlled Burn — Race Mix": original E-minor writing and dynamic form,
+// now with a firmer low/low-mid boundary and a consistently readable metallic
+// hook above the chug grid.
+export const SYNDICATE_RUN_THEME = Object.freeze({
+  ...SYNDICATE_RUN_BASE_THEME,
+  bars: Object.freeze(SYNDICATE_RUN_BASE_THEME.bars.map(productionBar)),
+});

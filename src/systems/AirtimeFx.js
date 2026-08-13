@@ -2,6 +2,11 @@
 // Physics owns the arc. This module translates it into squash/stretch,
 // active-aero silhouette, trail length, and one-shot highlight decisions.
 
+import {
+  VEHICLE_PITCH_ROWS,
+  VEHICLE_STEER_FRAMES,
+} from '../config/vehicleSprite.js';
+
 export const AIRTIME_COLORS = Object.freeze({
   neutral: 0x00e5ff,
   short: 0xff2d95,
@@ -10,11 +15,11 @@ export const AIRTIME_COLORS = Object.freeze({
   mastery: 0x2ee56b,
 });
 
-export const CAR_STEER_FRAME_COUNT = 5;
+export const CAR_STEER_FRAME_COUNT = VEHICLE_STEER_FRAMES;
 export const CAR_PITCH_ROW = Object.freeze({
-  down: 0,
+  down: VEHICLE_PITCH_ROWS - 1,
   neutral: 1,
-  up: 2,
+  up: 0,
 });
 
 // A small inertial filter keeps analog pitch from snapping between authored
@@ -45,6 +50,17 @@ export function airtimePitchPose(pitch = 0) {
 export function carSpriteFrame(steerFrame = 2, pitch = 0) {
   const steer = clamp(Math.round(Number.isFinite(steerFrame) ? steerFrame : 2), 0, 4);
   return CAR_PITCH_ROW[airtimePitchPose(pitch)] * CAR_STEER_FRAME_COUNT + steer;
+}
+
+// The atlas was authored from the craft's point of view. In a rear chase
+// camera that made its left/right silhouettes read backward to the driver.
+// Mirror only the pose lookup; physics and road movement keep their signs.
+export function chaseSteerFrame(steer = 0) {
+  const value = Number.isFinite(steer) ? steer : 0;
+  return value < -0.6 ? 4
+    : value < -0.2 ? 3
+      : value <= 0.2 ? 2
+        : value <= 0.6 ? 1 : 0;
 }
 
 export function nextGlideMode(previous = 'neutral', glide = 0) {

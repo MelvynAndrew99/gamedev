@@ -16,6 +16,10 @@ export class TracksideScenery {
     this.graphics = scene.add.graphics().setDepth(4);
   }
 
+  setEnvironment(environment) {
+    this.environment = environment;
+  }
+
   render(model, base) {
     const g = this.graphics;
     const t = this.t;
@@ -52,6 +56,26 @@ export class TracksideScenery {
 export function tracksideObjectForSegment(environment, segmentIndex) {
   const config = environment.trackside;
   if (!config) return null;
+  const signature = config.signature;
+  if (signature) {
+    const signaturePhase = (environment.seed * 3) % signature.cadence;
+    if ((segmentIndex + signaturePhase) % signature.cadence === 0) {
+      const hash = hashInt(segmentIndex, environment.seed ^ 0x51f15e);
+      const side = (hash & 1) === 0 ? -1 : 1;
+      const offsetT = ((hash >>> 8) & 0xff) / 255;
+      const sizeT = ((hash >>> 16) & 0xff) / 255;
+      return {
+        kind: signature.kinds[(hash >>> 1) % signature.kinds.length],
+        offset: side * (
+          signature.offset[0] +
+          (signature.offset[1] - signature.offset[0]) * offsetT
+        ),
+        size: signature.size[0] + (signature.size[1] - signature.size[0]) * sizeT,
+        variant: (hash >>> 24) & 0xff,
+        signature: true,
+      };
+    }
+  }
   const phase = environment.seed % config.cadence;
   if ((segmentIndex + phase) % config.cadence !== 0) return null;
 
@@ -65,6 +89,7 @@ export function tracksideObjectForSegment(environment, segmentIndex) {
     offset: side * (config.offset[0] + offsetRange * offsetT),
     size: 0.84 + (((hash >>> 16) & 0xff) / 255) * 0.34,
     variant: (hash >>> 24) & 0xff,
+    signature: false,
   };
 }
 

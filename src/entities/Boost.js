@@ -19,8 +19,9 @@
 // feel, and Player's own clamp riding that number down is the entire decay
 // implementation (no separate boost-decay acceleration term needed).
 export class Boost {
-  constructor(tuning) {
+  constructor(tuning, capacity = tuning.nitroMax) {
     this.t = tuning;
+    this.capacity = Math.max(1, Math.floor(Number(capacity) || tuning.nitroMax));
     this.slots = 0;
     this.tier = 0;          // 0 = inactive, 1/2/3 = active tap-stack tier
     this.holding = false;   // true once the current press has crossed the hold threshold
@@ -37,11 +38,11 @@ export class Boost {
   }
 
   get full() {
-    return this.slots >= this.t.nitroMax;
+    return this.slots >= this.capacity;
   }
 
   collect() {
-    this.slots = Math.min(this.t.nitroMax, this.slots + 1);
+    this.slots = Math.min(this.capacity, this.slots + 1);
   }
 
   update(dt, pressed) {

@@ -1,4 +1,4 @@
-# Destruction Racer — Training Level Design
+# Rhythmic Ride — Training Level Design
 
 This document is the source of truth for building Training mode lessons. Read it
 with [GAME_DESIGN.md](./GAME_DESIGN.md): the main brief defines the driving
@@ -205,10 +205,10 @@ Weave's mastery cones — all react when struck.
 
 The finish result is the reward transition. It plays a short fanfare, bursts
 confetti, calls out a perfect clear when appropriate, and records the best
-trophy. An explicit result menu offers `Retry`, `Next Track`, and `Title` when a
-finished successor exists. The final available lesson offers `Retry` and
-`Title` while naming the next staged lesson as coming soon. Keyboard, controller,
-and pointer input must expose the same choices.
+trophy. An explicit result menu offers `Retry` and `Race School`; returning to
+Race School keeps the finished lesson selected and reveals any newly unlocked
+successor without launching it automatically. Keyboard, controller, and pointer
+input must expose the same choices.
 
 ## Lesson 3: Redline
 
@@ -374,15 +374,13 @@ only with explicit product approval; it is not the primary Training 5 design.
 
 ## Cone semantics
 
-Objective-linked cones are a Training mode exception to the campaign warning
-grammar. Their objective is explicit in the intro and HUD, and contact is
-harmless. They grant progress, objective points, and audiovisual contact
-feedback but no economy reward.
+Objective-linked cones are shared by Training and Story. Their objective is
+explicit in the intro or HUD, and contact is harmless. They grant progress,
+objective points, and audiovisual contact feedback but no economy reward.
 
-In Story and Endless modes, ordinary cones remain danger warnings that resolve
-to rocks. The Proving Ground must explicitly restate that warning meaning before
-using it. If target cones ever appear alongside warning cones in one course,
-they need a distinct visual treatment before that course can ship.
+Endless alone retains ordinary danger-warning cones that resolve to rocks.
+Story courses have zero warning cones: every cone is an authored, persistent
+target with a stable ID. A course may not mix the two meanings.
 
 ## Track data contract
 
@@ -461,6 +459,14 @@ The initial Training mode track list is fixed in this order:
 4. Air School — acquire ramp approaches and build controlled airtime.
 5. Rival School — score boosted wrecks during a 35-second base run, extending
    it by driving through green clock cones.
+6. Flight School — a visible `SOON` tile for a post-jam sustained-flight
+   preview. It is retained in Projection Lab but unavailable in the jam build.
+
+Air School remains the normal fourth lesson and unlocks after Redline. Flight
+School is shown from the beginning as `SOON`, cannot launch from Race School,
+and does not count toward School trophy totals. Its former Platinum-all-rivals
+gate is retained in the course data for post-jam restoration; the complete
+handoff lives in `FLIGHT_SCHOOL_README.md`.
 
 Warning reads, zippers, surface changes, and combo lines remain future
 curriculum candidates. Proving Ground combines the completed curriculum as the
@@ -468,6 +474,18 @@ first Story race; it is not a Training track.
 
 Later lessons may add optional mastery targets, but their required objective
 should still teach one new verb. Combining skills is validation, not introduction.
+
+## Custom Track Builder unlock
+
+After finishing all five released lessons and attempting both Story events on
+all three courses, the locked Track Builder destination in the title carousel
+opens. Scores and trophies do not gate it. Projection Lab also exposes a
+developer-only Track Editor shortcut that bypasses this presentation gate
+without changing saved progression. The editor uses a connected
+top-down ribbon because the runtime road remains a linear pseudo-3D spline; its
+six road tiles compile directly to the normal track-data pieces. Players may
+layer cones, rocks, boosts, and ramps, apply one of four released environments,
+save six local tracks, edit them, and launch a two-lap Test Drive.
 
 ## Definition of done
 

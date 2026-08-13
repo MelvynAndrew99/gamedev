@@ -36,6 +36,7 @@ function isFailureTone(tone) {
 // flash a false failure while the course is still settling at the start line.
 export function airtimeCoachView(telemetry = {}, device = 'keyboard') {
   const phase = telemetry.phase ?? 'approach';
+  const flightAssist = telemetry.flightAssist === true;
   const current = Number.isFinite(telemetry.currentAirSeconds)
     ? Math.max(0, telemetry.currentAirSeconds)
     : 0;
@@ -50,6 +51,24 @@ export function airtimeCoachView(telemetry = {}, device = 'keyboard') {
     ? telemetry.message.trim()
     : null;
   const controls = airtimeControlHint(device);
+
+  if (flightAssist && telemetry.flightPhase === 'flight') {
+    const hit = Math.max(0, Math.floor(Number(telemetry.ringsHit) || 0));
+    const total = Math.max(hit, Math.floor(Number(telemetry.ringsTotal) || 0));
+    const altitude = Math.round(Math.max(0, Number(telemetry.altitude) || 0) * 100);
+    return {
+      phase: 'flight',
+      title: 'FLIGHT MODE',
+      value: `RINGS ${hit}/${total}`,
+      detail: `ALT ${altitude}  •  ALIGN WITH THE NEXT RING`,
+      controls: device === 'gamepad'
+        ? 'STICK FLY  •  ○ BRAKE  •  □ BOOST'
+        : '←→ / W S FLY  •  ↓ BRAKE  •  C BOOST',
+      color: '#00e5ff',
+      meter: total > 0 ? hit / total : 0,
+      pulse: false,
+    };
+  }
 
   if (phase === 'airborne') {
     const glide = Number.isFinite(telemetry.glide) ? telemetry.glide : 0;
@@ -70,7 +89,7 @@ export function airtimeCoachView(telemetry = {}, device = 'keyboard') {
         : COLORS.info;
     return {
       phase,
-      title: 'AIRTIME',
+      title: flightAssist ? 'FLIGHT TIME' : 'AIRTIME',
       value: formatAirtime(current),
       // Once airborne, the player's live control must win over approach
       // feedback. Otherwise a green READY message can contradict magenta
@@ -111,16 +130,22 @@ export function airtimeCoachView(telemetry = {}, device = 'keyboard') {
   const phaseTitle = phase === 'landed'
     ? isFailureTone(telemetry.messageTone)
       ? 'TRY AGAIN'
-      : 'LANDED'
-    : 'NEXT  •  GOLD RAMP';
+      : flightAssist ? 'TOUCHDOWN' : 'LANDED'
+    : flightAssist ? 'FLIGHT SYSTEMS READY' : 'NEXT  •  GOLD RAMP';
   return {
     phase,
     title: phaseTitle,
     value: phase === 'landed' && best > 0 ? `BEST ${formatAirtime(best)}` : '',
     detail: feedback ?? (phase === 'landed'
-      ? 'SET UP NEXT GOLD RAMP'
-      : 'CENTER CAR  •  HIT GOLD'),
-    controls: phase === 'landed' ? '' : controls,
+      ? flightAssist ? 'SET UP NEXT FLIGHT' : 'SET UP NEXT GOLD RAMP'
+      : flightAssist ? 'ENTER THE FIRST RING' : 'CENTER CAR  •  HIT GOLD'),
+    controls: phase === 'landed'
+      ? ''
+      : flightAssist
+        ? device === 'gamepad'
+          ? 'STICK FLY  •  ○ BRAKE  •  □ BOOST'
+          : '←→ / W S FLY  •  ↓ BRAKE  •  C BOOST'
+        : controls,
     color: feedback ? toneColor(telemetry.messageTone) : COLORS.info,
     meter: null,
     pulse: !!feedback,

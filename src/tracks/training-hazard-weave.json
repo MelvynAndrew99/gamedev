@@ -6,7 +6,7 @@
   "finish": "laps",
   "music": "training-loop",
   "environment": "training-loop",
-  "intro": "Two laps. Change lanes, miss the rocks, and hit the cones.",
+  "intro": "Avoid rocks. Hit cones. Cracks cost trophies.",
   "lapMessages": {
     "2": "FINAL LAP — SAME RUN, KEEP THE FLOW"
   },

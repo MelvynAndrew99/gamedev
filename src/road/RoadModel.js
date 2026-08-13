@@ -107,14 +107,14 @@ export class RoadModel {
       this.addRoad(15, 10, 15, 0, -drift / this.t.segmentLength);
     }
 
-    // The start/finish line, as a physical checkered gantry over the road.
-    // On a looping circuit this one gate IS the start, every lap line, and
-    // the finish — you launch from under it and cross it each lap. Purely
-    // visual (the renderer draws it from this flag); lap logic still keys off
-    // position 0. Endless Mode has no finish line, so it never sets a gate.
-    this.segments[0].gate = { label: 'START / FINISH' };
-    for (let k = 0; k < 3 && k < this.segments.length; k++) {
-      this.segments[k].startLine = true; // checkered paint across the asphalt
+    // Ordinary circuits share one physical start/finish gantry and a short
+    // checkered road marking. Courses that do not begin on a road (Flight
+    // School) can opt out while retaining position-based completion logic.
+    if (data.startFinish !== false) {
+      this.segments[0].gate = { label: 'START / FINISH' };
+      for (let k = 0; k < 3 && k < this.segments.length; k++) {
+        this.segments[k].startLine = true;
+      }
     }
 
     this.decorate(
@@ -241,6 +241,14 @@ export class RoadModel {
       const def = OBSTACLES[kind];
       if (!def) throw new Error(`Unknown authored track object kind: ${kind}`);
       seen.add(id);
+      if (def.kind === 'launch') {
+        for (let index = Math.max(0, at - 28); index < at; index++) {
+          this.segments[index].launchApproach = {
+            offset,
+            w: Math.max(0.18, def.view * 0.62),
+          };
+        }
+      }
       this.segments[at].sprites.push({
         def,
         key: def.key,
@@ -251,6 +259,9 @@ export class RoadModel {
         objectiveId: objective,
         persistentHit: objective != null || once,
         timeBonusSeconds: Number(object.timeBonusSeconds) || 0,
+        altitude: Number.isFinite(object.altitude) ? object.altitude : 0,
+        ringRadiusX: Number.isFinite(object.radiusX) ? object.radiusX : 0,
+        ringRadiusY: Number.isFinite(object.radiusY) ? object.radiusY : 0,
       });
     }
   }
@@ -289,7 +300,9 @@ export class RoadModel {
       // Once its rock payload has appeared, the danger warning is resolved
       // and a later boost cannot be mistaken for what the cones announced.
       if (sameLane.some((s) => s.key === 'rock')) return false;
-      if (sameLane.some((s) => s.key === 'cone')) return true;
+      // Authored Story cones are collectible objectives, not hazard signage.
+      // Only ordinary cones retain the legacy "a rock follows" meaning.
+      if (sameLane.some((s) => s.key === 'cone' && !s.objectiveId)) return true;
     }
     return false;
   }

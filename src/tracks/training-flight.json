@@ -1,0 +1,101 @@
+{
+  "id": "training-flight",
+  "name": "FLIGHT SCHOOL",
+  "seed": 1106,
+  "laps": 1,
+  "finish": "laps",
+  "music": "training-loop",
+  "environment": "flight-school",
+  "status": "coming_soon",
+  "startFinish": false,
+  "intro": "One final lesson. You are already airborne—bank, climb, brake, and boost through the academy ring route.",
+  "unlock": {
+    "type": "story_platinum",
+    "lockedText": "COMING SOON — FLIGHT SCHOOL IS A POST-JAM PREVIEW"
+  },
+  "design": {
+    "focus": "A self-contained post-game sequel preview that begins in flight and teaches aerial precision without a racing launch ritual.",
+    "pacing": "Ten rings alternate broad confidence beats with lateral and vertical threading before a celebratory finish.",
+    "scope": "Flight controls, rings, and sustained lift never appear in Air School, Story, or Endless."
+  },
+  "flightTraining": {
+    "airborneStart": true,
+    "initialAltitude": 0.42,
+    "initialCruiseSpeedMultiplier": 0.78,
+    "startingBoostSlots": 3,
+    "minimumAltitude": 0.12,
+    "maximumAltitude": 0.92,
+    "climbSpeed": 0.66,
+    "verticalResponse": 4.8,
+    "pitchResponse": 8.5,
+    "bankResponse": 10.5,
+    "ringCount": 10,
+    "architecturalFlyThroughs": [
+      {
+        "id": "aurora-concourse",
+        "from": 1180,
+        "to": 1660,
+        "ringIds": ["flight-ring-5", "flight-ring-6"],
+        "style": "open-atrium",
+        "design": "A broad, visibly open transit-hall route. Both target rings sit fully inside the aperture; missing either ring leaves a safe exterior line rather than causing an instant failure."
+      }
+    ]
+  },
+  "decoration": {
+    "roadsidePosts": false,
+    "nitro": false,
+    "zippers": false
+  },
+  "objectives": [
+    {
+      "id": "flight-rings",
+      "type": "hit_all",
+      "target": "flight-ring",
+      "label": "FLY THROUGH 10 RINGS",
+      "hudLabel": "RINGS",
+      "pointsPerUnit": 250
+    }
+  ],
+  "scoring": {
+    "type": "trophy",
+    "version": 2,
+    "objective": "flight-rings",
+    "thresholds": [
+      { "rank": "gold", "minimum": 10, "stars": 3 },
+      { "rank": "silver", "minimum": 8, "stars": 2 },
+      { "rank": "bronze", "minimum": 6, "stars": 1 }
+    ]
+  },
+  "patterns": {
+    "startClear": 90,
+    "finishClear": 120,
+    "placements": []
+  },
+  "objects": [
+    { "id": "flight-ring-1", "at": 280, "kind": "flightRing", "objective": "flight-rings", "offset": 0, "altitude": 0.3, "radiusX": 0.62, "radiusY": 0.3 },
+    { "id": "flight-ring-2", "at": 520, "kind": "flightRing", "objective": "flight-rings", "offset": -0.25, "altitude": 0.44, "radiusX": 0.46, "radiusY": 0.24 },
+    { "id": "flight-ring-3", "at": 790, "kind": "flightRing", "objective": "flight-rings", "offset": 0.42, "altitude": 0.62, "radiusX": 0.34, "radiusY": 0.2 },
+    { "id": "flight-ring-4", "at": 1020, "kind": "flightRing", "objective": "flight-rings", "offset": -0.5, "altitude": 0.38, "radiusX": 0.31, "radiusY": 0.19 },
+    { "id": "flight-ring-5", "at": 1260, "kind": "flightRing", "objective": "flight-rings", "offset": 0.18, "altitude": 0.72, "radiusX": 0.38, "radiusY": 0.22 },
+    { "id": "flight-ring-6", "at": 1510, "kind": "flightRing", "objective": "flight-rings", "offset": 0.42, "altitude": 0.54, "radiusX": 0.34, "radiusY": 0.2 },
+    { "id": "flight-ring-7", "at": 1770, "kind": "flightRing", "objective": "flight-rings", "offset": -0.38, "altitude": 0.85, "radiusX": 0.28, "radiusY": 0.17 },
+    { "id": "flight-ring-8", "at": 2030, "kind": "flightRing", "objective": "flight-rings", "offset": -0.58, "altitude": 0.43, "radiusX": 0.28, "radiusY": 0.17 },
+    { "id": "flight-ring-9", "at": 2300, "kind": "flightRing", "objective": "flight-rings", "offset": 0.46, "altitude": 0.7, "radiusX": 0.27, "radiusY": 0.17 },
+    { "id": "flight-ring-10", "at": 2610, "kind": "flightRing", "objective": "flight-rings", "offset": 0, "altitude": 0.5, "radiusX": 0.34, "radiusY": 0.2 }
+  ],
+  "pieces": [
+    ["hill", 70, -55],
+    ["curve", 70, 1.5, -20],
+    ["straight", 80],
+    ["curve", 90, -2, 30],
+    ["hill", 80, 45],
+    ["chicane", 55, 1.8, -20],
+    ["curve", 100, 2.3, 25],
+    ["hill", 90, -25],
+    ["curve", 100, -2.4, 20],
+    ["chicane", 60, 1.6, 0],
+    ["straight", 90]
+  ],
+  "obstacles": 0,
+  "par": 70
+}
