@@ -338,6 +338,20 @@ class MusicEngine {
     this.track = null;
   }
 
+  pausePlayback() {
+    if (!this.ctx || this.ctx.state !== 'running' || !this.ctx.suspend) {
+      return Promise.resolve(false);
+    }
+    return this.ctx.suspend().then(() => true).catch(() => false);
+  }
+
+  resumePlayback() {
+    if (!this.ctx || this.ctx.state !== 'suspended' || !this.ctx.resume) {
+      return Promise.resolve(false);
+    }
+    return this.ctx.resume().then(() => true).catch(() => false);
+  }
+
   scheduler() {
     const track = this.track;
     if (!track) return;

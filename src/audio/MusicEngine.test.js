@@ -113,6 +113,41 @@ test('music and gameplay feedback retain independent live volume settings', () =
   }
 });
 
+test('pause and resume freeze the shared audio clock without restarting the track', async () => {
+  const previousContext = MUSIC.ctx;
+  const previousTrack = MUSIC.track;
+  let suspended = 0;
+  let resumed = 0;
+  const ctx = {
+    state: 'running',
+    suspend() {
+      suspended += 1;
+      this.state = 'suspended';
+      return Promise.resolve();
+    },
+    resume() {
+      resumed += 1;
+      this.state = 'running';
+      return Promise.resolve();
+    },
+  };
+  const track = { id: 'still-playing' };
+  try {
+    MUSIC.ctx = ctx;
+    MUSIC.track = track;
+    assert.equal(await MUSIC.pausePlayback(), true);
+    assert.equal(await MUSIC.pausePlayback(), false, 'a paused context is not suspended twice');
+    assert.equal(MUSIC.track, track, 'pause does not reset arrangement state');
+    assert.equal(await MUSIC.resumePlayback(), true);
+    assert.equal(await MUSIC.resumePlayback(), false, 'a running context is not resumed twice');
+    assert.equal(suspended, 1);
+    assert.equal(resumed, 1);
+  } finally {
+    MUSIC.ctx = previousContext;
+    MUSIC.track = previousTrack;
+  }
+});
+
 test('airtime audio exposes a safe lifecycle before browser audio is unlocked', () => {
   const handle = MUSIC.startAirtimeFlight({ boosted: true, speedRatio: 1.2 });
   assert.equal(typeof handle.update, 'function');

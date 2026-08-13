@@ -23,6 +23,11 @@ export const STORY_PAYOUTS = Object.freeze({
   rivalBounty: 50,
 });
 
+export const PIT_CREW_REPAIR_FRACTIONS = Object.freeze({
+  1: 0.25,
+  2: 0.5,
+});
+
 export const GARAGE_ITEMS = Object.freeze([
   Object.freeze({
     id: 'boost_pack', category: 'race', label: 'STARTER CANISTER', cost: 75,
@@ -34,12 +39,12 @@ export const GARAGE_ITEMS = Object.freeze([
   }),
   Object.freeze({
     id: 'pit_crew_1', category: 'upgrade', label: 'PIT CREW', cost: 800,
-    description: 'Your crew restores 15 hull after every completed Story event.',
+    description: 'Your crew restores up to 25% of max hull after every completed Story event.',
   }),
   Object.freeze({
     id: 'pit_crew_2', category: 'upgrade', label: 'UPGRADE PIT CREW', cost: 1400,
     requires: 'pit_crew_1',
-    description: 'Your upgraded crew fully repairs the hull after completed Story events.',
+    description: 'Your upgraded crew restores up to 50% of max hull after completed Story events.',
   }),
   Object.freeze({
     id: 'music_player', category: 'unlock', label: 'MUSIC PLAYER', cost: 500,
@@ -159,10 +164,12 @@ export function consumeRaceLoadout(racer, baseCapacity = 3) {
 
 export function applyPitCrewService(racer) {
   if (racer.pitCrewLevel <= 0) return { level: 0, health: 0 };
-  const requested = racer.pitCrewLevel >= 2 ? racer.maxHealth : 15;
+  const level = racer.pitCrewLevel >= 2 ? 2 : 1;
+  const fraction = PIT_CREW_REPAIR_FRACTIONS[level];
+  const requested = Math.floor(Math.max(0, racer.maxHealth) * fraction);
   const health = Math.min(requested, Math.max(0, racer.maxHealth - racer.health));
   racer.repair(health);
-  return { level: racer.pitCrewLevel, health };
+  return { level, health };
 }
 
 export function storyStyleBank(racer, trackId, version, phase) {

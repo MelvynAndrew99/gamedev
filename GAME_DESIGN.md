@@ -177,6 +177,14 @@ isolated: every distance attempt starts at full hull, damage lasts only for that
 attempt, and returning to the title reveals the unchanged Story hull. Refreshing
 or wrecking during Endless can never overwrite the saved Story condition.
 
+During a live Story or Race School event, `Start`, `P`, or `Escape` opens the
+pause overlay and freezes simulation, clocks, HUD motion, music, and sound. The
+three actions are Resume, Restart Event, and Exit to Course Select; D-pad/arrows,
+confirm/back, and pointer input all share the same selection. Restart preserves
+the current Story hull and does not refund race-prep items already consumed at
+the rolling start. Endless intentionally has no pause overlay: its single-run
+distance challenge retains the existing immediate-exit behavior on `Escape`.
+
 Buying the Music Player opens a full soundtrack library inside the Garage.
 Discovered themes show their title and BPM; undiscovered themes remain anonymous
 locked slots. The player supports cursor/pointer selection, play, pause,

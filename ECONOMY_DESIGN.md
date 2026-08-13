@@ -112,14 +112,17 @@ progression or its primary accessibility upgrades.
 | --- | ---: | --- |
 | Hull patch | $50 | Restore 10 hull; prorate the final partial patch at $5/hull. |
 | Full repair | Dynamic | Restore all missing hull at $5/hull. |
-| Pit Crew I | $800 once | After any **completed** Story event, automatically restore 15 hull. |
-| Pit Crew II | $1,400 upgrade | After any completed Story event, restore to full hull. |
+| Pit Crew I | $800 once | After any **completed** Story event, restore up to 25% of max hull. |
+| Pit Crew II | $1,400 upgrade | After any completed Story event, restore up to 50% of max hull. |
 
 Pit Crew II appears as the next state of the same bay after buying Level I and
 unlocks after the first Rival win. Neither crew triggers on a wreck or abandoned
 race, preserving the emergency tow and the consequence of failing. Show the
 upgrade through two animated crew silhouettes, repair sparks, and a filling
-hull diagram; explanatory text confirms the exact number.
+hull diagram; explanatory text confirms the exact percentage. The service is a
+bounded post-race allowance, not a free reset: damage beyond 25/50 hull remains
+for the player to repair from race earnings. This lets improved crews absorb
+small trick-taking mistakes while large risks retain an economic consequence.
 
 ### Race Prep
 
@@ -202,7 +205,8 @@ screen while retaining the SNES palette:
 7. Race Prep is consumed exactly once on race start, survives menu navigation,
    and cannot stack beyond 2/4 starting boost when both supplies are queued.
 8. Pit Crew triggers only after a completed Story event. Level I restores no
-   more than 15; Level II restores no more than the missing hull.
+   more than 25% of max hull; Level II restores no more than 50% of max hull or
+   the currently missing hull, whichever is smaller.
 9. Purchases and payout caps survive a page reload. A fresh new-campaign action
    must explicitly confirm before clearing them; merely entering Story must not.
 10. At 800×600, wallet, hull, selected effect, price/state, category, and input

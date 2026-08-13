@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   GARAGE_ITEMS,
+  PIT_CREW_REPAIR_FRACTIONS,
   applyEmergencyTow,
   applyPitCrewService,
   awardStoryPayout,
@@ -182,12 +183,20 @@ test('unknown courses and forged rival IDs cannot expand the authored money supp
   assert.equal(bounded.bounties, 150);
 });
 
-test('pit crew level one restores 15 and level two restores only missing hull', () => {
+test('pit crews repair at most 25% or 50% of max hull without granting a full reset', () => {
+  assert.deepEqual(PIT_CREW_REPAIR_FRACTIONS, { 1: 0.25, 2: 0.5 });
   const state = career();
+  state.health = 20;
   state.pitCrewLevel = 1;
-  assert.deepEqual(applyPitCrewService(state), { level: 1, health: 15 });
-  assert.equal(state.health, 70);
+  assert.deepEqual(applyPitCrewService(state), { level: 1, health: 25 });
+  assert.equal(state.health, 45);
+
+  state.health = 20;
   state.pitCrewLevel = 2;
-  assert.deepEqual(applyPitCrewService(state), { level: 2, health: 30 });
+  assert.deepEqual(applyPitCrewService(state), { level: 2, health: 50 });
+  assert.equal(state.health, 70, 'heavy damage still leaves a paid repair decision');
+
+  state.health = 80;
+  assert.deepEqual(applyPitCrewService(state), { level: 2, health: 20 });
   assert.equal(state.health, 100);
 });

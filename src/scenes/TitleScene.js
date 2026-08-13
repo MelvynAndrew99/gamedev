@@ -2,7 +2,6 @@
 
 import Phaser from 'phaser';
 import { TUNING } from '../config/tuning.js';
-import { getScore } from '../systems/HighScores.js';
 import {
   getTrainingResult,
   highestUnlockedTrainingIndex,
@@ -197,6 +196,7 @@ export class TitleScene extends Phaser.Scene {
     this.load.image('post', 'assets/post.png');
     this.load.image('ramp', 'assets/ramp.png');
     this.load.image('boost', 'assets/boost.png');
+    this.load.image('title-city-bg', 'assets/title-city-bg-v2.png');
   }
 
   create() {
@@ -262,84 +262,42 @@ export class TitleScene extends Phaser.Scene {
   }
 
   buildTableau() {
-    const sky = this.add.graphics();
-    const bands = TUNING.colors.skyBands;
-    bands.forEach((color, index) => {
-      sky.fillStyle(color, 1);
-      sky.fillRect(0, index * (HEIGHT / bands.length), WIDTH, HEIGHT / bands.length + 1);
-    });
+    // The detailed city is a purpose-built 4:3 plate. Keeping it separate
+    // from the native title/car/menu layers preserves crisp, reliable input
+    // geometry while allowing a far richer first impression than primitives.
+    this.titleBackground = this.add.image(WIDTH / 2, HEIGHT / 2, 'title-city-bg')
+      .setDisplaySize(WIDTH, HEIGHT)
+      .setDepth(0);
+    this.titleBackgroundBaseScale = {
+      x: this.titleBackground.scaleX,
+      y: this.titleBackground.scaleY,
+    };
+    this.titleRoadMotion = this.add.graphics().setDepth(5);
 
-    const moon = this.add.graphics();
-    moon.fillStyle(COLORS.magenta, 0.5);
-    moon.fillCircle(652, 124, 66);
-    moon.fillStyle(0xff8bb6, 0.26);
-    for (let y = 84; y < 162; y += 13) moon.fillRect(589, y, 126, 5);
-
-    this.city = this.add.graphics();
-    this.city.fillStyle(0x11082e, 1);
-    const skyline = [
-      [0, 48], [28, 70], [62, 42], [88, 80], [120, 58], [152, 92],
-      [198, 64], [232, 76], [269, 49], [301, 88], [349, 61], [386, 74],
-      [431, 53], [466, 84], [510, 67], [548, 94], [598, 58], [630, 78],
-      [676, 49], [710, 90], [756, 62],
-    ];
-    skyline.forEach(([x, height], index) => {
-      this.city.fillRect(x, 214 - height, index % 3 === 0 ? 44 : 32, height);
-    });
-    this.city.fillStyle(COLORS.cyan, 0.55);
-    for (let x = 18; x < WIDTH; x += 47) this.city.fillRect(x, 174 + (x % 3) * 8, 3, 7);
-    this.tweens.add({
-      targets: this.city,
-      x: -6,
-      duration: 2800,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.inOut',
-    });
-
-    const road = this.add.graphics();
-    road.fillStyle(0x160b32, 1);
-    road.fillRect(0, 214, WIDTH, HEIGHT - 214);
-    road.fillStyle(0x32313f, 1);
-    road.fillTriangle(350, 214, 450, 214, 746, HEIGHT);
-    road.fillTriangle(350, 214, 746, HEIGHT, 54, HEIGHT);
-    road.lineStyle(8, COLORS.magenta, 0.9);
-    road.lineBetween(350, 214, 54, HEIGHT);
-    road.lineStyle(8, COLORS.cyan, 0.9);
-    road.lineBetween(450, 214, 746, HEIGHT);
-    road.lineStyle(2, COLORS.white, 0.22);
-    road.lineBetween(384, 214, 305, HEIGHT);
-    road.lineBetween(416, 214, 495, HEIGHT);
-
-    this.roadMotion = this.add.graphics();
-    this.speedStreaks = this.add.graphics();
-    this.speedStreaks.lineStyle(2, COLORS.cyan, 0.34);
-    [
-      [34, 248, 112, 232], [688, 264, 772, 244], [22, 326, 145, 292],
-      [668, 355, 792, 314], [84, 178, 178, 171], [611, 187, 744, 178],
-    ].forEach((line) => this.speedStreaks.lineBetween(...line));
-    this.tweens.add({
-      targets: this.speedStreaks,
-      alpha: { from: 0.35, to: 0.82 },
-      duration: 650,
-      yoyo: true,
-      repeat: -1,
-    });
-
+    this.logoExtrusion = this.add.text(WIDTH / 2 + 7, 82, GAME_TITLE.replace(' ', '\n'), {
+      fontFamily: 'Arial Black, Impact, sans-serif',
+      fontSize: '55px',
+      fontStyle: 'bold italic',
+      color: colorCss(COLORS.ink),
+      align: 'center',
+      lineSpacing: -14,
+      stroke: colorCss(COLORS.ink),
+      strokeThickness: 12,
+    }).setOrigin(0.5).setDepth(7).setScale(0.86).setAlpha(0);
     this.logo = this.add.text(WIDTH / 2, 74, GAME_TITLE.replace(' ', '\n'), {
       fontFamily: 'Arial Black, Impact, sans-serif',
-      fontSize: '49px',
-      fontStyle: 'bold',
+      fontSize: '55px',
+      fontStyle: 'bold italic',
       color: colorCss(COLORS.white),
       align: 'center',
-      lineSpacing: -13,
+      lineSpacing: -14,
       stroke: colorCss(COLORS.magenta),
-      strokeThickness: 9,
-      shadow: { offsetX: 5, offsetY: 6, color: '#08031c', blur: 0, fill: true },
-    }).setOrigin(0.5).setDepth(8).setScale(0.82).setAlpha(0);
+      strokeThickness: 7,
+      shadow: { offsetX: 4, offsetY: 5, color: '#08031c', blur: 0, fill: true },
+    }).setOrigin(0.5).setDepth(8).setScale(0.86).setAlpha(0);
     this.logo.setData('cyanStroke', true);
     this.tweens.add({
-      targets: this.logo,
+      targets: [this.logo, this.logoExtrusion],
       alpha: 1,
       scaleX: 1,
       scaleY: 1,
@@ -347,19 +305,22 @@ export class TitleScene extends Phaser.Scene {
       ease: 'Back.out',
     });
     this.logoAccent = this.add.graphics().setDepth(7);
-    this.logoAccent.fillStyle(COLORS.cyan, 1);
-    this.logoAccent.fillRect(277, 139, 246, 5);
-    this.logoAccent.fillStyle(COLORS.gold, 1);
-    this.logoAccent.fillRect(334, 147, 132, 3);
 
-    this.car = this.add.sprite(WIDTH / 2, 230, 'car', carSpriteFrame(2, 0))
+    // The visible pixels sit low inside the 64×56 source frame. Position the
+    // frame so the tires—not its transparent bounds—meet the grid at y≈424.
+    // A restrained contact shadow makes that road relationship unambiguous.
+    this.carGrounding = this.add.graphics().setDepth(5);
+    this.carGrounding.fillStyle(0x03020d, 0.72);
+    this.carGrounding.fillEllipse(WIDTH / 2, 422, 122, 18);
+    this.carGrounding.lineStyle(2, COLORS.magenta, 0.34);
+    this.carGrounding.strokeEllipse(WIDTH / 2, 422, 112, 12);
+    this.car = this.add.sprite(WIDTH / 2, 374, 'car', carSpriteFrame(2, 0))
       .setScale(2.7)
       .setDepth(6);
     this.tweens.add({
       targets: this.car,
-      y: '+=7',
-      angle: { from: -0.7, to: 0.7 },
-      duration: 820,
+      y: '+=1',
+      duration: 620,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.inOut',
@@ -385,22 +346,42 @@ export class TitleScene extends Phaser.Scene {
   }
 
   update(time) {
-    this.drawRoadMotion(time);
+    this.drawTitleBackgroundMotion(time);
     this.pollKeyboard();
     this.pollGamepad();
   }
 
-  drawRoadMotion(time) {
-    const shift = (time * 0.07) % 54;
-    this.roadMotion.clear();
-    for (let step = -1; step < 8; step += 1) {
-      const depth = (step * 54 + shift) / 430;
-      if (depth <= 0 || depth >= 1) continue;
-      const y = 214 + depth * depth * 386;
-      const half = 50 + depth * 295;
-      this.roadMotion.lineStyle(2 + depth * 5, step % 2 ? COLORS.cyan : COLORS.magenta, 0.4);
-      this.roadMotion.lineBetween(400 - half, y, 400 - half - 16 * depth, y + 10 + depth * 18);
-      this.roadMotion.lineBetween(400 + half, y, 400 + half + 16 * depth, y + 10 + depth * 18);
+  drawTitleBackgroundMotion(time) {
+    // A slow, nearly seamless camera push moves the whole city toward the
+    // player. Connected perspective crossbars add readable road speed; unlike
+    // the discarded free-floating dashes, every mark belongs to the pavement.
+    const push = (time % 12000) / 12000;
+    const scale = 1 + push * 0.012;
+    this.titleBackground.setScale(
+      this.titleBackgroundBaseScale.x * scale,
+      this.titleBackgroundBaseScale.y * scale,
+    );
+    this.titleBackground.setY(HEIGHT / 2 + push * 2);
+
+    this.titleRoadMotion.clear();
+    const alpha = this.view === FRONT_END_VIEWS.MAIN ? 0.3 : 0.1;
+    const travel = (time * 0.00016) % 1;
+    for (let row = 0; row < 7; row += 1) {
+      const phase = (row / 7 + travel) % 1;
+      const depth = phase * phase;
+      const y = 399 + depth * 201;
+      const halfWidth = 8 + depth * 392;
+      this.titleRoadMotion.lineStyle(
+        1 + depth * 2,
+        row % 2 ? COLORS.magenta : 0xa76cff,
+        alpha * (0.35 + depth * 0.65),
+      );
+      this.titleRoadMotion.lineBetween(
+        WIDTH / 2 - halfWidth,
+        y,
+        WIDTH / 2 + halfWidth,
+        y,
+      );
     }
   }
 
@@ -649,7 +630,9 @@ export class TitleScene extends Phaser.Scene {
     this.ui = this.add.container(0, 0).setDepth(20);
     const main = this.view === FRONT_END_VIEWS.MAIN;
     this.logo.setVisible(main);
+    this.logoExtrusion.setVisible(main);
     this.logoAccent.setVisible(main);
+    this.carGrounding.setAlpha(main ? 1 : 0.12);
     this.car.setAlpha(main ? 1 : 0.18).setScale(main ? 2.7 : 2.55);
 
     if (main) this.renderMain();
@@ -716,19 +699,18 @@ export class TitleScene extends Phaser.Scene {
     MAIN_DESTINATIONS.forEach((item, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2);
-      const x = 28 + column * 382;
-      const y = 342 + row * 76;
-      this.drawMainCard(x, y, 362, 68, item, index, index === this.selection());
+      const x = 42 + column * 374;
+      const y = 434 + row * 70;
+      this.drawMainCard(x, y, 342, 62, item, index, index === this.selection());
     });
 
-    const selected = MAIN_DESTINATIONS[this.selection()];
-    const best = getScore('endless');
-    const extra = selected.id === 'endless' && best ? `  •  BEST ${best}m` : '';
-    this.drawDescription(`${selected.description}${extra}`, 28, 502, 744, 48);
-    this.text(WIDTH / 2, 564, 'ARROWS / D-PAD MOVE   A / ENTER SELECT', {
+    this.text(WIDTH / 2, 582, 'ARROWS / D-PAD MOVE   A / ENTER SELECT', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '13px',
-      color: colorCss(COLORS.muted),
+      fontStyle: 'bold',
+      color: colorCss(COLORS.white),
+      stroke: colorCss(COLORS.ink),
+      strokeThickness: 4,
     }).setOrigin(0.5);
   }
 
@@ -975,8 +957,8 @@ export class TitleScene extends Phaser.Scene {
     if (result.ok) {
       if (action.id === 'boost_pack') return '+1 STARTING BOOST ARMED  •  NEXT STORY RACE';
       if (action.id === 'extra_boost_slot') return '4TH BOOST SLOT LOADED  •  NEXT STORY RACE';
-      if (action.id === 'pit_crew_1') return 'PIT CREW ADDED  •  +15 HULL AFTER A FINISH';
-      if (action.id === 'pit_crew_2') return 'PIT CREW UPGRADED  •  FREE FULL REPAIR AFTER A FINISH';
+      if (action.id === 'pit_crew_1') return 'PIT CREW ADDED  •  UP TO 25% HULL AFTER A FINISH';
+      if (action.id === 'pit_crew_2') return 'PIT CREW UPGRADED  •  UP TO 50% HULL AFTER A FINISH';
       if (action.id === 'music_player') return 'MUSIC PLAYER UNLOCKED  •  PRESS A TO OPEN LIBRARY';
       return `${action.label} PURCHASED`;
     }

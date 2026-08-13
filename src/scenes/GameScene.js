@@ -60,7 +60,12 @@ import { createTrackDiscipline, updateTrackDiscipline } from '../systems/TrackDi
 import { TimedElimination } from '../systems/TimedElimination.js';
 import { TimedScoreAttack } from '../systems/TimedScoreAttack.js';
 import { rivalFxSpec } from '../systems/RivalFx.js';
-import { buttonDown, getPrimaryPad } from '../systems/Gamepad.js';
+import {
+  axisValue,
+  buttonDown,
+  dpadDown,
+  getPrimaryPad,
+} from '../systems/Gamepad.js';
 import { TRACKS, TRAINING_TRACKS } from '../tracks/index.js';
 import {
   STORY_PAGES,
@@ -94,6 +99,11 @@ import { HIGH_SPEED_THEME } from '../audio/tracks/highSpeedTheme.js';
 import { TRAINING_LOOP_THEME } from '../audio/tracks/trainingLoopTheme.js';
 import { NEON_GULCH_THEME } from '../audio/tracks/neonGulchTheme.js';
 import { SYNDICATE_RUN_THEME } from '../audio/tracks/syndicateRunTheme.js';
+import {
+  PAUSE_ACTIONS,
+  canPauseRace,
+  movePauseSelection,
+} from '../ui/PauseMenuModel.js';
 
 // Theme identities can be shared by geometry variants (Training Loop and its
 // Story validation race). Endless keeps the original high-speed score.
@@ -305,9 +315,17 @@ export class GameScene extends Phaser.Scene {
     this.createRivalVisuals();
 
     this.controls = new Controls(this);
-    this.input.keyboard.on('keydown-ESC', () => this.quitToTitle());
-    this.input.keyboard.on('keydown-ENTER', () => this.confirm());
-    this.input.keyboard.on('keydown-R', () => this.retryTraining());
+    this.racePaused = false;
+    this.pauseSelection = 0;
+    this.pauseUi = null;
+    this.input.keyboard.on('keydown-ESC', () => this.handleEscape());
+    this.input.keyboard.on('keydown-P', () => this.togglePause());
+    this.input.keyboard.on('keydown-ENTER', () => this.handleEnter());
+    this.input.keyboard.on('keydown-UP', () => this.movePauseMenu(-1));
+    this.input.keyboard.on('keydown-DOWN', () => this.movePauseMenu(1));
+    this.input.keyboard.on('keydown-R', () => {
+      if (!this.racePaused) this.retryTraining();
+    });
 
     this.iframes = 0; // post-hit invulnerability countdown
 
@@ -339,7 +357,14 @@ export class GameScene extends Phaser.Scene {
     // the player acknowledges the objectives and the race clock can start.
     this.hudLaunched = false;
     if (!this.awaitingBriefing) this.launchHud();
-    this.events.once('shutdown', () => this.scene.stop('HudScene'));
+    this.events.once('shutdown', () => {
+      // Scene transitions normally leave through releasePauseRuntime(). This
+      // fallback prevents Phaser's reusable scene clock/tweens staying paused
+      // if a debug command or external scene transition interrupts the menu.
+      this.time.paused = false;
+      this.tweens.resumeAll();
+      this.scene.stop('HudScene');
+    });
 
     // Procedural score — synthesized live, not a loaded file (see
     // audio/MusicEngine.js). Starting it here rides the ENTER/click that
@@ -367,9 +392,35 @@ export class GameScene extends Phaser.Scene {
       a: buttonDown(pad, 0, 'A'),
       b: buttonDown(pad, 1, 'B'),
       x: buttonDown(pad, 2, 'X'),
+      start: buttonDown(pad, 9, 'start'),
+      up: dpadDown(pad, 'up') || axisValue(pad, 1) < -0.65,
+      down: dpadDown(pad, 'down') || axisValue(pad, 1) > 0.65,
     };
-    const padPrev = this.prevPad ?? { a: true, b: true, x: true };
+    const padPrev = this.prevPad ?? {
+      a: true, b: true, x: true, start: true, up: true, down: true,
+    };
     this.prevPad = padNow;
+
+    if (this.racePaused) {
+      if (
+        (padNow.start && !padPrev.start) ||
+        (padNow.b && !padPrev.b)
+      ) {
+        this.closePauseMenu();
+      } else if (padNow.up && !padPrev.up) {
+        this.movePauseMenu(-1);
+      } else if (padNow.down && !padPrev.down) {
+        this.movePauseMenu(1);
+      } else if (padNow.a && !padPrev.a) {
+        this.activatePauseSelection();
+      }
+      return;
+    }
+
+    if (padNow.start && !padPrev.start && this.pauseAvailable()) {
+      this.openPauseMenu();
+      return;
+    }
 
     if (this.done) {
       if (padNow.a && !padPrev.a) this.advance();
@@ -2171,6 +2222,194 @@ export class GameScene extends Phaser.Scene {
       'TitleScene',
       modeMenuTarget(this.mode, this.trackIndex, this.storyPhase),
     );
+  }
+
+  pauseAvailable() {
+    return canPauseRace({
+      mode: this.mode,
+      done: this.done,
+      awaitingBriefing: this.awaitingBriefing,
+      trainingTutorial: Boolean(this.trainingTutorial),
+    });
+  }
+
+  handleEscape() {
+    if (this.racePaused) {
+      this.closePauseMenu();
+    } else if (this.pauseAvailable()) {
+      this.openPauseMenu();
+    } else {
+      this.quitToTitle();
+    }
+  }
+
+  handleEnter() {
+    if (this.racePaused) this.activatePauseSelection();
+    else this.confirm();
+  }
+
+  togglePause() {
+    if (this.racePaused) this.closePauseMenu();
+    else if (this.pauseAvailable()) this.openPauseMenu();
+  }
+
+  openPauseMenu() {
+    if (this.racePaused || !this.pauseAvailable()) return;
+    this.racePaused = true;
+    this.pauseSelection = 0;
+    this.renderPauseMenu();
+
+    this.pauseHudWasActive = this.scene.isActive('HudScene');
+    if (this.pauseHudWasActive) this.scene.pause('HudScene');
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    MUSIC.pausePlayback();
+  }
+
+  closePauseMenu() {
+    if (!this.racePaused) return;
+    this.releasePauseRuntime();
+    // Treat held buttons as already down so closing with A/Start cannot also
+    // accelerate, boost, or reopen the menu on the same physical press.
+    this.prevPad = null;
+  }
+
+  releasePauseRuntime() {
+    this.pauseUi?.destroy(true);
+    this.pauseUi = null;
+    this.racePaused = false;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    if (this.pauseHudWasActive && this.scene.isPaused('HudScene')) {
+      this.scene.resume('HudScene');
+    }
+    this.pauseHudWasActive = false;
+    MUSIC.resumePlayback();
+  }
+
+  movePauseMenu(direction) {
+    if (!this.racePaused) return;
+    const next = movePauseSelection(
+      this.pauseSelection,
+      direction,
+      PAUSE_ACTIONS.length,
+    );
+    if (next === this.pauseSelection) return;
+    this.pauseSelection = next;
+    this.renderPauseMenu();
+  }
+
+  activatePauseSelection() {
+    if (!this.racePaused) return;
+    const action = PAUSE_ACTIONS[this.pauseSelection]?.id;
+    if (action === 'resume') {
+      this.closePauseMenu();
+    } else if (action === 'restart') {
+      this.restartPausedEvent();
+    } else if (action === 'exit') {
+      this.exitPausedEvent();
+    }
+  }
+
+  restartPausedEvent() {
+    if (!this.racePaused) return;
+    const launchData = {
+      mode: this.mode,
+      trackIndex: this.trackIndex,
+      ...(this.mode === 'story' ? { storyPhase: this.storyPhase } : {}),
+    };
+    this.releasePauseRuntime();
+    this.scene.start('GameScene', launchData);
+  }
+
+  exitPausedEvent() {
+    if (!this.racePaused) return;
+    this.releasePauseRuntime();
+    this.returnToModeMenu();
+  }
+
+  renderPauseMenu() {
+    this.pauseUi?.destroy(true);
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+    const ui = this.add.container(0, 0).setDepth(200);
+    this.pauseUi = ui;
+
+    ui.add(this.add.rectangle(
+      centerX,
+      centerY,
+      this.scale.width,
+      this.scale.height,
+      0x050710,
+      0.76,
+    ));
+    ui.add(this.add.rectangle(centerX, centerY, 420, 390, 0x10142c, 0.98)
+      .setStrokeStyle(4, 0x00e5ff, 0.9));
+    ui.add(this.add.rectangle(centerX, centerY - 190, 330, 8, 0xff2d95, 1));
+    ui.add(this.add.text(centerX, centerY - 142, 'PAUSED', {
+      fontSize: '42px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      stroke: '#050710',
+      strokeThickness: 7,
+    }).setOrigin(0.5));
+
+    const eventLabel = this.mode === 'story'
+      ? `${this.trackData.name}  •  ${this.storyPhase === STORY_PHASES.RIVALS ? 'RIVAL RACE' : 'TIME TRIAL'}`
+      : `${this.trackData.name}  •  RACE SCHOOL`;
+    ui.add(this.add.text(centerX, centerY - 91, eventLabel, {
+      fontSize: '15px',
+      color: '#9feeff',
+      fontStyle: 'bold',
+      align: 'center',
+      wordWrap: { width: 370 },
+    }).setOrigin(0.5));
+
+    PAUSE_ACTIONS.forEach((action, index) => {
+      const selected = index === this.pauseSelection;
+      const y = centerY - 30 + index * 68;
+      const row = this.add.rectangle(
+        centerX,
+        y,
+        340,
+        52,
+        selected ? 0x293b69 : 0x171c38,
+        1,
+      ).setStrokeStyle(selected ? 3 : 1, selected ? 0xffcf3f : 0x596080, 1)
+        .setInteractive({ useHandCursor: true });
+      row.on('pointerover', () => {
+        if (!this.racePaused || this.pauseSelection === index) return;
+        this.pauseSelection = index;
+        this.renderPauseMenu();
+      });
+      row.on('pointerdown', () => {
+        if (!this.racePaused) return;
+        this.pauseSelection = index;
+        this.activatePauseSelection();
+      });
+      ui.add(row);
+      ui.add(this.add.text(centerX, y, action.label, {
+        fontSize: selected ? '22px' : '19px',
+        color: selected ? '#ffffff' : '#c4c9dd',
+        fontStyle: 'bold',
+        stroke: '#080a16',
+        strokeThickness: 4,
+      }).setOrigin(0.5));
+      if (selected) {
+        ui.add(this.add.text(centerX - 149, y, '▶', {
+          fontSize: '20px', color: '#ffcf3f', stroke: '#080a16', strokeThickness: 3,
+        }).setOrigin(0.5));
+      }
+    });
+
+    ui.add(this.add.text(
+      centerX,
+      centerY + 164,
+      '↑↓ SELECT   A / ENTER CONFIRM   B / ESC RESUME',
+      {
+        fontSize: '13px', color: '#aeb6d4', fontStyle: 'bold', align: 'center',
+      },
+    ).setOrigin(0.5));
   }
 
   confirm() {
